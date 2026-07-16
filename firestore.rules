@@ -29,6 +29,9 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isSuperAdmin();
     }
+    match /stores/{storeId} {
+      allow read, write: if isSuperAdmin() || isStoreOwner(storeId);
+    }
     match /products/{document=**} {
       allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
       allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
