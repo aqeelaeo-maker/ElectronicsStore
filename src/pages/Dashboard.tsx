@@ -17,7 +17,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
+import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -112,9 +113,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Overview of your store performance</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Overview of your store performance</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/products" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium">Add Product</Link>
+          <Link to="/sales" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm text-sm font-medium">Create Invoice</Link>
+          <Link to="/customers" className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors shadow-sm text-sm font-medium">Add Customer</Link>
+          <Link to="/vendors" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors shadow-sm text-sm font-medium">Add Vendor</Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
