@@ -11,6 +11,7 @@ import Products from './pages/Products';
 import Customers from './pages/Customers';
 import Vendors from './pages/Vendors';
 import Sales from './pages/Sales';
+import Settings from './pages/Settings';
 
 // Mock empty pages for the rest of the routes
 const Placeholder = ({ title }: { title: string }) => (
@@ -20,28 +21,9 @@ const Placeholder = ({ title }: { title: string }) => (
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading, role, logout } = useAuth();
-  const [status, setStatus] = React.useState<string | null>(null);
-  const [checking, setChecking] = React.useState(true);
+  const { user, loading, role, status, logout } = useAuth();
 
-  React.useEffect(() => {
-    if (user) {
-      import('firebase/firestore').then(({ doc, getDoc }) => {
-        import('./lib/firebase').then(({ db }) => {
-          getDoc(doc(db, 'users', user.uid)).then(docSnap => {
-            if (docSnap.exists()) {
-              setStatus(docSnap.data().status);
-            }
-            setChecking(false);
-          });
-        });
-      });
-    } else {
-      setChecking(false);
-    }
-  }, [user]);
-
-  if (loading || checking) {
+  if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>;
@@ -57,12 +39,20 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         <div className="bg-white p-8 rounded-lg shadow-sm max-w-md text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Pending</h2>
           <p className="text-gray-600 mb-6">Your account is pending authorization by the Super Admin. Please wait for approval to access your store.</p>
-          <button 
-            onClick={logout}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Sign Out
-          </button>
+          <div className="flex justify-center gap-4">
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              Check Status
+            </button>
+            <button 
+              onClick={logout}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -92,7 +82,7 @@ export default function App() {
             <Route path="vendors" element={<Vendors />} />
             <Route path="inventory" element={<Placeholder title="Inventory" />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
-            <Route path="settings" element={<Placeholder title="Settings" />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -25,6 +25,10 @@ service cloud.firestore {
     }
 
     // Rules for all collections that use storeId (products, customers, sales, vendors)
+    match /settings/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if isSuperAdmin();
+    }
     match /products/{document=**} {
       allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
       allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
