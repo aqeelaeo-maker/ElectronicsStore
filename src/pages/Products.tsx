@@ -83,6 +83,80 @@ export default function Products() {
     p.brand.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (showAddForm) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Add New Product</h1>
+            <p className="text-sm text-gray-500">Enter the details for the new product</p>
+          </div>
+          <button 
+            onClick={() => setShowAddForm(false)}
+            className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors shadow-sm text-sm font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <form onSubmit={handleAddProduct}>
+            <div className="px-4 py-5 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
+                  <input type="text" name="name" id="name" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Brand</label>
+                  <input type="text" name="brand" id="brand" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
+                  <select name="category" id="category" required className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    <option value="Television">Television</option>
+                    <option value="Refrigerator">Refrigerator</option>
+                    <option value="Air Conditioner">Air Conditioner</option>
+                    <option value="Mobile Phone">Mobile Phone</option>
+                    <option value="Laptop">Laptop</option>
+                    <option value="Camera">Camera</option>
+                    <option value="DVR">DVR</option>
+                    <option value="Security System">Security System</option>
+                    <option value="Accessories">Accessories</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="modelNumber" className="block text-sm font-medium text-gray-700">Model Number</label>
+                  <input type="text" name="modelNumber" id="modelNumber" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="stock" className="block text-sm font-medium text-gray-700">Initial Stock</label>
+                  <input type="number" name="stock" id="stock" required min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="purchasePrice" className="block text-sm font-medium text-gray-700">Purchase Price</label>
+                  <input type="number" name="purchasePrice" id="purchasePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="salePrice" className="block text-sm font-medium text-gray-700">Sale Price</label>
+                  <input type="number" name="salePrice" id="salePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowAddForm(false)} className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+                Cancel
+              </button>
+              <button type="submit" className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+                Save Product
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -91,11 +165,11 @@ export default function Products() {
           <p className="text-sm text-gray-500">Manage your product catalog and inventory</p>
         </div>
         <button 
-          onClick={() => setShowAddForm(!showAddForm)}
+          onClick={() => setShowAddForm(true)}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
         >
           <Plus className="w-4 h-4 mr-2" />
-          {showAddForm ? 'Cancel' : 'Add Product'}
+          Add Product
         </button>
       </div>
 
@@ -183,64 +257,6 @@ export default function Products() {
           </table>
         </div>
       </div>
-
-      {showAddForm && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <form onSubmit={handleAddProduct}>
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Add New Product</h3>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
-                  <input type="text" name="name" id="name" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Brand</label>
-                  <input type="text" name="brand" id="brand" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
-                  <select name="category" id="category" required className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                    <option value="Television">Television</option>
-                    <option value="Refrigerator">Refrigerator</option>
-                    <option value="Air Conditioner">Air Conditioner</option>
-                    <option value="Mobile Phone">Mobile Phone</option>
-                    <option value="Laptop">Laptop</option>
-                    <option value="Camera">Camera</option>
-                    <option value="DVR">DVR</option>
-                    <option value="Security System">Security System</option>
-                    <option value="Accessories">Accessories</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="modelNumber" className="block text-sm font-medium text-gray-700">Model Number</label>
-                  <input type="text" name="modelNumber" id="modelNumber" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="stock" className="block text-sm font-medium text-gray-700">Initial Stock</label>
-                  <input type="number" name="stock" id="stock" required min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="purchasePrice" className="block text-sm font-medium text-gray-700">Purchase Price</label>
-                  <input type="number" name="purchasePrice" id="purchasePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="salePrice" className="block text-sm font-medium text-gray-700">Sale Price</label>
-                  <input type="number" name="salePrice" id="salePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setShowAddForm(false)} className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
-                Cancel
-              </button>
-              <button type="submit" className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
-                Save Product
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }
