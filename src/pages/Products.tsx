@@ -206,6 +206,10 @@ export default function Products() {
                     <option value="Air Conditioner">Air Conditioner</option>
                     <option value="Mobile Phone">Mobile Phone</option>
                     <option value="Laptop">Laptop</option>
+                    <option value="Camera">Camera</option>
+                    <option value="DVR">DVR</option>
+                    <option value="Security System">Security System</option>
+                    <option value="Accessories">Accessories</option>
                   </select>
                 </div>
                 <div>
