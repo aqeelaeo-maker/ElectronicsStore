@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Package } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Product {
   id: string;
@@ -16,13 +17,19 @@ interface Product {
 }
 
 export default function Products() {
+  const { storeId, role } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+    if (!storeId) return;
+    
+    const q = role === 'Super Admin'
+      ? query(collection(db, 'products'), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+      
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
       snapshot.forEach((doc) => {
@@ -37,10 +44,15 @@ export default function Products() {
     });
     
     return () => unsubscribe();
-  }, []);
+  }, [storeId, role]);
 
   const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!storeId) {
+      toast.error('Store ID not found');
+      return;
+    }
+    
     const formData = new FormData(e.currentTarget);
     const newProduct = {
       name: formData.get('name'),
@@ -50,6 +62,7 @@ export default function Products() {
       purchasePrice: Number(formData.get('purchasePrice')),
       salePrice: Number(formData.get('salePrice')),
       stock: Number(formData.get('stock')),
+      storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };

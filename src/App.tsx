@@ -20,9 +20,28 @@ const Placeholder = ({ title }: { title: string }) => (
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
+  const { user, loading, role, logout } = useAuth();
+  const [status, setStatus] = React.useState<string | null>(null);
+  const [checking, setChecking] = React.useState(true);
+
+  React.useEffect(() => {
+    if (user) {
+      import('firebase/firestore').then(({ doc, getDoc }) => {
+        import('./lib/firebase').then(({ db }) => {
+          getDoc(doc(db, 'users', user.uid)).then(docSnap => {
+            if (docSnap.exists()) {
+              setStatus(docSnap.data().status);
+            }
+            setChecking(false);
+          });
+        });
+      });
+    } else {
+      setChecking(false);
+    }
+  }, [user]);
+
+  if (loading || checking) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>;
@@ -30,6 +49,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (status === 'Pending' && role !== 'Super Admin') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-sm max-w-md text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Pending</h2>
+          <p className="text-gray-600 mb-6">Your account is pending authorization by the Super Admin. Please wait for approval to access your store.</p>
+          <button 
+            onClick={logout}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
   }
   
   return <>{children}</>;

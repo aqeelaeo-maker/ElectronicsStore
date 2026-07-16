@@ -16,11 +16,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
 } from 'recharts';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
   return (
@@ -46,28 +45,40 @@ function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
 }
 
 export default function Dashboard() {
+  const { storeId, role } = useAuth();
   const [sales, setSales] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!storeId) return;
+
+    const baseQuery = (colName: string) => 
+      role === 'Super Admin' 
+        ? collection(db, colName) 
+        : query(collection(db, colName), where('storeId', '==', storeId));
+
     // Listen to Sales
-    const unsubscribeSales = onSnapshot(query(collection(db, 'sales'), orderBy('createdAt', 'desc')), (snapshot) => {
+    const qSales = role === 'Super Admin' 
+      ? query(collection(db, 'sales'), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+
+    const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
       const data: any[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
       setSales(data);
     });
 
     // Listen to Products
-    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const unsubscribeProducts = onSnapshot(baseQuery('products'), (snapshot) => {
       const data: any[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
       setProducts(data);
     });
 
     // Listen to Customers
-    const unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
+    const unsubscribeCustomers = onSnapshot(baseQuery('customers'), (snapshot) => {
       const data: any[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
       setCustomers(data);
@@ -79,7 +90,7 @@ export default function Dashboard() {
       unsubscribeProducts();
       unsubscribeCustomers();
     };
-  }, []);
+  }, [storeId, role]);
 
   const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + (sale.total || 0), 0), [sales]);
   const totalProducts = products.length;

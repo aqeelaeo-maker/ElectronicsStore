@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, FileText, ShoppingCart, Eye } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Sale {
   id: string;
@@ -14,13 +15,19 @@ interface Sale {
 }
 
 export default function Sales() {
+  const { storeId, role } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'sales'), orderBy('createdAt', 'desc'));
+    if (!storeId) return;
+
+    const q = role === 'Super Admin'
+      ? query(collection(db, 'sales'), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Sale[] = [];
       snapshot.forEach((doc) => {
@@ -35,10 +42,15 @@ export default function Sales() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [storeId, role]);
 
   const handleAddSale = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!storeId) {
+      toast.error('Store ID not found');
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const invoiceNo = `INV-${Math.floor(1000 + Math.random() * 9000)}`;
     const newSale = {
@@ -47,6 +59,7 @@ export default function Sales() {
       total: Number(formData.get('total')) || 0,
       status: 'Paid',
       date: new Date().toISOString(),
+      storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };

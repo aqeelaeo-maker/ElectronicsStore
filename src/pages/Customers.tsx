@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Users } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Customer {
   id: string;
@@ -14,13 +15,19 @@ interface Customer {
 }
 
 export default function Customers() {
+  const { storeId, role } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'customers'), orderBy('createdAt', 'desc'));
+    if (!storeId) return;
+
+    const q = role === 'Super Admin'
+      ? query(collection(db, 'customers'), orderBy('createdAt', 'desc'))
+      : query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Customer[] = [];
       snapshot.forEach((doc) => {
@@ -35,10 +42,15 @@ export default function Customers() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [storeId, role]);
 
   const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!storeId) {
+      toast.error('Store ID not found');
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const newCustomer = {
       name: formData.get('name'),
@@ -46,6 +58,7 @@ export default function Customers() {
       email: formData.get('email'),
       city: formData.get('city'),
       balance: Number(formData.get('balance')) || 0,
+      storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
