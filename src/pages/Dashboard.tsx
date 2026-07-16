@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   DollarSign, 
   Package, 
@@ -19,16 +19,8 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-
-const mockSalesData = [
-  { name: 'Jan', sales: 4000, profit: 2400 },
-  { name: 'Feb', sales: 3000, profit: 1398 },
-  { name: 'Mar', sales: 2000, profit: 9800 },
-  { name: 'Apr', sales: 2780, profit: 3908 },
-  { name: 'May', sales: 1890, profit: 4800 },
-  { name: 'Jun', sales: 2390, profit: 3800 },
-  { name: 'Jul', sales: 3490, profit: 4300 },
-];
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
   return (
@@ -54,6 +46,59 @@ function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
 }
 
 export default function Dashboard() {
+  const [sales, setSales] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Listen to Sales
+    const unsubscribeSales = onSnapshot(query(collection(db, 'sales'), orderBy('createdAt', 'desc')), (snapshot) => {
+      const data: any[] = [];
+      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      setSales(data);
+    });
+
+    // Listen to Products
+    const unsubscribeProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const data: any[] = [];
+      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      setProducts(data);
+    });
+
+    // Listen to Customers
+    const unsubscribeCustomers = onSnapshot(collection(db, 'customers'), (snapshot) => {
+      const data: any[] = [];
+      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
+      setCustomers(data);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribeSales();
+      unsubscribeProducts();
+      unsubscribeCustomers();
+    };
+  }, []);
+
+  const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + (sale.total || 0), 0), [sales]);
+  const totalProducts = products.length;
+  const totalCustomers = customers.length;
+  const lowStockProducts = products.filter(p => p.stock < 10).length;
+
+  const recentSales = sales.slice(0, 4);
+  const topProducts = [...products].sort((a, b) => b.salePrice - a.salePrice).slice(0, 3); // using price as mock metric for top selling
+
+  const mockSalesData = [
+    { name: 'Jan', sales: 4000, profit: 2400 },
+    { name: 'Feb', sales: 3000, profit: 1398 },
+    { name: 'Mar', sales: 2000, profit: 9800 },
+    { name: 'Apr', sales: 2780, profit: 3908 },
+    { name: 'May', sales: 1890, profit: 4800 },
+    { name: 'Jun', sales: 2390, profit: 3800 },
+    { name: 'Jul', sales: 3490, profit: 4300 },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -63,28 +108,28 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
-          title="Today's Sales" 
-          value="$12,426" 
+          title="Total Sales" 
+          value={`$${totalSales.toFixed(2)}`} 
           icon={DollarSign} 
           trend="+12.5%"
           colorClass="bg-blue-100 text-blue-600"
         />
         <StatCard 
           title="Total Products" 
-          value="1,245" 
+          value={totalProducts} 
           icon={Package}
           colorClass="bg-green-100 text-green-600"
         />
         <StatCard 
           title="Total Customers" 
-          value="892" 
+          value={totalCustomers} 
           icon={Users} 
           trend="+5.2%"
           colorClass="bg-purple-100 text-purple-600"
         />
         <StatCard 
           title="Low Stock Items" 
-          value="24" 
+          value={lowStockProducts} 
           icon={AlertTriangle} 
           colorClass="bg-yellow-100 text-yellow-600"
         />
@@ -112,35 +157,34 @@ export default function Dashboard() {
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Sales</h2>
             <div className="space-y-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center justify-between pb-4 border-b border-gray-100 last:border-0 last:pb-0">
+              {recentSales.map((sale) => (
+                <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-gray-100 last:border-0 last:pb-0">
                   <div className="flex items-center">
                     <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
                       <ShoppingCart className="w-5 h-5 text-blue-600" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-900">Invoice #INV-{2000 + i}</p>
-                      <p className="text-xs text-gray-500">John Doe • 2 items</p>
+                      <p className="text-sm font-medium text-gray-900">{sale.invoiceNo}</p>
+                      <p className="text-xs text-gray-500">{sale.customerName}</p>
                     </div>
                   </div>
-                  <span className="text-sm font-medium text-gray-900">$1,299.00</span>
+                  <span className="text-sm font-medium text-gray-900">${sale.total?.toFixed(2)}</span>
                 </div>
               ))}
+              {recentSales.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">No recent sales</p>
+              )}
             </div>
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Top Selling Products</h2>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Top Products (By Value)</h2>
             <div className="space-y-4">
-              {[
-                { name: 'Samsung 55" 4K Smart TV', sales: 124, stock: 15 },
-                { name: 'Apple iPhone 15 Pro', sales: 98, stock: 5 },
-                { name: 'LG Washing Machine 8kg', sales: 85, stock: 22 }
-              ].map((product, i) => (
-                <div key={i} className="flex items-center justify-between">
+              {topProducts.map((product) => (
+                <div key={product.id} className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                    <p className="text-xs text-gray-500">{product.sales} sales</p>
+                    <p className="text-xs text-gray-500">${product.salePrice?.toFixed(2)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -151,6 +195,9 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+              {topProducts.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">No products available</p>
+              )}
             </div>
           </div>
         </div>

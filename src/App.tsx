@@ -7,8 +7,10 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-
 import Products from './pages/Products';
+import Customers from './pages/Customers';
+import Vendors from './pages/Vendors';
+import Sales from './pages/Sales';
 
 // Mock empty pages for the rest of the routes
 const Placeholder = ({ title }: { title: string }) => (
@@ -48,10 +50,10 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="products" element={<Products />} />
             <Route path="serials" element={<Placeholder title="Serial Numbers" />} />
-            <Route path="sales" element={<Placeholder title="Sales" />} />
+            <Route path="sales" element={<Sales />} />
             <Route path="purchases" element={<Placeholder title="Purchases" />} />
-            <Route path="customers" element={<Placeholder title="Customers" />} />
-            <Route path="vendors" element={<Placeholder title="Vendors" />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="vendors" element={<Vendors />} />
             <Route path="inventory" element={<Placeholder title="Inventory" />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
             <Route path="settings" element={<Placeholder title="Settings" />} />

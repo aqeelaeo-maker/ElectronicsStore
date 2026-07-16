@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -21,26 +21,22 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
+  useEffect(() => {
+    const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
-      querySnapshot.forEach((doc) => {
+      snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Product);
       });
       setProducts(data);
-    } catch (error) {
+      setLoading(false);
+    }, (error) => {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
-    } finally {
       setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProducts();
+    });
+    
+    return () => unsubscribe();
   }, []);
 
   const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -62,7 +58,6 @@ export default function Products() {
       await addDoc(collection(db, 'products'), newProduct);
       toast.success('Product added successfully');
       setShowModal(false);
-      fetchProducts();
     } catch (error) {
       console.error('Error adding product:', error);
       toast.error('Failed to add product');
