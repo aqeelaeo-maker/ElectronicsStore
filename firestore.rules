@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if the user is a super admin
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'aqeelaeo@gmail.com';
+    }
+
+    // Helper to check if a user is the owner of a document based on storeId
+    function isStoreOwner(storeId) {
+      return isAuthenticated() && (request.auth.uid == storeId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeId == storeId);
+    }
+
+    // Rules for the users collection
+    match /users/{userId} {
+      // Users can read/write their own profile, Super Admins can access all
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
+    }
+
+    // Rules for all collections that use storeId (products, customers, sales, vendors)
+    match /products/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+    
+    match /customers/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+    
+    match /sales/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+    
+    match /vendors/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+
+    // Default rule to deny everything else not explicitly allowed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
