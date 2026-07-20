@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Search, Plus, Trash2, Hash } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -89,14 +89,36 @@ export default function SerialNumbers() {
 
   const handleAddSerialNumber = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProduct || !storeId || !newSerialNumber.trim()) return;
+    const targetSerialNumber = newSerialNumber.trim();
+    if (!selectedProduct || !storeId || !targetSerialNumber) return;
     
     setAddingSerial(true);
     try {
-      // Check if serial number already exists for this product (optional, but good for uniqueness)
-      const isDuplicate = serialNumbers.some(sn => sn.serialNumber.toLowerCase() === newSerialNumber.trim().toLowerCase());
-      if (isDuplicate) {
+      // Check if serial number already exists for this product locally
+      const isLocalDuplicate = serialNumbers.some(sn => sn.serialNumber.toLowerCase() === targetSerialNumber.toLowerCase());
+      if (isLocalDuplicate) {
         toast.warning('This serial number already exists for this product');
+        setAddingSerial(false);
+        return;
+      }
+
+      // Check if the serial number already exists across ALL products in Firestore
+      const serialQuery = query(
+        collection(db, 'serialNumbers'),
+        where('serialNumber', '==', targetSerialNumber)
+      );
+      const querySnapshot = await getDocs(serialQuery);
+      if (!querySnapshot.empty) {
+        const existingDoc = querySnapshot.docs[0].data();
+        const existingProductId = existingDoc.productId;
+        
+        // Find if we have the product name loaded to give a highly descriptive error
+        const otherProduct = products.find(p => p.id === existingProductId);
+        if (otherProduct) {
+          toast.error(`This serial number is already assigned to product: "${otherProduct.name}" (${otherProduct.brand})`);
+        } else {
+          toast.error('This serial number is already assigned to another product');
+        }
         setAddingSerial(false);
         return;
       }
