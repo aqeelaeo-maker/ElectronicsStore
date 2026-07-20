@@ -125,64 +125,64 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-1">Manage system configurations and store details</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-white">Settings</h1>
+        <p className="text-sm text-slate-400 mt-1">Manage system configurations and store details</p>
       </div>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Store className="w-5 h-5 text-gray-700" />
-          <h2 className="text-lg font-medium text-gray-900">Store Profile</h2>
+      <div className="glass-panel shadow-xl rounded-2xl p-6 sm:p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <Store className="w-5 h-5 text-blue-400" />
+          <h2 className="text-lg font-bold text-white">Store Profile</h2>
         </div>
         
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
-              <label htmlFor="storeName" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="storeName" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Store Name
               </label>
               <input
                 type="text"
                 id="storeName"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
                 value={storeSettings.name}
                 onChange={(e) => setStoreSettings({...storeSettings, name: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storeEmail" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="storeEmail" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Store Email Address
               </label>
               <input
                 type="email"
                 id="storeEmail"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
                 value={storeSettings.email}
                 onChange={(e) => setStoreSettings({...storeSettings, email: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storePhone" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="storePhone" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Phone Number
               </label>
               <input
                 type="text"
                 id="storePhone"
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
                 value={storeSettings.phone}
                 onChange={(e) => setStoreSettings({...storeSettings, phone: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storeLogo" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="storeLogo" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                 Store Logo
               </label>
               <div className="mt-1 flex items-center gap-4">
                 {storeSettings.logoUrl && (
-                  <div className="h-12 w-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0">
+                  <div className="h-12 w-12 rounded-xl overflow-hidden bg-slate-900 border border-white/10 flex-shrink-0">
                     <img src={storeSettings.logoUrl} alt="Store logo" className="h-full w-full object-cover" />
                   </div>
                 )}
@@ -190,7 +190,7 @@ export default function Settings() {
                   type="file"
                   id="storeLogo"
                   accept="image/*"
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-colors cursor-pointer"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -207,23 +207,23 @@ export default function Settings() {
           </div>
           
           <div>
-            <label htmlFor="storeAddress" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="storeAddress" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
               Store Address
             </label>
             <textarea
               id="storeAddress"
               rows={3}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
               value={storeSettings.address}
               onChange={(e) => setStoreSettings({...storeSettings, address: e.target.value})}
             />
           </div>
           
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-2">
             <button
               onClick={handleSaveStore}
               disabled={savingStore}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium disabled:opacity-50"
+              className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-500/10 transition-colors text-sm font-semibold disabled:opacity-50"
             >
               <Save className="w-4 h-4 mr-2" />
               {savingStore ? 'Saving...' : 'Save Store Details'}
@@ -233,29 +233,29 @@ export default function Settings() {
       </div>
 
       {role === 'Super Admin' && (
-        <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <ShieldAlert className="w-5 h-5 text-gray-700" />
-            <h2 className="text-lg font-medium text-gray-900">Store Authorization (Super Admin Only)</h2>
+        <div className="glass-panel shadow-xl rounded-2xl p-6 sm:p-8 mt-6">
+          <div className="flex items-center gap-3 mb-6">
+            <ShieldAlert className="w-5 h-5 text-blue-400" />
+            <h2 className="text-lg font-bold text-white">Store Authorization (Super Admin Only)</h2>
           </div>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
-              <label htmlFor="newEmail" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="newEmail" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
                 Authorized Emails
               </label>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-slate-400 mb-4">
                 Users with these emails will be automatically approved to create and open their stores.
               </p>
               
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-3 mb-4">
                 <input
                   type="email"
                   id="newEmail"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="email@example.com"
-                  className="flex-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="glass-input flex-1 block w-full rounded-xl py-2.5 px-4 sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -266,21 +266,21 @@ export default function Settings() {
                 <button
                   type="button"
                   onClick={handleAddEmail}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-500/10 transition-colors text-sm font-semibold"
                 >
                   Add
                 </button>
               </div>
 
               {authorizedEmails.length > 0 ? (
-                <ul className="divide-y divide-gray-200 border border-gray-200 rounded-md overflow-hidden">
+                <ul className="divide-y divide-white/5 border border-white/5 rounded-xl overflow-hidden bg-slate-950/20">
                   {authorizedEmails.map((email, index) => (
-                    <li key={index} className="flex justify-between items-center py-2 px-4 bg-gray-50 hover:bg-gray-100 transition-colors">
-                      <span className="text-sm text-gray-700">{email}</span>
+                    <li key={index} className="flex justify-between items-center py-3 px-4 hover:bg-white/5 transition-colors">
+                      <span className="text-sm font-semibold text-slate-200">{email}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveEmail(email)}
-                        className="text-red-600 hover:text-red-800 transition-colors"
+                        className="text-red-400 hover:text-red-300 transition-colors"
                         title="Remove email"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -289,15 +289,15 @@ export default function Settings() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-gray-500 italic">No authorized emails added yet.</p>
+                <p className="text-sm text-slate-500 italic py-2">No authorized emails added yet.</p>
               )}
             </div>
             
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-2">
               <button
                 onClick={handleSaveGeneral}
                 disabled={savingGeneral}
-                className="flex items-center px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 transition-colors shadow-sm text-sm font-medium disabled:opacity-50"
+                className="flex items-center px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors text-sm font-semibold disabled:opacity-50"
               >
                 <Save className="w-4 h-4 mr-2" />
                 {savingGeneral ? 'Saving...' : 'Save Settings'}

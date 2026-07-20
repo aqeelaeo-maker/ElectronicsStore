@@ -24,7 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
   return (
-    <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg transition-all hover:border-slate-700/80 hover:shadow-[0_4px_20px_rgba(59,130,246,0.06)]">
+    <div className="glass-panel glass-panel-hover p-6 rounded-2xl shadow-xl">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
@@ -149,7 +149,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Chart */}
-        <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+        <div className="glass-panel p-6 rounded-2xl shadow-xl">
           <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
             <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
             Sales & Profit Overview
@@ -172,7 +172,7 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+          <div className="glass-panel p-6 rounded-2xl shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
               Recent Sales
@@ -198,7 +198,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+          <div className="glass-panel p-6 rounded-2xl shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
               Top Products (By Value)

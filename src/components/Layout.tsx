@@ -37,26 +37,32 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-100">
+    <div className="min-h-screen bg-slate-950 flex text-slate-100 relative overflow-hidden">
+      {/* Aero Glassmorphism Glowing Spheres */}
+      <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-blue-600/10 blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-indigo-600/10 blur-[130px] pointer-events-none" />
+      <div className="absolute top-[35%] right-[15%] w-[35%] h-[35%] rounded-full bg-purple-600/5 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[25%] left-[20%] w-[30%] h-[30%] rounded-full bg-cyan-600/5 blur-[110px] pointer-events-none" />
+
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-gray-900/80 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-850 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-xl lg:shadow-none",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-slate-900/30 backdrop-blur-xl border-r border-white/5 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-2xl lg:shadow-none",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800/80 bg-slate-950/20">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-slate-950/40">
           <span className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <span className="bg-blue-600 px-2 py-1 rounded-lg text-white font-black leading-none text-xs shadow-md shadow-blue-500/20">EM</span>
-            <span>Electro<span className="text-blue-500">Manage</span></span>
+            <span className="bg-gradient-to-r from-blue-600 to-cyan-500 px-2 py-1 rounded-lg text-white font-black leading-none text-xs shadow-lg shadow-blue-500/20">EM</span>
+            <span>Electro<span className="text-blue-400">Manage</span></span>
           </span>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -70,16 +76,16 @@ export default function Layout() {
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    "flex items-center px-4 py-2.5 text-sm font-semibold rounded-lg group transition-all duration-150",
+                    "flex items-center px-4 py-2.5 text-sm font-semibold rounded-lg group transition-all duration-150 border",
                     isActive 
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30" 
-                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"
+                      ? "bg-blue-600/20 text-white border-blue-500/30 shadow-lg shadow-blue-950/50 backdrop-blur-sm" 
+                      : "text-slate-400 hover:bg-white/5 border-transparent hover:text-slate-100 hover:border-white/5"
                   )}
                 >
                   <item.icon 
                     className={cn(
                       "flex-shrink-0 -ml-1 mr-3 h-5 w-5 transition-colors duration-150",
-                      isActive ? "text-white" : "text-slate-400 group-hover:text-slate-300"
+                      isActive ? "text-blue-400" : "text-slate-400 group-hover:text-slate-300"
                     )} 
                   />
                   <span className="truncate">{item.name}</span>
@@ -89,10 +95,10 @@ export default function Layout() {
           </nav>
         </div>
 
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/10">
-          <div className="flex items-center p-2 rounded-xl bg-slate-800/30 border border-slate-800/20">
+        <div className="p-4 border-t border-white/5 bg-slate-950/40 backdrop-blur-md">
+          <div className="flex items-center p-2 rounded-xl bg-white/5 border border-white/5 shadow-inner">
             <div className="flex-shrink-0">
-              <div className="h-9 w-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/10">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/10">
                 {user?.email?.[0].toUpperCase()}
               </div>
             </div>
@@ -100,12 +106,12 @@ export default function Layout() {
               <p className="text-sm font-bold text-slate-200 truncate">
                 {user?.email}
               </p>
-              <p className="text-xs font-semibold text-slate-500 capitalize">{role?.toLowerCase() || 'member'}</p>
+              <p className="text-xs font-semibold text-slate-400 capitalize">{role?.toLowerCase() || 'member'}</p>
             </div>
           </div>
           <button 
             onClick={() => logout()}
-            className="mt-4 flex w-full items-center justify-center px-4 py-2.5 text-sm font-semibold text-red-400 bg-red-950/20 hover:bg-red-950/40 border border-red-900/20 hover:border-red-900/40 rounded-lg transition-colors"
+            className="mt-4 flex w-full items-center justify-center px-4 py-2.5 text-sm font-semibold text-red-400 bg-red-950/10 hover:bg-red-950/20 border border-red-500/10 hover:border-red-500/20 rounded-lg transition-all"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Sign Out
@@ -114,8 +120,8 @@ export default function Layout() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between px-4 lg:px-8 shrink-0">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-10">
+        <header className="h-16 bg-slate-950/20 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4 lg:px-8 shrink-0">
           <button 
             onClick={() => setSidebarOpen(true)}
             className="p-2 -ml-2 text-slate-400 hover:text-white lg:hidden transition-colors"
@@ -129,7 +135,7 @@ export default function Layout() {
                 <input 
                   type="text"
                   placeholder="Global Search (Invoice, Serial...)"
-                  className="w-72 pl-4 pr-10 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-900/80 focus:bg-slate-900 rounded-full text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
+                  className="w-72 pl-4 pr-10 py-2 bg-slate-950/40 border border-white/5 hover:border-white/10 hover:bg-slate-950/60 focus:bg-slate-950/80 rounded-full text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/40 transition-all backdrop-blur-sm"
                 />
              </div>
           </div>
