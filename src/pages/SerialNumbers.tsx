@@ -64,11 +64,10 @@ export default function SerialNumbers() {
     
     setLoadingSerials(true);
     
-    // We query serial numbers for the selected product
+    // We query serial numbers for the selected product without orderBy to avoid needing a composite index
     const q = query(
       collection(db, 'serialNumbers'), 
-      where('productId', '==', selectedProduct.id),
-      orderBy('createdAt', 'desc')
+      where('productId', '==', selectedProduct.id)
     );
       
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -76,6 +75,14 @@ export default function SerialNumbers() {
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as SerialNumber);
       });
+      
+      // Sort client-side by createdAt descending
+      data.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+      
       setSerialNumbers(data);
       setLoadingSerials(false);
     }, (error) => {
