@@ -132,35 +132,35 @@ export default function Products() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white">{isEditing ? 'Edit Product' : 'Add New Product'}</h1>
-            <p className="text-sm text-slate-400 mt-1">{isEditing ? 'Update the product details' : 'Enter the details for the new product'}</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">{isEditing ? 'Edit Product' : 'Add New Product'}</h1>
+            <p className="text-sm text-slate-500 mt-1">{isEditing ? 'Update the product details' : 'Enter the details for the new product'}</p>
           </div>
           <button 
             onClick={() => {
               setShowAddForm(false);
               setEditingProduct(null);
             }}
-            className="flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition-colors shadow-sm text-sm font-semibold"
+            className="flex items-center px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-sm text-sm font-semibold"
           >
             Cancel
           </button>
         </div>
 
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div className="glass-panel rounded-2xl shadow-sm overflow-hidden border border-slate-200">
           <form onSubmit={isEditing ? handleUpdateProduct : handleAddProduct}>
-            <div className="px-6 py-6 sm:p-8">
+            <div className="bg-white px-6 py-6 sm:p-8">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label htmlFor="name" className="block text-sm font-semibold text-slate-300">Product Name</label>
-                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="name" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Product Name</label>
+                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="brand" className="block text-sm font-semibold text-slate-300">Brand</label>
-                  <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="brand" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Brand</label>
+                  <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="category" className="block text-sm font-semibold text-slate-300">Category</label>
-                  <select name="category" id="category" defaultValue={initialData.category} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 transition-all">
+                  <label htmlFor="category" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+                  <select name="category" id="category" defaultValue={initialData.category} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm">
                     <option value="Television">Television</option>
                     <option value="Refrigerator">Refrigerator</option>
                     <option value="Air Conditioner">Air Conditioner</option>
@@ -173,31 +173,31 @@ export default function Products() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="modelNumber" className="block text-sm font-semibold text-slate-300">Model Number</label>
-                  <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="modelNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Model Number</label>
+                  <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="stock" className="block text-sm font-semibold text-slate-300">Initial Stock</label>
-                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="stock" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Initial Stock</label>
+                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="purchasePrice" className="block text-sm font-semibold text-slate-300">Purchase Price</label>
-                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Purchase Price</label>
+                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="salePrice" className="block text-sm font-semibold text-slate-300">Sale Price</label>
-                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sale Price</label>
+                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
               </div>
             </div>
-            <div className="bg-slate-950/40 px-6 py-4 border-t border-slate-850 flex justify-end gap-3">
+            <div className="bg-[#f8faf9] px-6 py-4 sm:px-8 flex justify-end gap-3 border-t border-slate-200">
               <button type="button" onClick={() => {
                 setShowAddForm(false);
                 setEditingProduct(null);
-              }} className="inline-flex justify-center rounded-xl border border-slate-800 shadow-sm px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm font-semibold focus:outline-none transition-colors">
+              }} className="inline-flex justify-center rounded-xl border border-slate-200 px-5 py-2.5 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 focus:outline-none transition-colors">
                 Cancel
               </button>
-              <button type="submit" className="inline-flex justify-center rounded-xl border border-transparent shadow-md px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 text-sm font-bold focus:outline-none transition-colors shadow-white/5">
+              <button type="submit" className="inline-flex justify-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-sm font-bold shadow-md shadow-emerald-950/10 focus:outline-none transition-colors">
                 {isEditing ? 'Update Product' : 'Save Product'}
               </button>
             </div>
@@ -211,101 +211,101 @@ export default function Products() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Products</h1>
-          <p className="text-sm text-slate-400 mt-1">Manage your product catalog and inventory</p>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Products</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage your product catalog and inventory</p>
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center px-4 py-2.5 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-colors shadow-md shadow-white/5 text-sm font-bold"
+          className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Product
         </button>
       </div>
 
-      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
-        <div className="p-4 border-b border-slate-800">
+      <div className="glass-panel rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-150 bg-slate-50/50">
           <div className="relative max-w-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-slate-500" />
+              <Search className="h-4 w-4 text-slate-450" />
             </div>
             <input
               type="text"
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm transition-all"
+              className="glass-input block w-full pl-10 pr-3 py-2 rounded-xl text-xs"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-800">
-            <thead className="bg-slate-950/40">
+          <table className="min-w-full divide-y divide-slate-100">
+            <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Product</th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Category</th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Price</th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Stock</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stock</th>
                 <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody className="bg-slate-900 divide-y divide-slate-800">
+            <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No products found. Add a new product to get started.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-slate-850/40 transition-colors">
+                  <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center">
-                          <Package className="h-5 w-5 text-slate-400" />
+                        <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center">
+                          <Package className="h-5 w-5 text-[#0a382c]" />
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-bold text-white">{product.name}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">{product.brand} • {product.modelNumber}</div>
+                          <div className="text-sm font-bold text-slate-900">{product.name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">{product.brand} • {product.modelNumber}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-white/5 text-slate-300 border border-white/10">
+                      <span className="px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
                         {product.category}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-300">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
                       ${product.salePrice.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs font-bold rounded-full ${
+                      <span className={`px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full uppercase tracking-wider ${
                         product.stock > 10 
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-150' 
                           : product.stock > 0 
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
-                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-150' 
+                            : 'bg-rose-50 text-rose-800 border border-rose-150'
                       }`}>
                         {product.stock} in stock
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                       <button 
                         onClick={() => setEditingProduct(product)}
-                        className="text-slate-300 hover:text-white mr-4 transition-colors"
+                        className="text-slate-400 hover:text-slate-800 mr-4 transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleDeleteProduct(product.id)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
+                        className="text-red-400 hover:text-red-600 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

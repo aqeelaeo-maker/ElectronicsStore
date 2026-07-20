@@ -24,21 +24,21 @@ import { useAuth } from '../contexts/AuthContext';
 
 function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
   return (
-    <div className="glass-panel glass-panel-hover p-6 rounded-2xl shadow-xl">
+    <div className="glass-panel glass-panel-hover p-6 rounded-2xl shadow-sm">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
-          <p className="mt-2.5 text-3xl font-extrabold text-white tracking-tight">{value}</p>
+          <p className="mt-2.5 text-3xl font-black text-slate-900 tracking-tight">{value}</p>
         </div>
-        <div className={`p-3 rounded-xl ${colorClass} shadow-inner`}>
+        <div className={`p-3 rounded-xl ${colorClass} flex items-center justify-center`}>
           <Icon className="w-6 h-6" />
         </div>
       </div>
       {trend && (
         <div className="mt-4 flex items-center text-xs font-semibold">
-          <TrendingUp className="w-4 h-4 text-slate-300 mr-1" />
-          <span className="text-slate-300">{trend}</span>
-          <span className="text-slate-500 ml-1.5">vs last month</span>
+          <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
+          <span className="text-emerald-700 font-bold">{trend}</span>
+          <span className="text-slate-400 ml-1.5">vs last month</span>
         </div>
       )}
     </div>
@@ -114,8 +114,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">Dashboard</h1>
-        <p className="text-sm text-slate-400 mt-1">Real-time overview of your store performance</p>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
+        <p className="text-sm text-slate-500 mt-1">Real-time overview of your store performance</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -124,97 +124,97 @@ export default function Dashboard() {
           value={`$${totalSales.toFixed(2)}`} 
           icon={DollarSign} 
           trend="+12.5%"
-          colorClass="bg-white/5 text-slate-300 border border-white/10"
+          colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
         />
         <StatCard 
           title="Total Products" 
           value={totalProducts} 
           icon={Package} 
-          colorClass="bg-white/5 text-slate-300 border border-white/10"
+          colorClass="bg-amber-50 text-amber-700 border border-amber-100"
         />
         <StatCard 
           title="Total Customers" 
           value={totalCustomers} 
           icon={Users} 
           trend="+5.2%"
-          colorClass="bg-white/5 text-slate-300 border border-white/10"
+          colorClass="bg-blue-50 text-blue-700 border border-blue-100"
         />
         <StatCard 
           title="Low Stock Items" 
           value={lowStockProducts} 
           icon={AlertTriangle} 
-          colorClass="bg-white/5 text-slate-300 border border-white/10"
+          colorClass="bg-rose-50 text-rose-700 border border-rose-100"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Chart */}
-        <div className="glass-panel p-6 rounded-2xl shadow-xl">
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-            <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
+        <div className="glass-panel p-6 rounded-2xl shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
             Sales & Profit Overview
           </h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={mockSalesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `$${val}`} />
                 <Tooltip 
-                  cursor={{ fill: '#1e293b', opacity: 0.3 }}
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#f1f5f9' }}
+                  cursor={{ fill: '#f4f7f6', opacity: 0.5 }}
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', color: '#0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
                 />
-                <Bar dataKey="sales" fill="#cbd5e1" radius={[4, 4, 0, 0]} name="Sales" />
-                <Bar dataKey="profit" fill="#64748b" radius={[4, 4, 0, 0]} name="Profit" />
+                <Bar dataKey="sales" fill="#0a382c" radius={[4, 4, 0, 0]} name="Sales" />
+                <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} name="Profit" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="glass-panel p-6 rounded-2xl shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
+          <div className="glass-panel p-6 rounded-2xl shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
               Recent Sales
             </h2>
             <div className="space-y-4">
               {recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-800 last:border-0 last:pb-0">
+                <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
                   <div className="flex items-center">
-                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-slate-300" />
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                      <ShoppingCart className="w-5 h-5 text-[#0a382c]" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-semibold text-white">{sale.invoiceNo}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{sale.customerName}</p>
+                      <p className="text-sm font-semibold text-slate-950">{sale.invoiceNo}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{sale.customerName}</p>
                     </div>
                   </div>
-                  <span className="text-sm font-bold text-slate-200">${sale.total?.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-slate-900">${sale.total?.toFixed(2)}</span>
                 </div>
               ))}
               {recentSales.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-6">No recent sales</p>
+                <p className="text-sm text-slate-400 text-center py-6">No recent sales</p>
               )}
             </div>
           </div>
 
-          <div className="glass-panel p-6 rounded-2xl shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
+          <div className="glass-panel p-6 rounded-2xl shadow-sm">
+            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
               Top Products (By Value)
             </h2>
             <div className="space-y-4">
               {topProducts.map((product) => (
-                <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-800 last:border-0 last:pb-0">
+                <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
                   <div>
-                    <p className="text-sm font-semibold text-white">{product.name}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">${product.salePrice?.toFixed(2)}</p>
+                    <p className="text-sm font-semibold text-slate-950">{product.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">${product.salePrice?.toFixed(2)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                       product.stock < 10 
-                        ? 'bg-white/5 text-slate-400 border border-white/10' 
-                        : 'bg-white/10 text-white border border-white/20'
+                        ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                     }`}>
                       {product.stock} in stock
                     </span>
@@ -222,7 +222,7 @@ export default function Dashboard() {
                 </div>
               ))}
               {topProducts.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-6">No products available</p>
+                <p className="text-sm text-slate-400 text-center py-6">No products available</p>
               )}
             </div>
           </div>

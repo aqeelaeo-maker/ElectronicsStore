@@ -64,7 +64,6 @@ export default function SerialNumbers() {
     
     setLoadingSerials(true);
     
-    // We filter by storeId for regular store owners to satisfy security rules, preventing permission denied errors.
     const q = role === 'Super Admin'
       ? query(
           collection(db, 'serialNumbers'), 
@@ -175,34 +174,34 @@ export default function SerialNumbers() {
   return (
     <div className="space-y-6 h-full flex flex-col">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">Serial Numbers</h1>
-        <p className="text-sm text-slate-400 mt-1">Manage unique serial numbers for serialized store inventory</p>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Serial Numbers</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage unique serial numbers for serialized store inventory</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
         {/* Left Column: Products List */}
-        <div className="w-full lg:w-1/3 flex flex-col bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
-          <div className="p-4 border-b border-slate-800">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">Select Product</h2>
+        <div className="w-full lg:w-1/3 flex flex-col glass-panel rounded-2xl shadow-sm overflow-hidden bg-white">
+          <div className="p-4 border-b border-slate-150 bg-slate-50/50">
+            <h2 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Select Product</h2>
             <div className="relative">
               <input
                 type="text"
                 placeholder="Search products..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm"
+                className="glass-input block w-full pl-10 pr-3 py-2 rounded-xl text-xs"
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
               />
-              <Search className="w-5 h-5 text-slate-500 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-slate-450 absolute left-3.5 top-3" />
             </div>
           </div>
           
-          <div className="overflow-y-auto flex-1 p-2 space-y-1">
+          <div className="overflow-y-auto flex-1 p-2 space-y-1 bg-white">
             {loadingProducts ? (
               <div className="flex justify-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c]"></div>
               </div>
             ) : filteredProducts.length === 0 ? (
-              <div className="text-center p-8 text-slate-500 text-sm">
+              <div className="text-center p-8 text-slate-400 text-xs">
                 No products found.
               </div>
             ) : (
@@ -215,14 +214,14 @@ export default function SerialNumbers() {
                         onClick={() => setSelectedProduct(product)}
                         className={`w-full text-left px-4 py-3 rounded-xl transition-all border ${
                           isSelected 
-                            ? 'bg-white/5 border-white/20 shadow-md ring-1 ring-white/10' 
-                            : 'hover:bg-slate-850/30 border-transparent'
+                            ? 'bg-emerald-50/40 border-emerald-300 shadow-sm ring-1 ring-emerald-500/10' 
+                            : 'hover:bg-[#f8faf9] border-transparent'
                         }`}
                       >
-                        <div className="font-bold text-white text-sm">{product.name}</div>
-                        <div className="text-xs text-slate-400 flex justify-between mt-1.5">
+                        <div className="font-bold text-slate-900 text-sm">{product.name}</div>
+                        <div className="text-xs text-slate-500 flex justify-between mt-1.5">
                           <span>{product.brand} • {product.modelNumber}</span>
-                          <span className="text-slate-300 font-bold">Stock: {product.stock}</span>
+                          <span className="text-[#0a382c] font-black uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded text-[10px]">Stock: {product.stock}</span>
                         </div>
                       </button>
                     </li>
@@ -234,32 +233,32 @@ export default function SerialNumbers() {
         </div>
 
         {/* Right Column: Serial Numbers */}
-        <div className="w-full lg:w-2/3 flex flex-col bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+        <div className="w-full lg:w-2/3 flex flex-col glass-panel rounded-2xl shadow-sm overflow-hidden bg-white border border-slate-200">
           {!selectedProduct ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-500 min-h-[350px]">
-              <Hash className="w-16 h-16 text-slate-700 mb-4" />
-              <p className="text-base font-bold text-slate-300 mb-1">No Product Selected</p>
+              <Hash className="w-16 h-16 text-slate-300 mb-4" />
+              <p className="text-base font-bold text-slate-700 mb-1">No Product Selected</p>
               <p className="text-xs max-w-xs mx-auto text-slate-500 leading-relaxed">Select a product from the list on the left to manage its serial numbers.</p>
             </div>
           ) : (
             <>
-              <div className="p-4 border-b border-slate-800 bg-slate-950/40 flex justify-between items-center">
+              <div className="p-4 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center">
                 <div>
-                  <h2 className="text-base font-bold text-white">{selectedProduct.name}</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{selectedProduct.brand} | Model: {selectedProduct.modelNumber}</p>
+                  <h2 className="text-base font-bold text-slate-900">{selectedProduct.name}</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">{selectedProduct.brand} | Model: {selectedProduct.modelNumber}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Available Stock</div>
-                  <div className="text-xl font-extrabold text-slate-200">{selectedProduct.stock}</div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Available Stock</div>
+                  <div className="text-xl font-black text-[#0a382c]">{selectedProduct.stock}</div>
                 </div>
               </div>
 
-              <div className="p-4 border-b border-slate-800">
+              <div className="p-4 border-b border-slate-150 bg-white">
                 <form onSubmit={handleAddSerialNumber} className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Enter new serial number..."
-                    className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm"
+                    className="glass-input block flex-1 rounded-xl py-2 px-3 text-xs"
                     value={newSerialNumber}
                     onChange={(e) => setNewSerialNumber(e.target.value)}
                     required
@@ -267,58 +266,58 @@ export default function SerialNumbers() {
                   <button
                     type="submit"
                     disabled={addingSerial || !newSerialNumber.trim()}
-                    className="flex items-center px-4 py-2 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-all text-sm font-bold disabled:opacity-50 shadow-md shadow-white/5"
+                    className="flex items-center px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl transition-all text-xs font-bold disabled:opacity-50 shadow-md shadow-emerald-950/10"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-4 h-4 mr-1.5" />
                     Add
                   </button>
                 </form>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4 bg-white">
                 {loadingSerials ? (
                   <div className="flex justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c]"></div>
                   </div>
                 ) : serialNumbers.length === 0 ? (
-                  <div className="text-center p-8 text-slate-500 text-sm">
+                  <div className="text-center p-8 text-slate-400 text-xs">
                     No serial numbers recorded for this product yet.
                   </div>
                 ) : (
-                  <div className="border border-slate-800 rounded-xl overflow-hidden shadow-inner">
-                    <table className="min-w-full divide-y divide-slate-800">
-                      <thead className="bg-slate-950/40">
+                  <div className="border border-slate-150 rounded-xl overflow-hidden">
+                    <table className="min-w-full divide-y divide-slate-100">
+                      <thead className="bg-[#f8faf9]">
                         <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                             Serial Number
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                             Status
                           </th>
-                          <th scope="col" className="px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-slate-900 divide-y divide-slate-800">
+                      <tbody className="bg-white divide-y divide-slate-100">
                         {serialNumbers.map((sn) => (
-                          <tr key={sn.id} className="hover:bg-slate-850/40 transition-colors">
+                          <tr key={sn.id} className="hover:bg-[#f8faf9] transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-bold text-slate-200 font-mono tracking-wider">{sn.serialNumber}</div>
+                              <div className="text-sm font-bold text-slate-800 font-mono tracking-wider">{sn.serialNumber}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`px-2.5 py-1 inline-flex text-[10px] font-bold rounded-full ${
+                              <span className={`px-2.5 py-1 inline-flex text-[9px] font-black uppercase tracking-wider rounded-full ${
                                 sn.status === 'Available' 
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                                  : 'bg-slate-800 text-slate-400 border border-slate-700/50'
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-150' 
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
                               }`}>
                                 {sn.status}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                               <button 
                                 onClick={() => handleDeleteSerialNumber(sn.id)}
-                                className="text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+                                className="text-red-500 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors"
                                 title="Delete"
                               >
                                 <Trash2 className="w-4 h-4" />

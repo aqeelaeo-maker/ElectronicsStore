@@ -117,7 +117,7 @@ export default function Settings() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c]"></div>
       </div>
     );
   }
@@ -125,64 +125,64 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">Settings</h1>
-        <p className="text-sm text-slate-400 mt-1">Manage system configurations and store details</p>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Settings</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage system configurations and store details</p>
       </div>
 
-      <div className="glass-panel shadow-xl rounded-2xl p-6 sm:p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Store className="w-5 h-5 text-blue-400" />
-          <h2 className="text-lg font-bold text-white">Store Profile</h2>
+      <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 bg-white border border-slate-200">
+        <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+          <Store className="w-5 h-5 text-[#0a382c]" />
+          <h2 className="text-lg font-bold text-slate-900">Store Profile</h2>
         </div>
         
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
-              <label htmlFor="storeName" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+              <label htmlFor="storeName" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Store Name
               </label>
               <input
                 type="text"
                 id="storeName"
-                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
                 value={storeSettings.name}
                 onChange={(e) => setStoreSettings({...storeSettings, name: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storeEmail" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+              <label htmlFor="storeEmail" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Store Email Address
               </label>
               <input
                 type="email"
                 id="storeEmail"
-                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
                 value={storeSettings.email}
                 onChange={(e) => setStoreSettings({...storeSettings, email: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storePhone" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+              <label htmlFor="storePhone" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Phone Number
               </label>
               <input
                 type="text"
                 id="storePhone"
-                className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
+                className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
                 value={storeSettings.phone}
                 onChange={(e) => setStoreSettings({...storeSettings, phone: e.target.value})}
               />
             </div>
             
             <div>
-              <label htmlFor="storeLogo" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+              <label htmlFor="storeLogo" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Store Logo
               </label>
               <div className="mt-1 flex items-center gap-4">
                 {storeSettings.logoUrl && (
-                  <div className="h-12 w-12 rounded-xl overflow-hidden bg-slate-900 border border-white/10 flex-shrink-0">
+                  <div className="h-12 w-12 rounded-xl overflow-hidden bg-slate-50 border border-slate-200 flex-shrink-0">
                     <img src={storeSettings.logoUrl} alt="Store logo" className="h-full w-full object-cover" />
                   </div>
                 )}
@@ -190,7 +190,7 @@ export default function Settings() {
                   type="file"
                   id="storeLogo"
                   accept="image/*"
-                  className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-white/5 file:text-slate-300 hover:file:bg-white/10 transition-colors cursor-pointer"
+                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border file:border-emerald-150 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-800 hover:file:bg-emerald-100 transition-colors cursor-pointer"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -207,13 +207,13 @@ export default function Settings() {
           </div>
           
           <div>
-            <label htmlFor="storeAddress" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+            <label htmlFor="storeAddress" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
               Store Address
             </label>
             <textarea
               id="storeAddress"
               rows={3}
-              className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm"
+              className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
               value={storeSettings.address}
               onChange={(e) => setStoreSettings({...storeSettings, address: e.target.value})}
             />
@@ -223,7 +223,7 @@ export default function Settings() {
             <button
               onClick={handleSaveStore}
               disabled={savingStore}
-              className="flex items-center px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 rounded-xl shadow-md shadow-white/5 transition-colors text-sm font-bold disabled:opacity-50"
+              className="flex items-center px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md transition-colors text-xs font-black disabled:opacity-50 shadow-emerald-950/10"
             >
               <Save className="w-4 h-4 mr-2" />
               {savingStore ? 'Saving...' : 'Save Store Details'}
@@ -233,18 +233,18 @@ export default function Settings() {
       </div>
 
       {role === 'Super Admin' && (
-        <div className="glass-panel shadow-xl rounded-2xl p-6 sm:p-8 mt-6">
-          <div className="flex items-center gap-3 mb-6">
-            <ShieldAlert className="w-5 h-5 text-slate-400" />
-            <h2 className="text-lg font-bold text-white">Store Authorization (Super Admin Only)</h2>
+        <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 mt-6 bg-white border border-slate-200">
+          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+            <ShieldAlert className="w-5 h-5 text-rose-500" />
+            <h2 className="text-lg font-bold text-slate-900">Store Authorization (Super Admin Only)</h2>
           </div>
           
           <div className="space-y-6">
             <div>
-              <label htmlFor="newEmail" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
+              <label htmlFor="newEmail" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Authorized Emails
               </label>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
                 Users with these emails will be automatically approved to create and open their stores.
               </p>
               
@@ -255,7 +255,7 @@ export default function Settings() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="email@example.com"
-                  className="glass-input flex-1 block w-full rounded-xl py-2.5 px-4 sm:text-sm"
+                  className="glass-input flex-1 block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -266,21 +266,21 @@ export default function Settings() {
                 <button
                   type="button"
                   onClick={handleAddEmail}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 rounded-xl shadow-md shadow-white/5 transition-colors text-sm font-bold"
+                  className="px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-sm transition-colors text-xs font-bold"
                 >
                   Add
                 </button>
               </div>
 
               {authorizedEmails.length > 0 ? (
-                <ul className="divide-y divide-white/5 border border-white/5 rounded-xl overflow-hidden bg-slate-950/20">
+                <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-[#f8faf9]">
                   {authorizedEmails.map((email, index) => (
-                    <li key={index} className="flex justify-between items-center py-3 px-4 hover:bg-white/5 transition-colors">
-                      <span className="text-sm font-semibold text-slate-200">{email}</span>
+                    <li key={index} className="flex justify-between items-center py-3 px-4 hover:bg-slate-50 transition-colors">
+                      <span className="text-sm font-bold text-slate-850">{email}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveEmail(email)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
+                        className="text-red-500 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50"
                         title="Remove email"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -289,7 +289,7 @@ export default function Settings() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-slate-500 italic py-2">No authorized emails added yet.</p>
+                <p className="text-xs text-slate-500 italic py-2">No authorized emails added yet.</p>
               )}
             </div>
             
@@ -297,10 +297,10 @@ export default function Settings() {
               <button
                 onClick={handleSaveGeneral}
                 disabled={savingGeneral}
-                className="flex items-center px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-colors text-sm font-semibold disabled:opacity-50"
+                className="flex items-center px-5 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-xs font-bold disabled:opacity-50 shadow-sm"
               >
                 <Save className="w-4 h-4 mr-2" />
-                {savingGeneral ? 'Saving...' : 'Save Settings'}
+                {savingGeneral ? 'Saving...' : 'Save Authorized Emails'}
               </button>
             </div>
           </div>
