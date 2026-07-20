@@ -52,6 +52,11 @@ service cloud.firestore {
       allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
     }
 
+    match /serialNumbers/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+
     // Default rule to deny everything else not explicitly allowed
     match /{document=**} {
       allow read, write: if false;

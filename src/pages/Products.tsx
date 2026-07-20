@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Package } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -22,6 +22,7 @@ export default function Products() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -77,22 +78,68 @@ export default function Products() {
     }
   };
 
+  const handleUpdateProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    
+    const formData = new FormData(e.currentTarget);
+    const updatedProduct = {
+      name: formData.get('name'),
+      brand: formData.get('brand'),
+      category: formData.get('category'),
+      modelNumber: formData.get('modelNumber'),
+      purchasePrice: Number(formData.get('purchasePrice')),
+      salePrice: Number(formData.get('salePrice')),
+      stock: Number(formData.get('stock')),
+      updatedAt: serverTimestamp(),
+    };
+
+    try {
+      await updateDoc(doc(db, 'products', editingProduct.id), updatedProduct);
+      toast.success('Product updated successfully');
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      toast.error('Failed to update product');
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await deleteDoc(doc(db, 'products', id));
+        toast.success('Product deleted successfully');
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        toast.error('Failed to delete product');
+      }
+    }
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.modelNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.brand.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (showAddForm) {
+  const isFormOpen = showAddForm || !!editingProduct;
+
+  if (isFormOpen) {
+    const isEditing = !!editingProduct;
+    const initialData = editingProduct || {} as Partial<Product>;
+
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Add New Product</h1>
-            <p className="text-sm text-gray-500">Enter the details for the new product</p>
+            <h1 className="text-2xl font-bold text-gray-900">{isEditing ? 'Edit Product' : 'Add New Product'}</h1>
+            <p className="text-sm text-gray-500">{isEditing ? 'Update the product details' : 'Enter the details for the new product'}</p>
           </div>
           <button 
-            onClick={() => setShowAddForm(false)}
+            onClick={() => {
+              setShowAddForm(false);
+              setEditingProduct(null);
+            }}
             className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors shadow-sm text-sm font-medium"
           >
             Cancel
@@ -100,20 +147,20 @@ export default function Products() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <form onSubmit={handleAddProduct}>
+          <form onSubmit={isEditing ? handleUpdateProduct : handleAddProduct}>
             <div className="px-4 py-5 sm:p-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
-                  <input type="text" name="name" id="name" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Brand</label>
-                  <input type="text" name="brand" id="brand" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
-                  <select name="category" id="category" required className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                  <select name="category" id="category" defaultValue={initialData.category} required className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                     <option value="Television">Television</option>
                     <option value="Refrigerator">Refrigerator</option>
                     <option value="Air Conditioner">Air Conditioner</option>
@@ -127,28 +174,31 @@ export default function Products() {
                 </div>
                 <div>
                   <label htmlFor="modelNumber" className="block text-sm font-medium text-gray-700">Model Number</label>
-                  <input type="text" name="modelNumber" id="modelNumber" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="stock" className="block text-sm font-medium text-gray-700">Initial Stock</label>
-                  <input type="number" name="stock" id="stock" required min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="purchasePrice" className="block text-sm font-medium text-gray-700">Purchase Price</label>
-                  <input type="number" name="purchasePrice" id="purchasePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="salePrice" className="block text-sm font-medium text-gray-700">Sale Price</label>
-                  <input type="number" name="salePrice" id="salePrice" required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                 </div>
               </div>
             </div>
             <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setShowAddForm(false)} className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+              <button type="button" onClick={() => {
+                setShowAddForm(false);
+                setEditingProduct(null);
+              }} className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
                 Cancel
               </button>
               <button type="submit" className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
-                Save Product
+                {isEditing ? 'Update Product' : 'Save Product'}
               </button>
             </div>
           </form>
@@ -243,10 +293,16 @@ export default function Products() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-4">
+                      <button 
+                        onClick={() => setEditingProduct(product)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900">
+                      <button 
+                        onClick={() => handleDeleteProduct(product.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>

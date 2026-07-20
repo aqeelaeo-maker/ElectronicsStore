@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Users } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -19,7 +19,8 @@ export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -66,10 +67,46 @@ export default function Customers() {
     try {
       await addDoc(collection(db, 'customers'), newCustomer);
       toast.success('Customer added successfully');
-      setShowModal(false);
+      setShowAddForm(false);
     } catch (error) {
       console.error('Error adding customer:', error);
       toast.error('Failed to add customer');
+    }
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+
+    const formData = new FormData(e.currentTarget);
+    const updatedCustomer = {
+      name: formData.get('name'),
+      mobile: formData.get('mobile'),
+      email: formData.get('email'),
+      city: formData.get('city'),
+      balance: Number(formData.get('balance')) || 0,
+      updatedAt: serverTimestamp(),
+    };
+
+    try {
+      await updateDoc(doc(db, 'customers', editingCustomer.id), updatedCustomer);
+      toast.success('Customer updated successfully');
+      setEditingCustomer(null);
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      toast.error('Failed to update customer');
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this customer?')) {
+      try {
+        await deleteDoc(doc(db, 'customers', id));
+        toast.success('Customer deleted successfully');
+      } catch (error) {
+        console.error('Error deleting customer:', error);
+        toast.error('Failed to delete customer');
+      }
     }
   };
 
@@ -77,6 +114,77 @@ export default function Customers() {
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.mobile.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const isFormOpen = showAddForm || !!editingCustomer;
+
+  if (isFormOpen) {
+    const isEditing = !!editingCustomer;
+    const initialData = editingCustomer || {} as Partial<Customer>;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{isEditing ? 'Edit Customer' : 'Add New Customer'}</h1>
+            <p className="text-sm text-gray-500">{isEditing ? 'Update the customer details' : 'Enter the details for the new customer'}</p>
+          </div>
+          <button 
+            onClick={() => {
+              setShowAddForm(false);
+              setEditingCustomer(null);
+            }}
+            className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors shadow-sm text-sm font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <form onSubmit={isEditing ? handleUpdateCustomer : handleAddCustomer}>
+            <div className="px-4 py-5 sm:p-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Full Name</label>
+                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="mobile" className="block text-sm font-medium text-gray-700">Mobile Number</label>
+                  <input type="text" name="mobile" id="mobile" defaultValue={initialData.mobile} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
+                  <input type="email" name="email" id="email" defaultValue={initialData.email} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="city" className="block text-sm font-medium text-gray-700">City</label>
+                  <input type="text" name="city" id="city" defaultValue={initialData.city} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="balance" className="block text-sm font-medium text-gray-700">Opening Balance</label>
+                  <input type="number" name="balance" id="balance" defaultValue={initialData.balance ?? 0} step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end gap-3">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowAddForm(false);
+                  setEditingCustomer(null);
+                }} 
+                className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+              >
+                Cancel
+              </button>
+              <button type="submit" className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
+                {isEditing ? 'Update Customer' : 'Save Customer'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -86,7 +194,7 @@ export default function Customers() {
           <p className="text-sm text-gray-500">Manage your customers</p>
         </div>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={() => setShowAddForm(true)}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -158,10 +266,16 @@ export default function Customers() {
                       ${customer.balance?.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-blue-600 hover:text-blue-900 mr-4">
+                      <button 
+                        onClick={() => setEditingCustomer(customer)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900">
+                      <button 
+                        onClick={() => handleDeleteCustomer(customer.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -172,52 +286,6 @@ export default function Customers() {
           </table>
         </div>
       </div>
-
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowModal(false)} />
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <form onSubmit={handleAddCustomer}>
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Add New Customer</h3>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">Full Name</label>
-                      <input type="text" name="name" id="name" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                    </div>
-                    <div>
-                      <label htmlFor="mobile" className="block text-sm font-medium text-gray-700">Mobile Number</label>
-                      <input type="text" name="mobile" id="mobile" required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                    </div>
-                    <div>
-                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
-                      <input type="email" name="email" id="email" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                    </div>
-                    <div>
-                      <label htmlFor="city" className="block text-sm font-medium text-gray-700">City</label>
-                      <input type="text" name="city" id="city" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                    </div>
-                    <div>
-                      <label htmlFor="balance" className="block text-sm font-medium text-gray-700">Opening Balance</label>
-                      <input type="number" name="balance" id="balance" defaultValue={0} step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button type="submit" className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
-                    Save Customer
-                  </button>
-                  <button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

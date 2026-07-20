@@ -13,6 +13,8 @@ import Vendors from './pages/Vendors';
 import Sales from './pages/Sales';
 import Settings from './pages/Settings';
 
+import SerialNumbers from './pages/SerialNumbers';
+
 // Mock empty pages for the rest of the routes
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex items-center justify-center h-full">
@@ -75,7 +77,7 @@ export default function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="products" element={<Products />} />
-            <Route path="serials" element={<Placeholder title="Serial Numbers" />} />
+            <Route path="serials" element={<SerialNumbers />} />
             <Route path="sales" element={<Sales />} />
             <Route path="purchases" element={<Placeholder title="Purchases" />} />
             <Route path="customers" element={<Customers />} />
