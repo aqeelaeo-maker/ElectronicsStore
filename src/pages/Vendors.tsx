@@ -159,7 +159,7 @@ export default function Vendors() {
                     id="companyName" 
                     defaultValue={initialData.companyName} 
                     required 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="e.g. ElectroParts Inc."
                   />
                 </div>
@@ -171,7 +171,7 @@ export default function Vendors() {
                     id="contactPerson" 
                     defaultValue={initialData.contactPerson} 
                     required 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="e.g. John Doe"
                   />
                 </div>
@@ -183,7 +183,7 @@ export default function Vendors() {
                     id="phone" 
                     defaultValue={initialData.phone} 
                     required 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="e.g. +1 (555) 019-2834"
                   />
                 </div>
@@ -194,7 +194,7 @@ export default function Vendors() {
                     name="email" 
                     id="email" 
                     defaultValue={initialData.email} 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="e.g. contact@electroparts.com"
                   />
                 </div>
@@ -205,7 +205,7 @@ export default function Vendors() {
                     name="city" 
                     id="city" 
                     defaultValue={initialData.city} 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="e.g. Chicago"
                   />
                 </div>
@@ -217,7 +217,7 @@ export default function Vendors() {
                     id="balance" 
                     defaultValue={initialData.balance ?? 0} 
                     step="0.01" 
-                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 py-2.5 px-4 text-sm" 
                     placeholder="0.00"
                   />
                 </div>
@@ -236,7 +236,7 @@ export default function Vendors() {
               </button>
               <button 
                 type="submit" 
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all text-sm font-semibold shadow-md shadow-blue-500/10"
+                className="px-5 py-2.5 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-all text-sm font-bold shadow-md shadow-white/5"
               >
                 {isEditing ? 'Update Vendor' : 'Register Vendor'}
               </button>
@@ -256,7 +256,7 @@ export default function Vendors() {
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all text-sm font-semibold shadow-md shadow-blue-500/10"
+          className="flex items-center px-4 py-2.5 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-all text-sm font-bold shadow-md shadow-white/5"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Vendor
@@ -274,7 +274,7 @@ export default function Vendors() {
               placeholder="Search vendors..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm"
             />
           </div>
         </div>
@@ -294,7 +294,7 @@ export default function Vendors() {
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300 mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredVendors.length === 0 ? (
@@ -308,8 +308,8 @@ export default function Vendors() {
                   <tr key={vendor.id} className="hover:bg-slate-850/30 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-blue-400" />
+                        <div className="h-10 w-10 flex-shrink-0 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center">
+                          <Building2 className="h-5 w-5 text-slate-300" />
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-bold text-white">{vendor.companyName}</div>
@@ -329,7 +329,7 @@ export default function Vendors() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-1">
                       <button 
                         onClick={() => setEditingVendor(vendor)}
-                        className="text-blue-400 hover:text-blue-300 p-1.5 rounded-lg hover:bg-slate-800 transition-all inline-flex"
+                        className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-all inline-flex"
                         title="Edit Vendor"
                       >
                         <Edit2 className="w-4 h-4" />

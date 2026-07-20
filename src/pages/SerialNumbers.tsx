@@ -188,7 +188,7 @@ export default function SerialNumbers() {
               <input
                 type="text"
                 placeholder="Search products..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+                className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm"
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
               />
@@ -199,7 +199,7 @@ export default function SerialNumbers() {
           <div className="overflow-y-auto flex-1 p-2 space-y-1">
             {loadingProducts ? (
               <div className="flex justify-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300"></div>
               </div>
             ) : filteredProducts.length === 0 ? (
               <div className="text-center p-8 text-slate-500 text-sm">
@@ -215,14 +215,14 @@ export default function SerialNumbers() {
                         onClick={() => setSelectedProduct(product)}
                         className={`w-full text-left px-4 py-3 rounded-xl transition-all border ${
                           isSelected 
-                            ? 'bg-blue-500/5 border-blue-500 shadow-md ring-1 ring-blue-500/20' 
+                            ? 'bg-white/5 border-white/20 shadow-md ring-1 ring-white/10' 
                             : 'hover:bg-slate-850/30 border-transparent'
                         }`}
                       >
                         <div className="font-bold text-white text-sm">{product.name}</div>
                         <div className="text-xs text-slate-400 flex justify-between mt-1.5">
                           <span>{product.brand} • {product.modelNumber}</span>
-                          <span className="text-blue-400 font-bold">Stock: {product.stock}</span>
+                          <span className="text-slate-300 font-bold">Stock: {product.stock}</span>
                         </div>
                       </button>
                     </li>
@@ -250,7 +250,7 @@ export default function SerialNumbers() {
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Available Stock</div>
-                  <div className="text-xl font-extrabold text-blue-400">{selectedProduct.stock}</div>
+                  <div className="text-xl font-extrabold text-slate-200">{selectedProduct.stock}</div>
                 </div>
               </div>
 
@@ -259,7 +259,7 @@ export default function SerialNumbers() {
                   <input
                     type="text"
                     placeholder="Enter new serial number..."
-                    className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
+                    className="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm"
                     value={newSerialNumber}
                     onChange={(e) => setNewSerialNumber(e.target.value)}
                     required
@@ -267,7 +267,7 @@ export default function SerialNumbers() {
                   <button
                     type="submit"
                     disabled={addingSerial || !newSerialNumber.trim()}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all text-sm font-semibold disabled:opacity-50 shadow-md shadow-blue-500/10"
+                    className="flex items-center px-4 py-2 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-all text-sm font-bold disabled:opacity-50 shadow-md shadow-white/5"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Add
@@ -278,7 +278,7 @@ export default function SerialNumbers() {
               <div className="flex-1 overflow-y-auto p-4">
                 {loadingSerials ? (
                   <div className="flex justify-center p-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300"></div>
                   </div>
                 ) : serialNumbers.length === 0 ? (
                   <div className="text-center p-8 text-slate-500 text-sm">

@@ -36,8 +36,8 @@ function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
       </div>
       {trend && (
         <div className="mt-4 flex items-center text-xs font-semibold">
-          <TrendingUp className="w-4 h-4 text-emerald-400 mr-1" />
-          <span className="text-emerald-400">{trend}</span>
+          <TrendingUp className="w-4 h-4 text-slate-300 mr-1" />
+          <span className="text-slate-300">{trend}</span>
           <span className="text-slate-500 ml-1.5">vs last month</span>
         </div>
       )}
@@ -124,26 +124,26 @@ export default function Dashboard() {
           value={`$${totalSales.toFixed(2)}`} 
           icon={DollarSign} 
           trend="+12.5%"
-          colorClass="bg-blue-500/10 text-blue-400 border border-blue-500/20"
+          colorClass="bg-white/5 text-slate-300 border border-white/10"
         />
         <StatCard 
           title="Total Products" 
           value={totalProducts} 
-          icon={Package}
-          colorClass="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+          icon={Package} 
+          colorClass="bg-white/5 text-slate-300 border border-white/10"
         />
         <StatCard 
           title="Total Customers" 
           value={totalCustomers} 
           icon={Users} 
           trend="+5.2%"
-          colorClass="bg-purple-500/10 text-purple-400 border border-purple-500/20"
+          colorClass="bg-white/5 text-slate-300 border border-white/10"
         />
         <StatCard 
           title="Low Stock Items" 
           value={lowStockProducts} 
           icon={AlertTriangle} 
-          colorClass="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+          colorClass="bg-white/5 text-slate-300 border border-white/10"
         />
       </div>
 
@@ -151,7 +151,7 @@ export default function Dashboard() {
         {/* Sales Chart */}
         <div className="glass-panel p-6 rounded-2xl shadow-xl">
           <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-            <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
+            <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
             Sales & Profit Overview
           </h2>
           <div className="h-80">
@@ -164,8 +164,8 @@ export default function Dashboard() {
                   cursor={{ fill: '#1e293b', opacity: 0.3 }}
                   contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#f1f5f9' }}
                 />
-                <Bar dataKey="sales" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Sales" />
-                <Bar dataKey="profit" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Profit" />
+                <Bar dataKey="sales" fill="#cbd5e1" radius={[4, 4, 0, 0]} name="Sales" />
+                <Bar dataKey="profit" fill="#64748b" radius={[4, 4, 0, 0]} name="Profit" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -174,15 +174,15 @@ export default function Dashboard() {
         <div className="space-y-6">
           <div className="glass-panel p-6 rounded-2xl shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
+              <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
               Recent Sales
             </h2>
             <div className="space-y-4">
               {recentSales.map((sale) => (
                 <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-800 last:border-0 last:pb-0">
                   <div className="flex items-center">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-blue-400" />
+                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                      <ShoppingCart className="w-5 h-5 text-slate-300" />
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-semibold text-white">{sale.invoiceNo}</p>
@@ -200,7 +200,7 @@ export default function Dashboard() {
 
           <div className="glass-panel p-6 rounded-2xl shadow-xl">
             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
+              <span className="w-1.5 h-4 bg-slate-300 rounded-full"></span>
               Top Products (By Value)
             </h2>
             <div className="space-y-4">
@@ -213,8 +213,8 @@ export default function Dashboard() {
                   <div className="text-right">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                       product.stock < 10 
-                        ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        ? 'bg-white/5 text-slate-400 border border-white/10' 
+                        : 'bg-white/10 text-white border border-white/20'
                     }`}>
                       {product.stock} in stock
                     </span>

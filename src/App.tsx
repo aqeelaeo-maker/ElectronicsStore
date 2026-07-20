@@ -27,9 +27,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, role, status, logout } = useAuth();
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-    </div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden">
+        {/* Aero Glassmorphism Glowing Spheres - Gray / White monochrome */}
+        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-slate-500/5 blur-[130px] pointer-events-none" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-300 relative z-10"></div>
+      </div>
+    );
   }
   
   if (!user) {
@@ -38,20 +42,24 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (status === 'Pending' && role !== 'Super Admin') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-lg shadow-sm max-w-md text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Account Pending</h2>
-          <p className="text-gray-600 mb-6">Your account is pending authorization by the Super Admin. Please wait for approval to access your store.</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
+        {/* Aero Glassmorphism Glowing Spheres - Gray / White monochrome */}
+        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-slate-500/5 blur-[130px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-slate-600/5 blur-[130px] pointer-events-none" />
+
+        <div className="glass-panel p-8 rounded-2xl shadow-2xl max-w-md text-center relative z-10 border border-white/10">
+          <h2 className="text-2xl font-extrabold text-white mb-3">Account Pending</h2>
+          <p className="text-slate-300 text-sm mb-6 leading-relaxed">Your account is pending authorization by the Super Admin. Please wait for approval to access your store.</p>
           <div className="flex justify-center gap-4">
             <button 
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 font-bold rounded-xl shadow-md shadow-white/5 transition-all text-sm"
             >
               Check Status
             </button>
             <button 
               onClick={logout}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition-all text-sm"
             >
               Sign Out
             </button>

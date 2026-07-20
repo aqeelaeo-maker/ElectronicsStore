@@ -88,7 +88,7 @@ export default function Sales() {
         </div>
         <button 
           onClick={() => setShowModal(true)}
-          className="flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-500/10 transition-colors text-sm font-semibold"
+          className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 rounded-xl shadow-md shadow-white/5 transition-colors text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
           Create Invoice
@@ -127,7 +127,7 @@ export default function Sales() {
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300 mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredSales.length === 0 ? (
@@ -141,7 +141,7 @@ export default function Sales() {
                   <tr key={sale.id} className="hover:bg-white/5 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg flex items-center justify-center">
+                        <div className="h-10 w-10 flex-shrink-0 bg-white/5 border border-white/10 text-slate-300 rounded-lg flex items-center justify-center">
                           <FileText className="h-5 w-5" />
                         </div>
                         <div className="ml-4">
@@ -159,12 +159,12 @@ export default function Sales() {
                       ${sale.total?.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-0.5 inline-flex text-[10px] leading-5 font-bold rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase tracking-wide">
+                      <span className="px-2.5 py-0.5 inline-flex text-[10px] leading-5 font-bold rounded-full bg-white/10 border border-white/20 text-white uppercase tracking-wide">
                         {sale.status}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
-                      <button className="text-blue-400 hover:text-blue-300 transition-colors">
+                      <button className="text-slate-400 hover:text-slate-200 transition-colors">
                         <Eye className="w-4 h-4" />
                       </button>
                     </td>
@@ -197,7 +197,7 @@ export default function Sales() {
                   </div>
                 </div>
                 <div className="bg-slate-950/40 px-6 py-4 sm:px-6 sm:flex sm:flex-row-reverse gap-3 border-t border-white/5">
-                  <button type="submit" className="w-full inline-flex justify-center rounded-xl px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-sm font-semibold text-white shadow-md shadow-blue-500/10 focus:outline-none transition-colors sm:w-auto">
+                  <button type="submit" className="w-full inline-flex justify-center rounded-xl px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-950 shadow-md shadow-white/5 focus:outline-none transition-colors sm:w-auto">
                     Create Invoice
                   </button>
                   <button type="button" onClick={() => setShowModal(false)} className="mt-3 w-full inline-flex justify-center rounded-xl border border-slate-700 px-5 py-2.5 bg-slate-800 text-sm font-semibold text-slate-300 hover:bg-slate-700 focus:outline-none transition-colors sm:mt-0 sm:w-auto">

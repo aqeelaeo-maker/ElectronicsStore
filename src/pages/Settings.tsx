@@ -190,7 +190,7 @@ export default function Settings() {
                   type="file"
                   id="storeLogo"
                   accept="image/*"
-                  className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-colors cursor-pointer"
+                  className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-white/5 file:text-slate-300 hover:file:bg-white/10 transition-colors cursor-pointer"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -223,7 +223,7 @@ export default function Settings() {
             <button
               onClick={handleSaveStore}
               disabled={savingStore}
-              className="flex items-center px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-500/10 transition-colors text-sm font-semibold disabled:opacity-50"
+              className="flex items-center px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 rounded-xl shadow-md shadow-white/5 transition-colors text-sm font-bold disabled:opacity-50"
             >
               <Save className="w-4 h-4 mr-2" />
               {savingStore ? 'Saving...' : 'Save Store Details'}
@@ -235,7 +235,7 @@ export default function Settings() {
       {role === 'Super Admin' && (
         <div className="glass-panel shadow-xl rounded-2xl p-6 sm:p-8 mt-6">
           <div className="flex items-center gap-3 mb-6">
-            <ShieldAlert className="w-5 h-5 text-blue-400" />
+            <ShieldAlert className="w-5 h-5 text-slate-400" />
             <h2 className="text-lg font-bold text-white">Store Authorization (Super Admin Only)</h2>
           </div>
           
@@ -266,7 +266,7 @@ export default function Settings() {
                 <button
                   type="button"
                   onClick={handleAddEmail}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-500/10 transition-colors text-sm font-semibold"
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 rounded-xl shadow-md shadow-white/5 transition-colors text-sm font-bold"
                 >
                   Add
                 </button>

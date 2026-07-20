@@ -533,7 +533,7 @@ export default function Inventory() {
                   <input
                     type="text"
                     placeholder="Search products to add inventory..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all text-sm"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 transition-all text-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -544,7 +544,7 @@ export default function Inventory() {
               <div className="flex-1 overflow-y-auto p-4">
                 {loading ? (
                   <div className="flex justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300"></div>
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-12 text-slate-500">
@@ -581,7 +581,7 @@ export default function Inventory() {
                                     type="number"
                                     min="0"
                                     placeholder="+0"
-                                    className="w-20 px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm text-center font-bold"
+                                    className="w-20 px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm text-center font-bold"
                                     value={bulkQuantities[product.id] || ''}
                                     onChange={(e) => {
                                       const val = Math.max(0, parseInt(e.target.value) || 0);
@@ -643,7 +643,7 @@ export default function Inventory() {
                   </label>
                   <select
                     id="bulkVendor"
-                    className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 font-medium"
+                    className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/25 sm:text-sm text-slate-100 font-medium"
                     value={selectedVendorId}
                     onChange={(e) => setSelectedVendorId(e.target.value)}
                   >
@@ -662,13 +662,13 @@ export default function Inventory() {
                     type="text"
                     id="bulkRefNumber"
                     placeholder="e.g. INV-2026-BATCH"
-                    className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600"
+                    className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/25 sm:text-sm text-slate-100 placeholder-slate-600"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
                   />
                 </div>
 
-                <div className="bg-blue-500/5 p-4 rounded-xl border border-blue-500/10 space-y-3 mt-6">
+                <div className="bg-white/[0.02] p-4 rounded-xl border border-white/5 space-y-3 mt-6">
                   <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Stock Addition Summary</h3>
                   <div className="space-y-2 text-xs divide-y divide-slate-800/60">
                     {(Object.entries(bulkQuantities) as [string, number][]).filter(([_, qty]) => qty > 0).length === 0 ? (
@@ -681,14 +681,14 @@ export default function Inventory() {
                           return (
                             <div key={pId} className="flex justify-between py-1 text-slate-300">
                               <span className="line-clamp-1 flex-1 pr-2">{prod?.name}</span>
-                              <span className="font-bold text-blue-400 font-mono">+{qty}</span>
+                              <span className="font-bold text-slate-200 font-mono">+{qty}</span>
                             </div>
                           );
                         })}
                       </div>
                     )}
                   </div>
-                  <div className="flex justify-between text-blue-400 font-bold border-t border-slate-800/80 pt-3 text-sm">
+                  <div className="flex justify-between text-slate-300 font-bold border-t border-slate-800/80 pt-3 text-sm">
                     <span>Products to Update:</span>
                     <span>{(Object.values(bulkQuantities) as number[]).filter(qty => qty > 0).length} items</span>
                   </div>
@@ -708,7 +708,7 @@ export default function Inventory() {
                   <button
                     type="submit"
                     disabled={saving || (Object.values(bulkQuantities) as number[]).filter(qty => qty > 0).length === 0}
-                    className="flex-1 flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 focus:outline-none transition-colors disabled:opacity-50 shadow-blue-500/10"
+                    className="flex-1 flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-slate-950 bg-slate-100 hover:bg-slate-200 focus:outline-none transition-colors disabled:opacity-50 shadow-white/5"
                   >
                     {saving ? (
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -729,7 +729,7 @@ export default function Inventory() {
         <div className="bg-slate-900 rounded-2xl border border-slate-800 flex-1 flex flex-col overflow-hidden shadow-lg">
           <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/40 flex justify-between items-center">
             <h2 className="text-lg font-bold text-white">Inventory Transaction Log</h2>
-            <span className="text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full">
+            <span className="text-xs font-bold text-slate-300 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
               {logs.length} Transactions
             </span>
           </div>
@@ -773,7 +773,7 @@ export default function Inventory() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                          <span className="inline-flex items-center text-xs font-bold text-slate-200 bg-white/5 px-2.5 py-1 rounded-full border border-white/10">
                             <Plus className="w-3 h-3 mr-0.5" />
                             {log.quantityAdded} units
                           </span>
@@ -782,14 +782,14 @@ export default function Inventory() {
                           <div className="flex items-center gap-1.5 font-bold font-mono text-xs">
                             <span className="text-slate-500">{log.previousStock}</span>
                             <span className="text-slate-600">→</span>
-                            <span className="text-blue-400 font-bold">{log.newStock}</span>
+                            <span className="text-slate-200 font-bold">{log.newStock}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-xs font-bold text-slate-300 line-clamp-1">
                             {log.vendorName ? (
                               <span className="flex items-center">
-                                <User className="w-3.5 h-3.5 mr-1 text-purple-400" />
+                                <User className="w-3.5 h-3.5 mr-1 text-slate-400" />
                                 {log.vendorName}
                               </span>
                             ) : (

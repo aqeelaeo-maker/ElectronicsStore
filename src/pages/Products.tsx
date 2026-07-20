@@ -152,15 +152,15 @@ export default function Products() {
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="sm:col-span-2 lg:col-span-3">
                   <label htmlFor="name" className="block text-sm font-semibold text-slate-300">Product Name</label>
-                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="text" name="name" id="name" defaultValue={initialData.name} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="brand" className="block text-sm font-semibold text-slate-300">Brand</label>
-                  <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="category" className="block text-sm font-semibold text-slate-300">Category</label>
-                  <select name="category" id="category" defaultValue={initialData.category} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 transition-all">
+                  <select name="category" id="category" defaultValue={initialData.category} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 transition-all">
                     <option value="Television">Television</option>
                     <option value="Refrigerator">Refrigerator</option>
                     <option value="Air Conditioner">Air Conditioner</option>
@@ -174,19 +174,19 @@ export default function Products() {
                 </div>
                 <div>
                   <label htmlFor="modelNumber" className="block text-sm font-semibold text-slate-300">Model Number</label>
-                  <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="stock" className="block text-sm font-semibold text-slate-300">Initial Stock</label>
-                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="purchasePrice" className="block text-sm font-semibold text-slate-300">Purchase Price</label>
-                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
                 <div>
                   <label htmlFor="salePrice" className="block text-sm font-semibold text-slate-300">Sale Price</label>
-                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
+                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="mt-1.5 block w-full bg-slate-950 border border-slate-800 rounded-xl shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-white/10 focus:border-white/20 sm:text-sm text-slate-100 placeholder-slate-600 transition-all" />
                 </div>
               </div>
             </div>
@@ -197,7 +197,7 @@ export default function Products() {
               }} className="inline-flex justify-center rounded-xl border border-slate-800 shadow-sm px-5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 text-sm font-semibold focus:outline-none transition-colors">
                 Cancel
               </button>
-              <button type="submit" className="inline-flex justify-center rounded-xl border border-transparent shadow-md px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold focus:outline-none transition-colors shadow-blue-500/10">
+              <button type="submit" className="inline-flex justify-center rounded-xl border border-transparent shadow-md px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 text-sm font-bold focus:outline-none transition-colors shadow-white/5">
                 {isEditing ? 'Update Product' : 'Save Product'}
               </button>
             </div>
@@ -216,7 +216,7 @@ export default function Products() {
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors shadow-md shadow-blue-500/10 text-sm font-semibold"
+          className="flex items-center px-4 py-2.5 bg-slate-100 text-slate-950 rounded-xl hover:bg-slate-200 transition-colors shadow-md shadow-white/5 text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Product
@@ -234,7 +234,7 @@ export default function Products() {
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 sm:text-sm transition-all"
+              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-white/10 text-sm transition-all"
             />
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function Products() {
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-300 mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
@@ -278,7 +278,7 @@ export default function Products() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-white/5 text-slate-300 border border-white/10">
                         {product.category}
                       </span>
                     </td>
@@ -299,7 +299,7 @@ export default function Products() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button 
                         onClick={() => setEditingProduct(product)}
-                        className="text-blue-400 hover:text-blue-300 mr-4 transition-colors"
+                        className="text-slate-300 hover:text-white mr-4 transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
