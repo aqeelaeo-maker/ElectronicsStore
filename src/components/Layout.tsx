@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -32,9 +34,40 @@ const navigation = [
 ];
 
 export default function Layout() {
-  const { user, role, logout } = useAuth();
+  const { user, role, storeId, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
+
+  useEffect(() => {
+    if (!storeId) return;
+
+    const storeRef = doc(db, 'stores', storeId);
+    const unsubscribe = onSnapshot(storeRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setStoreDetails({
+          name: data.name || '',
+          logoUrl: data.logoUrl || ''
+        });
+      }
+    }, (error) => {
+      console.error('Error listening to store details:', error);
+    });
+
+    return () => unsubscribe();
+  }, [storeId]);
+
+  const getInitials = (name: string) => {
+    if (!name) return 'EM';
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .map(word => word[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  };
 
   return (
     <div className="min-h-screen bg-[#f3f6f5] flex text-slate-800 relative overflow-hidden font-sans">
@@ -52,11 +85,17 @@ export default function Layout() {
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="h-16 flex items-center justify-between px-6 border-b border-emerald-900/40 bg-[#072d23]">
-          <span className="text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
-            <span className="bg-[#f0b90b] text-slate-950 px-2 py-1 rounded-lg font-black leading-none text-xs shadow">EM</span>
-            <span>Electro<span className="text-emerald-400">Manage</span></span>
+          <span className="text-sm font-extrabold tracking-tight text-white flex items-center gap-2.5 min-w-0 flex-1">
+            {storeDetails.logoUrl ? (
+              <img src={storeDetails.logoUrl} alt="Store Logo" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" referrerPolicy="no-referrer" />
+            ) : (
+              <div className="h-8 w-8 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-xs shadow flex-shrink-0">
+                {getInitials(storeDetails.name || 'ElectroManage')}
+              </div>
+            )}
+            <span className="truncate">{storeDetails.name || 'ElectroManage'}</span>
           </span>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-300 hover:text-white transition-colors">
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-300 hover:text-white transition-colors ml-2">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -148,12 +187,19 @@ export default function Layout() {
                 />
              </div>
 
-             {/* Profile selection like in the reference image (ET circle initials) */}
+             {/* Profile selection with dynamic store name and logo */}
              <div className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 rounded-full border border-slate-200 transition-all cursor-pointer">
-               <span className="text-xs font-bold text-slate-700">ElectroManage Store</span>
-               <div className="h-6 w-6 rounded-full bg-[#0a382c] flex items-center justify-center text-emerald-300 text-[10px] font-black">
-                 EM
-               </div>
+               {storeDetails.logoUrl && (
+                 <img src={storeDetails.logoUrl} alt="Store Logo" className="h-5 w-5 rounded-full object-cover flex-shrink-0" referrerPolicy="no-referrer" />
+               )}
+               <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">
+                 {storeDetails.name || 'ElectroManage'}
+               </span>
+               {!storeDetails.logoUrl && (
+                 <div className="h-6 w-6 rounded-full bg-[#0a382c] flex items-center justify-center text-emerald-300 text-[10px] font-black flex-shrink-0">
+                   {getInitials(storeDetails.name || 'ElectroManage')}
+                 </div>
+               )}
              </div>
           </div>
         </header>
