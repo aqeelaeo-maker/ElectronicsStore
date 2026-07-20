@@ -126,66 +126,119 @@ export default function Vendors() {
     const initialData = editingVendor || {} as Partial<Vendor>;
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{isEditing ? 'Edit Vendor' : 'Add New Vendor'}</h1>
-            <p className="text-sm text-gray-500">{isEditing ? 'Update the vendor details' : 'Enter the details for the new vendor'}</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">
+              {isEditing ? 'Edit Vendor Details' : 'Register New Vendor'}
+            </h1>
+            <p className="text-sm text-slate-400 mt-1">
+              {isEditing ? 'Update vendor profile, contacts, and account balance' : 'Enter the supplier details to add them to your vendor register'}
+            </p>
           </div>
           <button 
             onClick={() => {
               setShowAddForm(false);
               setEditingVendor(null);
             }}
-            className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors shadow-sm text-sm font-medium"
+            className="flex items-center px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold border border-slate-700/50"
           >
-            Cancel
+            Back to Directory
           </button>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
           <form onSubmit={isEditing ? handleUpdateVendor : handleAddVendor}>
-            <div className="px-4 py-5 sm:p-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="p-6 sm:p-8 space-y-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label htmlFor="companyName" className="block text-sm font-medium text-gray-700">Company Name</label>
-                  <input type="text" name="companyName" id="companyName" defaultValue={initialData.companyName} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <label htmlFor="companyName" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Company Name</label>
+                  <input 
+                    type="text" 
+                    name="companyName" 
+                    id="companyName" 
+                    defaultValue={initialData.companyName} 
+                    required 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="e.g. ElectroParts Inc."
+                  />
                 </div>
                 <div>
-                  <label htmlFor="contactPerson" className="block text-sm font-medium text-gray-700">Contact Person</label>
-                  <input type="text" name="contactPerson" id="contactPerson" defaultValue={initialData.contactPerson} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <label htmlFor="contactPerson" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Contact Person</label>
+                  <input 
+                    type="text" 
+                    name="contactPerson" 
+                    id="contactPerson" 
+                    defaultValue={initialData.contactPerson} 
+                    required 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="e.g. John Doe"
+                  />
                 </div>
                 <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</label>
-                  <input type="text" name="phone" id="phone" defaultValue={initialData.phone} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <label htmlFor="phone" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Phone Number</label>
+                  <input 
+                    type="text" 
+                    name="phone" 
+                    id="phone" 
+                    defaultValue={initialData.phone} 
+                    required 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="e.g. +1 (555) 019-2834"
+                  />
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
-                  <input type="email" name="email" id="email" defaultValue={initialData.email} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <label htmlFor="email" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email Address</label>
+                  <input 
+                    type="email" 
+                    name="email" 
+                    id="email" 
+                    defaultValue={initialData.email} 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="e.g. contact@electroparts.com"
+                  />
                 </div>
                 <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700">City</label>
-                  <input type="text" name="city" id="city" defaultValue={initialData.city} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                  <label htmlFor="city" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">City</label>
+                  <input 
+                    type="text" 
+                    name="city" 
+                    id="city" 
+                    defaultValue={initialData.city} 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="e.g. Chicago"
+                  />
                 </div>
-                <div>
-                  <label htmlFor="balance" className="block text-sm font-medium text-gray-700">Opening/Current Balance</label>
-                  <input type="number" name="balance" id="balance" defaultValue={initialData.balance ?? 0} step="0.01" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                <div className="sm:col-span-2">
+                  <label htmlFor="balance" className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Opening / Current Balance ($)</label>
+                  <input 
+                    type="number" 
+                    name="balance" 
+                    id="balance" 
+                    defaultValue={initialData.balance ?? 0} 
+                    step="0.01" 
+                    className="block w-full bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 py-2.5 px-4 text-sm" 
+                    placeholder="0.00"
+                  />
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-end gap-3">
+            <div className="bg-slate-950/40 border-t border-slate-800 px-6 py-4 flex justify-end gap-3">
               <button 
                 type="button" 
                 onClick={() => {
                   setShowAddForm(false);
                   setEditingVendor(null);
                 }} 
-                className="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm"
+                className="px-5 py-2.5 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 hover:text-white transition-all text-sm font-semibold border border-slate-700/50"
               >
                 Cancel
               </button>
-              <button type="submit" className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:text-sm">
-                {isEditing ? 'Update Vendor' : 'Save Vendor'}
+              <button 
+                type="submit" 
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all text-sm font-semibold shadow-md shadow-blue-500/10"
+              >
+                {isEditing ? 'Update Vendor' : 'Register Vendor'}
               </button>
             </div>
           </form>
@@ -198,91 +251,93 @@ export default function Vendors() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vendors</h1>
-          <p className="text-sm text-gray-500">Manage your suppliers and vendors</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">Vendors</h1>
+          <p className="text-sm text-slate-400 mt-1">Manage and track your supplier directories and accounts</p>
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+          className="flex items-center px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all text-sm font-semibold shadow-md shadow-blue-500/10"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Vendor
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+        <div className="p-4 border-b border-slate-800 bg-slate-950/20">
           <div className="relative max-w-sm">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
+              <Search className="h-4 w-4 text-slate-500" />
             </div>
             <input
               type="text"
               placeholder="Search vendors..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="block w-full pl-10 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-sm"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-slate-800">
+            <thead className="bg-slate-950/40">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">City</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Balance</th>
-                <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Company</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Contact</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">City</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Balance</th>
+                <th scope="col" className="relative px-6 py-3 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-slate-900 divide-y divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredVendors.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm">
                     No vendors found. Add a new vendor to get started.
                   </td>
                 </tr>
               ) : (
                 filteredVendors.map((vendor) => (
-                  <tr key={vendor.id} className="hover:bg-gray-50">
+                  <tr key={vendor.id} className="hover:bg-slate-850/30 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-purple-100 rounded-lg flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-purple-600" />
+                        <div className="h-10 w-10 flex-shrink-0 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
+                          <Building2 className="h-5 w-5 text-blue-400" />
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{vendor.companyName}</div>
+                          <div className="text-sm font-bold text-white">{vendor.companyName}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{vendor.contactPerson}</div>
-                      <div className="text-sm text-gray-500">{vendor.phone}</div>
+                      <div className="text-sm font-semibold text-slate-200">{vendor.contactPerson}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{vendor.phone}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {vendor.city}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      {vendor.city || '—'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ${vendor.balance?.toFixed(2)}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-200">
+                      ${vendor.balance?.toFixed(2) || '0.00'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-1">
                       <button 
                         onClick={() => setEditingVendor(vendor)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        className="text-blue-400 hover:text-blue-300 p-1.5 rounded-lg hover:bg-slate-800 transition-all inline-flex"
+                        title="Edit Vendor"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleDeleteVendor(vendor.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-slate-800 transition-all inline-flex"
+                        title="Delete Vendor"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

@@ -37,7 +37,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-slate-950 flex text-slate-100">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
