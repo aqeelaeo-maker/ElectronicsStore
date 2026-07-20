@@ -14,6 +14,7 @@ import Sales from './pages/Sales';
 import Settings from './pages/Settings';
 
 import SerialNumbers from './pages/SerialNumbers';
+import Inventory from './pages/Inventory';
 
 // Mock empty pages for the rest of the routes
 const Placeholder = ({ title }: { title: string }) => (
@@ -82,7 +83,7 @@ export default function App() {
             <Route path="purchases" element={<Placeholder title="Purchases" />} />
             <Route path="customers" element={<Customers />} />
             <Route path="vendors" element={<Vendors />} />
-            <Route path="inventory" element={<Placeholder title="Inventory" />} />
+            <Route path="inventory" element={<Inventory />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
             <Route path="settings" element={<Settings />} />
           </Route>
