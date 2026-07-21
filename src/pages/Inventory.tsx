@@ -420,13 +420,13 @@ export default function Inventory() {
 
       {activeTab === 'current' ? (
         viewMode === 'cards' ? (
-          <div className="max-w-2xl mx-auto w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+          <div className="max-w-4xl mx-auto w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
             <div className="flex flex-col h-full bg-white">
-              <div className="p-4 border-b border-slate-150 bg-slate-50/50">
+              <div className="p-3.5 border-b border-slate-150 bg-slate-50/50">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-base font-black text-slate-900">Add Stock</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Manage inventory additions & update pricing</p>
+                    <h2 className="text-sm font-black text-slate-900">Add Stock</h2>
+                    <p className="text-[11px] text-slate-500">Manage inventory additions & update pricing in one place</p>
                   </div>
                   {selectedProduct && (
                     <button
@@ -436,7 +436,7 @@ export default function Inventory() {
                         setPurchasePriceInput(0);
                         setSalePriceInput(0);
                       }}
-                      className="text-slate-500 hover:text-slate-850 text-xs font-bold bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors border border-slate-200"
+                      className="text-slate-500 hover:text-slate-850 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition-colors border border-slate-200 cursor-pointer"
                     >
                       Clear Selection
                     </button>
@@ -444,93 +444,94 @@ export default function Inventory() {
                 </div>
               </div>
 
-              <form onSubmit={handleAddStockSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
-                {/* Select Product - dropdown */}
-                <div>
-                  <label htmlFor="productSelect" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Select Product <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    id="productSelect"
-                    required
-                    className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
-                    value={selectedProduct?.id || ''}
-                    onChange={(e) => {
-                      const prod = products.find(p => p.id === e.target.value);
-                      if (prod) {
-                        setSelectedProduct(prod);
-                        setQuantityToAdd(10);
-                        setPurchasePriceInput(prod.purchasePrice || 0);
-                        setSalePriceInput(prod.salePrice || 0);
-                      } else {
-                        setSelectedProduct(null);
-                        setQuantityToAdd(0);
-                        setPurchasePriceInput(0);
-                        setSalePriceInput(0);
-                      }
-                    }}
-                  >
-                    <option value="">-- Choose a Product --</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Selected Product Info (Single line only!) */}
-                {selectedProduct && (
-                  <div className="bg-emerald-50/30 px-3 py-2.5 rounded-xl border border-emerald-100 text-xs font-semibold text-slate-700 flex items-center justify-between gap-2 overflow-hidden animate-in slide-in-from-top-2 duration-150">
-                    <span className="truncate">
-                      Product: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber} - {selectedProduct.name}</strong>
-                    </span>
-                    <span className="shrink-0 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-                      Stock: {selectedProduct.stock || 0}
-                    </span>
-                  </div>
-                )}
-
-                {/* Select Vendor / Supplier - dropdown */}
-                <div>
-                  <label htmlFor="vendor" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Select Vendor / Supplier (Optional)
-                  </label>
-                  <select
-                    id="vendor"
-                    className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
-                    value={selectedVendorId}
-                    onChange={(e) => setSelectedVendorId(e.target.value)}
-                  >
-                    <option value="">Choose Supplier</option>
-                    {vendors.map(v => (
-                       <option key={v.id} value={v.id}>{v.companyName}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="border-t border-slate-100 my-4 pt-4">
-                  <span className="block text-[10px] font-extrabold text-slate-450 uppercase tracking-wider mb-3">
-                    Stock Entry Details
-                  </span>
-                  
-                  <div className="space-y-4">
+              <form onSubmit={handleAddStockSubmit} className="p-4 space-y-4 flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left Column: Product Selection and Supplier/Vendor Details */}
+                  <div className="space-y-3">
                     <div>
-                      <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Quantity to Add <span className="text-rose-500">*</span>
+                      <label htmlFor="productSelect" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Select Product <span className="text-rose-500">*</span>
                       </label>
-                      <div className="mt-1.5 flex items-center gap-3">
-                        <input
-                          type="number"
-                          id="quantityToAdd"
-                          required
-                          min="1"
-                          disabled={!selectedProduct}
-                          placeholder={selectedProduct ? "Enter quantity" : "First select a product"}
-                          className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold disabled:opacity-50"
-                          value={quantityToAdd || ''}
-                          onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
-                        />
+                      <select
+                        id="productSelect"
+                        required
+                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-medium"
+                        value={selectedProduct?.id || ''}
+                        onChange={(e) => {
+                          const prod = products.find(p => p.id === e.target.value);
+                          if (prod) {
+                            setSelectedProduct(prod);
+                            setQuantityToAdd(10);
+                            setPurchasePriceInput(prod.purchasePrice || 0);
+                            setSalePriceInput(prod.salePrice || 0);
+                          } else {
+                            setSelectedProduct(null);
+                            setQuantityToAdd(0);
+                            setPurchasePriceInput(0);
+                            setSalePriceInput(0);
+                          }
+                        }}
+                      >
+                        <option value="">-- Choose a Product --</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedProduct && (
+                      <div className="bg-emerald-50/30 px-2.5 py-1.5 rounded-lg border border-emerald-100 text-[11px] font-semibold text-slate-700 flex items-center justify-between gap-1 overflow-hidden">
+                        <span className="truncate">
+                          Product: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber} - {selectedProduct.name}</strong>
+                        </span>
+                        <span className="shrink-0 bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
+                          Stock: {selectedProduct.stock || 0}
+                        </span>
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="vendor" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Select Vendor / Supplier (Optional)
+                      </label>
+                      <select
+                        id="vendor"
+                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-medium"
+                        value={selectedVendorId}
+                        onChange={(e) => setSelectedVendorId(e.target.value)}
+                      >
+                        <option value="">Choose Supplier</option>
+                        {vendors.map(v => (
+                           <option key={v.id} value={v.id}>{v.companyName}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="refNumber" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                        Reference / Invoice Number (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        id="refNumber"
+                        disabled={!selectedProduct}
+                        placeholder="e.g. INV-2026-001"
+                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 placeholder-slate-400 disabled:opacity-50"
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right Column: Quantity, Prices and Projection Details */}
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label htmlFor="quantityToAdd" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          Quantity to Add <span className="text-rose-500">*</span>
+                        </label>
                         <div className="flex gap-1">
                           {[10, 25, 50, 100].map(val => (
                             <button
@@ -538,18 +539,29 @@ export default function Inventory() {
                               type="button"
                               disabled={!selectedProduct}
                               onClick={() => setQuantityToAdd(val)}
-                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition-colors disabled:opacity-50"
+                              className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-bold rounded text-[9px] transition-colors disabled:opacity-50 cursor-pointer"
                             >
                               +{val}
                             </button>
                           ))}
                         </div>
                       </div>
+                      <input
+                        type="number"
+                        id="quantityToAdd"
+                        required
+                        min="1"
+                        disabled={!selectedProduct}
+                        placeholder={selectedProduct ? "Enter quantity" : "First select a product"}
+                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-bold disabled:opacity-50"
+                        value={quantityToAdd || ''}
+                        onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
+                      />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <div>
-                        <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        <label htmlFor="purchasePrice" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                           Purchase Price ($) <span className="text-rose-500">*</span>
                         </label>
                         <input
@@ -560,13 +572,13 @@ export default function Inventory() {
                           step="0.01"
                           disabled={!selectedProduct}
                           placeholder="0.00"
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                          className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-bold disabled:opacity-50"
                           value={purchasePriceInput || ''}
                           onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
                         />
                       </div>
                       <div>
-                        <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        <label htmlFor="salePrice" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                           Sale Price ($) <span className="text-rose-500">*</span>
                         </label>
                         <input
@@ -577,53 +589,40 @@ export default function Inventory() {
                           step="0.01"
                           disabled={!selectedProduct}
                           placeholder="0.00"
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                          className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-bold disabled:opacity-50"
                           value={salePriceInput || ''}
                           onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Reference / Invoice Number (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="refNumber"
-                        disabled={!selectedProduct}
-                        placeholder="e.g. INV-2026-001"
-                        className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 placeholder-slate-400 disabled:opacity-50"
-                        value={referenceNumber}
-                        onChange={(e) => setReferenceNumber(e.target.value)}
-                      />
-                    </div>
+                    {selectedProduct && quantityToAdd > 0 ? (
+                      <div className="bg-emerald-50/50 p-2 py-1.5 rounded-lg border border-emerald-100 space-y-0.5 text-[10px] animate-in slide-in-from-top-2 duration-150">
+                        <div className="flex justify-between">
+                          <span className="text-slate-650">Previous Stock:</span>
+                          <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
+                        </div>
+                        <div className="flex justify-between text-emerald-800 font-black border-t border-emerald-100 pt-0.5">
+                          <span>New Projected Stock:</span>
+                          <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-[34px] hidden md:block" />
+                    )}
                   </div>
                 </div>
-
-                {selectedProduct && quantityToAdd > 0 && (
-                  <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2 text-xs mt-4 animate-in slide-in-from-top-2 duration-150">
-                    <div className="flex justify-between">
-                      <span className="text-slate-650">Previous Stock:</span>
-                      <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
-                    </div>
-                    <div className="flex justify-between text-emerald-800 font-black border-t border-emerald-100 pt-2">
-                      <span>New Projected Stock:</span>
-                      <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
-                    </div>
-                  </div>
-                )}
 
                 <button
                   type="submit"
                   disabled={saving || !selectedProduct || quantityToAdd <= 0}
-                  className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-md text-sm font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 mt-6 shadow-emerald-950/10 cursor-pointer"
+                  className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
                 >
                   {saving ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   ) : (
                     <>
-                      <Plus className="w-5 h-5 mr-2" />
+                      <Plus className="w-4 h-4 mr-1" />
                       Save Inventory Addition
                     </>
                   )}
