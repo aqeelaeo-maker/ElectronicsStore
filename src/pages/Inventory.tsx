@@ -496,9 +496,11 @@ export default function Inventory() {
 
       {activeTab === 'current' ? (
         viewMode === 'cards' ? (
-          <div className="max-w-4xl mx-auto w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
-            <div className="flex flex-col h-full bg-white">
-              <div className="p-3.5 border-b border-slate-150 bg-slate-50/50">
+          <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Add Stock Form */}
+            <div className="lg:col-span-7 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+              <div className="flex flex-col h-full bg-white">
+                <div className="p-3.5 border-b border-slate-150 bg-slate-50/50">
                 <div className="flex justify-between items-center">
                   <div>
                     <h2 className="text-sm font-black text-slate-900">Add Stock</h2>
@@ -785,6 +787,107 @@ export default function Inventory() {
                 </button>
               </form>
             </div>
+          </div>
+
+          {/* Right Column: Recent Additions with Edit/Delete */}
+          <div className="lg:col-span-5 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+            <div className="p-3.5 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center">
+              <div>
+                <h2 className="text-sm font-black text-slate-900">Recent Stock Additions</h2>
+                <p className="text-[11px] text-slate-500">Edit or delete your latest inventory logs</p>
+              </div>
+              <button
+                onClick={() => setActiveTab('history')}
+                className="text-[#0a382c] hover:text-[#0d4a3b] text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+              >
+                <History className="w-3 h-3" /> View All
+              </button>
+            </div>
+
+            <div className="p-4 divide-y divide-slate-100 max-h-[580px] overflow-y-auto">
+              {logs.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <History className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-650">No additions found</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Added stock will appear here</p>
+                </div>
+              ) : (
+                logs.slice(0, 8).map((log) => {
+                  const formattedDate = log.createdAt
+                    ? new Date(log.createdAt.seconds * 1000).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : 'Just now';
+
+                  return (
+                    <div key={log.id} className="py-3 first:pt-0 last:pb-0 flex items-start justify-between gap-3 group">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="font-bold text-slate-900 truncate text-xs">
+                          {log.productBrand} {log.productModelNumber}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {log.productName}
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-150 font-semibold">
+                            Buy: ${log.purchasePrice?.toFixed(2) || '0.00'}
+                          </span>
+                          {log.vendorName && (
+                            <span className="text-[9px] font-bold text-slate-550 flex items-center bg-slate-50 border border-slate-150 px-1.5 py-0.5 rounded truncate max-w-[150px]">
+                              <User className="w-2.5 h-2.5 mr-0.5 text-[#0a382c]" />
+                              {log.vendorName}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-[9px] text-slate-400 font-semibold pt-0.5 flex items-center gap-1">
+                          <span>{formattedDate}</span>
+                          {log.referenceNumber && (
+                            <>
+                              <span>•</span>
+                              <span className="uppercase">Ref: {log.referenceNumber}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right flex flex-col items-end gap-1">
+                          <span className="inline-flex items-center text-[10px] font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-150 uppercase tracking-wider">
+                            +{log.quantityAdded}
+                          </span>
+                          <span className="text-[9px] font-mono text-slate-400 font-bold">
+                            {log.previousStock} → {log.newStock}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-1 border-l border-slate-100 pl-2">
+                          <button
+                            onClick={() => handleOpenEditLog(log)}
+                            className="p-1 text-slate-400 hover:text-[#0a382c] hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Stock Entry"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLog(log)}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Stock Entry"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
           </div>
         ) : (
           /* Bulk Entry Mode Layout */
