@@ -920,11 +920,11 @@ export default function Sales() {
 
       {/* 1. Dynamic Invoice Creation Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center md:justify-end md:pr-12 pt-4 md:pt-10 px-4 pb-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center md:justify-end md:pr-12 pt-2 md:pt-6 px-4 pb-4">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all max-w-4xl w-full border border-slate-200 my-auto md:my-0">
-            <form onSubmit={handleCreateInvoiceSubmit}>
-              <div className="bg-white px-6 pt-6 pb-6 border-b border-slate-100 flex justify-between items-center">
+          <div className="relative z-10 bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all max-w-4xl w-full border border-slate-200 mt-2 md:mt-4 mb-2 md:mb-4 flex flex-col max-h-[92vh]">
+            <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col h-full max-h-[92vh] overflow-hidden">
+              <div className="bg-white px-6 pt-5 pb-5 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-emerald-50 text-[#0a382c] flex items-center justify-center">
                     <FileText className="w-5 h-5" />
@@ -943,7 +943,7 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="bg-white px-6 py-6 space-y-6 max-h-[78vh] overflow-y-auto">
+              <div className="bg-white px-6 py-6 space-y-6 overflow-y-auto flex-1">
                   {/* Two columns: Seller details & Customer details */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Seller details */}
@@ -1213,7 +1213,7 @@ export default function Sales() {
                   </div>
                 </div>
 
-                <div className="bg-[#f8faf9] px-6 py-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200">
+                <div className="bg-[#f8faf9] px-6 py-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200 flex-shrink-0">
                   <div className="text-center sm:text-left">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold block">Invoice Total Amount</span>
                     <span className="text-2xl font-black text-[#0a382c]">${calculateInvoiceTotal().toFixed(2)}</span>
