@@ -30,6 +30,8 @@ interface InventoryLog {
   quantityAdded: number;
   previousStock: number;
   newStock: number;
+  purchasePrice?: number;
+  salePrice?: number;
   vendorId?: string;
   vendorName?: string;
   referenceNumber?: string;
@@ -45,12 +47,16 @@ export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantityToAdd, setQuantityToAdd] = useState<number>(0);
+  const [purchasePriceInput, setPurchasePriceInput] = useState<number>(0);
+  const [salePriceInput, setSalePriceInput] = useState<number>(0);
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [viewMode, setViewMode] = useState<'cards' | 'bulk'>('cards');
   const [bulkQuantities, setBulkQuantities] = useState<Record<string, number>>({});
+  const [bulkPurchasePrices, setBulkPurchasePrices] = useState<Record<string, number>>({});
+  const [bulkSalePrices, setBulkSalePrices] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!storeId) return;
@@ -122,9 +128,11 @@ export default function Inventory() {
     const newStock = previousStock + quantityToAdd;
 
     try {
-      // 1. Update product's stock count
+      // 1. Update product's stock count and prices
       await updateDoc(doc(db, 'products', selectedProduct.id), {
         stock: newStock,
+        purchasePrice: purchasePriceInput,
+        salePrice: salePriceInput,
         updatedAt: serverTimestamp()
       });
 
@@ -138,6 +146,8 @@ export default function Inventory() {
         quantityAdded: quantityToAdd,
         previousStock,
         newStock,
+        purchasePrice: purchasePriceInput,
+        salePrice: salePriceInput,
         vendorId: selectedVendorId || null,
         vendorName: selectedVendor?.companyName || null,
         referenceNumber: referenceNumber.trim() || null,
@@ -149,6 +159,8 @@ export default function Inventory() {
       // Reset form states
       setSelectedProduct(null);
       setQuantityToAdd(0);
+      setPurchasePriceInput(0);
+      setSalePriceInput(0);
       setSelectedVendorId('');
       setReferenceNumber('');
     } catch (error) {
@@ -178,9 +190,14 @@ export default function Inventory() {
         const previousStock = prod.stock || 0;
         const newStock = previousStock + qty;
         
-        // 1. Update product stock
+        const purchasePrice = pId in bulkPurchasePrices ? bulkPurchasePrices[pId] : (prod.purchasePrice || 0);
+        const salePrice = pId in bulkSalePrices ? bulkSalePrices[pId] : (prod.salePrice || 0);
+
+        // 1. Update product stock and prices
         await updateDoc(doc(db, 'products', pId), {
           stock: newStock,
+          purchasePrice,
+          salePrice,
           updatedAt: serverTimestamp()
         });
         
@@ -194,6 +211,8 @@ export default function Inventory() {
           quantityAdded: qty,
           previousStock,
           newStock,
+          purchasePrice,
+          salePrice,
           vendorId: selectedVendorId || null,
           vendorName: selectedVendor?.companyName || null,
           referenceNumber: referenceNumber.trim() || null,
@@ -206,6 +225,8 @@ export default function Inventory() {
       
       // Reset form states
       setBulkQuantities({});
+      setBulkPurchasePrices({});
+      setBulkSalePrices({});
       setSelectedVendorId('');
       setReferenceNumber('');
       setViewMode('cards');
@@ -318,7 +339,7 @@ export default function Inventory() {
         viewMode === 'cards' ? (
           <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
             {/* Left Column: Products List with search */}
-            <div className="w-full lg:w-3/5 flex flex-col glass-panel rounded-2xl shadow-sm overflow-hidden">
+            <div className="w-full lg:w-1/2 flex flex-col glass-panel rounded-2xl shadow-sm overflow-hidden">
               <div className="p-4 border-b border-slate-150 bg-slate-50/50">
                 <div className="relative">
                   <input
@@ -376,6 +397,8 @@ export default function Inventory() {
                               onClick={() => {
                                 setSelectedProduct(product);
                                 setQuantityToAdd(10);
+                                setPurchasePriceInput(product.purchasePrice || 0);
+                                setSalePriceInput(product.salePrice || 0);
                               }}
                               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center shadow-sm ${
                                 isSelected
@@ -396,7 +419,7 @@ export default function Inventory() {
             </div>
 
             {/* Right Column: Add Stock Form */}
-            <div className="w-full lg:w-2/5 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+            <div className="w-full lg:w-1/2 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
               {!selectedProduct ? (
                 <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-500 min-h-[300px]">
                   <TrendingUp className="w-16 h-16 text-slate-300 mb-4" />
@@ -459,6 +482,41 @@ export default function Inventory() {
                             </button>
                           ))}
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Purchase Price ($) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          id="purchasePrice"
+                          required
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold"
+                          value={purchasePriceInput || ''}
+                          onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Sale Price ($) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          id="salePrice"
+                          required
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold"
+                          value={salePriceInput || ''}
+                          onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                        />
                       </div>
                     </div>
 
@@ -527,7 +585,7 @@ export default function Inventory() {
           /* Bulk Entry Mode Layout */
           <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
             {/* Left Column: List of All Products with Qty Input */}
-            <div className="w-full lg:w-3/5 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+            <div className="w-full lg:w-2/3 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
               <div className="p-4 border-b border-slate-150 bg-slate-50/50">
                 <div className="relative">
                   <input
@@ -559,7 +617,9 @@ export default function Inventory() {
                         <tr>
                           <th scope="col" className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Info</th>
                           <th scope="col" className="px-4 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Current Stock</th>
-                          <th scope="col" className="px-4 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40">Add Stock</th>
+                          <th scope="col" className="px-4 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24">Purchase Price</th>
+                          <th scope="col" className="px-4 py-3 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24">Sale Price</th>
+                          <th scope="col" className="px-4 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36">Add Stock</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-slate-100">
@@ -575,13 +635,47 @@ export default function Inventory() {
                               <td className="px-4 py-3 text-center">
                                 <div className="text-sm font-bold text-slate-800">{product.stock || 0}</div>
                               </td>
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder={String(product.purchasePrice || 0)}
+                                  className="w-20 px-2 py-1.5 glass-input text-slate-800 text-xs text-center font-bold"
+                                  value={product.id in bulkPurchasePrices ? bulkPurchasePrices[product.id] : ''}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, parseFloat(e.target.value) || 0);
+                                    setBulkPurchasePrices(prev => ({
+                                      ...prev,
+                                      [product.id]: val
+                                    }));
+                                  }}
+                                />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder={String(product.salePrice || 0)}
+                                  className="w-20 px-2 py-1.5 glass-input text-slate-800 text-xs text-center font-bold"
+                                  value={product.id in bulkSalePrices ? bulkSalePrices[product.id] : ''}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, parseFloat(e.target.value) || 0);
+                                    setBulkSalePrices(prev => ({
+                                      ...prev,
+                                      [product.id]: val
+                                    }));
+                                  }}
+                                />
+                              </td>
                               <td className="px-4 py-3 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   <input
                                     type="number"
                                     min="0"
                                     placeholder="+0"
-                                    className="w-20 px-2 py-1.5 glass-input text-slate-800 text-xs text-center font-bold"
+                                    className="w-16 px-1.5 py-1.5 glass-input text-slate-800 text-xs text-center font-bold"
                                     value={bulkQuantities[product.id] || ''}
                                     onChange={(e) => {
                                       const val = Math.max(0, parseInt(e.target.value) || 0);
@@ -630,7 +724,7 @@ export default function Inventory() {
             </div>
 
             {/* Right Column: Bulk Entry Form Summary & Shared Details */}
-            <div className="w-full lg:w-2/5 flex flex-col glass-panel rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="w-full lg:w-1/3 flex flex-col glass-panel rounded-2xl border border-slate-200 overflow-hidden bg-white">
               <div className="p-4 border-b border-slate-150 bg-slate-50/50">
                 <h2 className="text-base font-bold text-slate-900">Bulk Stock Settings</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Define supplier and reference details for this batch</p>
@@ -771,6 +865,20 @@ export default function Inventory() {
                           <div className="text-xs text-slate-500 mt-0.5">
                             {log.productBrand} | Model: {log.productModelNumber}
                           </div>
+                          {(log.purchasePrice !== undefined || log.salePrice !== undefined) && (
+                            <div className="text-[10px] font-mono mt-1.5 flex gap-2">
+                              {log.purchasePrice !== undefined && (
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                  Buy: <strong>${log.purchasePrice.toFixed(2)}</strong>
+                                </span>
+                              )}
+                              {log.salePrice !== undefined && (
+                                <span className="bg-[#e8f5e9] text-emerald-800 px-1.5 py-0.5 rounded border border-[#c8e6c9]">
+                                  Sell: <strong>${log.salePrice.toFixed(2)}</strong>
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex items-center text-[10px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-150 uppercase tracking-wider">
