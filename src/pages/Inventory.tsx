@@ -496,7 +496,7 @@ export default function Inventory() {
 
       {activeTab === 'current' ? (
         viewMode === 'cards' ? (
-          <div className="max-w-2xl mx-auto w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+          <div className="w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
             <div className="flex flex-col h-full bg-white">
               <div className="p-3.5 border-b border-slate-150 bg-slate-50/50">
                 <div className="flex justify-between items-center">
