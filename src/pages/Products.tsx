@@ -60,8 +60,8 @@ export default function Products() {
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
-      purchasePrice: Number(formData.get('purchasePrice')),
-      salePrice: Number(formData.get('salePrice')),
+      purchasePrice: 0,
+      salePrice: 0,
       stock: Number(formData.get('stock')),
       storeId,
       createdAt: serverTimestamp(),
@@ -70,11 +70,11 @@ export default function Products() {
 
     try {
       await addDoc(collection(db, 'products'), newProduct);
-      toast.success('Product added successfully');
+      toast.success('Stock added successfully');
       setShowAddForm(false);
     } catch (error) {
-      console.error('Error adding product:', error);
-      toast.error('Failed to add product');
+      console.error('Error adding stock:', error);
+      toast.error('Failed to add stock');
     }
   };
 
@@ -88,19 +88,19 @@ export default function Products() {
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
-      purchasePrice: Number(formData.get('purchasePrice')),
-      salePrice: Number(formData.get('salePrice')),
+      purchasePrice: editingProduct.purchasePrice || 0,
+      salePrice: editingProduct.salePrice || 0,
       stock: Number(formData.get('stock')),
       updatedAt: serverTimestamp(),
     };
 
     try {
       await updateDoc(doc(db, 'products', editingProduct.id), updatedProduct);
-      toast.success('Product updated successfully');
+      toast.success('Stock updated successfully');
       setEditingProduct(null);
     } catch (error) {
-      console.error('Error updating product:', error);
-      toast.error('Failed to update product');
+      console.error('Error updating stock:', error);
+      toast.error('Failed to update stock');
     }
   };
 
@@ -132,8 +132,8 @@ export default function Products() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">{isEditing ? 'Edit Product' : 'Add New Product'}</h1>
-            <p className="text-sm text-slate-500 mt-1">{isEditing ? 'Update the product details' : 'Enter the details for the new product'}</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">{isEditing ? 'Edit Stock' : 'Add Stock'}</h1>
+            <p className="text-sm text-slate-500 mt-1">{isEditing ? 'Update the stock details' : 'Enter the details for the new stock product'}</p>
           </div>
           <button 
             onClick={() => {
@@ -180,14 +180,6 @@ export default function Products() {
                   <label htmlFor="stock" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Initial Stock</label>
                   <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
-                <div>
-                  <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Purchase Price</label>
-                  <input type="number" name="purchasePrice" id="purchasePrice" defaultValue={initialData.purchasePrice} required min="0" step="0.01" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sale Price</label>
-                  <input type="number" name="salePrice" id="salePrice" defaultValue={initialData.salePrice} required min="0" step="0.01" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
-                </div>
               </div>
             </div>
             <div className="bg-[#f8faf9] px-6 py-4 sm:px-8 flex justify-end gap-3 border-t border-slate-200">
@@ -198,7 +190,7 @@ export default function Products() {
                 Cancel
               </button>
               <button type="submit" className="inline-flex justify-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-sm font-bold shadow-md shadow-emerald-950/10 focus:outline-none transition-colors">
-                {isEditing ? 'Update Product' : 'Save Product'}
+                {isEditing ? 'Update Stock' : 'Save Stock'}
               </button>
             </div>
           </form>
@@ -219,7 +211,7 @@ export default function Products() {
           className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Add Product
+          Add Stock
         </button>
       </div>
 

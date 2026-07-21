@@ -7,7 +7,9 @@ import {
   serverTimestamp, 
   query, 
   orderBy, 
-  where 
+  where,
+  getDoc,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -24,7 +26,8 @@ import {
   Hash, 
   CheckCircle2, 
   Building2,
-  Printer
+  Printer,
+  Pencil
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -106,6 +109,7 @@ export default function Sales() {
   const [showModal, setShowModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   // New Invoice Form States
   const [customerMode, setCustomerMode] = useState<'select' | 'manual'>('select');
@@ -188,13 +192,13 @@ export default function Sales() {
     return () => unsubscribe();
   }, [storeId, role]);
 
-  // 4. Fetch Available Serial Numbers for Verification & Selection
+  // 4. Fetch Serial Numbers for Verification & Selection
   useEffect(() => {
     if (!storeId) return;
 
     const q = role === 'Super Admin'
-      ? query(collection(db, 'serialNumbers'), where('status', '==', 'Available'))
-      : query(collection(db, 'serialNumbers'), where('storeId', '==', storeId), where('status', '==', 'Available'));
+      ? query(collection(db, 'serialNumbers'))
+      : query(collection(db, 'serialNumbers'), where('storeId', '==', storeId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: SerialNumber[] = [];
@@ -305,7 +309,111 @@ export default function Sales() {
     return invoiceItems.reduce((sum, item) => sum + Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)), 0);
   };
 
-  // Submit Detailed Invoice Creation using Atomic Batch writes
+  // Handle setting up edit mode
+  const handleEditClick = (sale: Sale) => {
+    setEditingSale(sale);
+    setCustomerMode(sale.customerId ? 'select' : 'manual');
+    setSelectedCustomerId(sale.customerId || '');
+    setManualCustomerName(sale.customerId ? '' : sale.customerName);
+    
+    if (sale.items) {
+      const mappedItems = sale.items.map(item => {
+        // Map the serial number strings back to Firestore document IDs from allSerials
+        const selectedSerialsWithIds = item.selectedSerials.map(snStr => {
+          const matchedDoc = allSerials.find(s => s.serialNumber === snStr && s.productId === item.productId);
+          return matchedDoc ? matchedDoc.id : snStr;
+        });
+        
+        return {
+          productId: item.productId,
+          quantity: item.quantity,
+          salePrice: item.salePrice,
+          discount: item.discount,
+          warranty: item.warranty || 'No Warranty',
+          selectedSerials: selectedSerialsWithIds
+        };
+      });
+      setInvoiceItems(mappedItems);
+    } else {
+      setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
+    }
+    
+    setShowModal(true);
+  };
+
+  // Delete invoice with automatic stock and serial restoration
+  const handleDeleteInvoice = async (sale: Sale) => {
+    if (!window.confirm(`Are you sure you want to delete invoice ${sale.invoiceNo}? This will restore all product stock and set serialized numbers to 'Available'.`)) {
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const batch = writeBatch(db);
+      
+      if (sale.items) {
+        for (const item of sale.items) {
+          // Get current product state from the database to ensure we restore correctly
+          const productRef = doc(db, 'products', item.productId);
+          const productSnap = await getDoc(productRef);
+          
+          if (productSnap.exists()) {
+            const currentStock = productSnap.data().stock || 0;
+            const restoredStock = currentStock + item.quantity;
+            
+            batch.update(productRef, {
+              stock: restoredStock,
+              updatedAt: serverTimestamp()
+            });
+            
+            // Add restoration entry to inventory logs
+            const logId = doc(collection(db, 'inventoryLogs')).id;
+            const logRef = doc(db, 'inventoryLogs', logId);
+            batch.set(logRef, {
+              storeId,
+              productId: item.productId,
+              productName: item.productName,
+              productBrand: item.brand,
+              productModelNumber: item.modelNumber,
+              quantityAdded: item.quantity,
+              previousStock: currentStock,
+              newStock: restoredStock,
+              referenceNumber: sale.invoiceNo,
+              notes: `Stock restored (Deleted Invoice ${sale.invoiceNo})`,
+              createdAt: serverTimestamp()
+            });
+          }
+          
+          // Restore selected serial numbers to Available status
+          if (item.selectedSerials && item.selectedSerials.length > 0) {
+            const matchingSerials = allSerials.filter(s => 
+              s.productId === item.productId && 
+              item.selectedSerials.includes(s.serialNumber)
+            );
+            for (const s of matchingSerials) {
+              batch.update(doc(db, 'serialNumbers', s.id), {
+                status: 'Available',
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        }
+      }
+      
+      // Delete the invoice document
+      batch.delete(doc(db, 'sales', sale.id));
+      
+      await batch.commit();
+      toast.success(`Invoice ${sale.invoiceNo} has been deleted successfully!`);
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast.error('Failed to delete invoice');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Submit Detailed Invoice (Create or Edit) using Atomic Batch writes
   const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeId) {
@@ -344,12 +452,27 @@ export default function Sales() {
         toast.error(`Selected product in line ${i + 1} was not found`);
         return;
       }
-      if (item.quantity > prod.stock) {
-        toast.error(`Not enough stock for "${prod.name}". Available: ${prod.stock}`);
+
+      // If editing, the stock currently allocated to this invoice's prior version shouldn't be counted as "unavailable"
+      let previousQty = 0;
+      if (editingSale && editingSale.items) {
+        const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
+        if (prevItem) {
+          previousQty = prevItem.quantity;
+        }
+      }
+      const availableStockWithPrev = prod.stock + previousQty;
+
+      if (item.quantity > availableStockWithPrev) {
+        toast.error(`Not enough stock for "${prod.name}". Available: ${availableStockWithPrev}`);
         return;
       }
       
-      const productSerials = allSerials.filter(sn => sn.productId === item.productId);
+      // Serial selection count check
+      const productSerials = allSerials.filter(sn => 
+        sn.productId === item.productId && 
+        (sn.status === 'Available' || (editingSale && editingSale.items?.some(pi => pi.productId === item.productId && pi.selectedSerials.includes(sn.serialNumber))))
+      );
       if (productSerials.length > 0 && item.selectedSerials.length !== item.quantity) {
         toast.error(`Please select exactly ${item.quantity} serial number(s) for "${prod.name}"`);
         return;
@@ -358,12 +481,17 @@ export default function Sales() {
 
     setSaving(true);
     
-    // Generate sequential invoice numbers like INV-year-0001
-    const currentYear = new Date().getFullYear();
-    const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
-    const nextSeq = yearSales.length + 1;
-    const paddedSeq = String(nextSeq).padStart(4, '0');
-    const invoiceNo = `INV-${currentYear}-${paddedSeq}`;
+    // Determine Invoice Number
+    let invoiceNo = '';
+    if (editingSale) {
+      invoiceNo = editingSale.invoiceNo;
+    } else {
+      const currentYear = new Date().getFullYear();
+      const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
+      const nextSeq = yearSales.length + 1;
+      const paddedSeq = String(nextSeq).padStart(4, '0');
+      invoiceNo = `INV-${currentYear}-${paddedSeq}`;
+    }
 
     const batch = writeBatch(db);
 
@@ -388,7 +516,7 @@ export default function Sales() {
     });
 
     const totalAmount = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
-    const saleId = doc(collection(db, 'sales')).id;
+    const saleId = editingSale ? editingSale.id : doc(collection(db, 'sales')).id;
 
     const newSaleDoc = {
       id: saleId,
@@ -398,25 +526,40 @@ export default function Sales() {
       items: itemsToSave,
       total: totalAmount,
       status: 'Paid',
-      date: new Date().toISOString(),
+      date: editingSale ? editingSale.date : new Date().toISOString(),
       storeId,
-      createdAt: serverTimestamp(),
+      createdAt: editingSale ? (editingSale as any).createdAt || serverTimestamp() : serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
     try {
-      // 1. Set the Sales document
+      // 1. Set the Sales document (overwrites the existing one if editing, merges or replaces completely)
       const saleRef = doc(db, 'sales', saleId);
       batch.set(saleRef, newSaleDoc);
 
-      // 2. Adjust Product stock, log transactions, and commit serial number flags
-      for (const item of invoiceItems) {
-        const prod = products.find(p => p.id === item.productId)!;
+      // 2. Map of stock changes (add back old quantities, deduct new quantities)
+      const stockChangeMap: Record<string, number> = {};
+
+      if (editingSale && editingSale.items) {
+        for (const oldItem of editingSale.items) {
+          stockChangeMap[oldItem.productId] = (stockChangeMap[oldItem.productId] || 0) + oldItem.quantity;
+        }
+      }
+
+      for (const newItem of invoiceItems) {
+        stockChangeMap[newItem.productId] = (stockChangeMap[newItem.productId] || 0) - newItem.quantity;
+      }
+
+      // Update product stocks and logs
+      for (const [pId, change] of Object.entries(stockChangeMap)) {
+        if (change === 0) continue; // no change in stock for this product
+
+        const prod = products.find(p => p.id === pId)!;
         const previousStock = prod.stock || 0;
-        const newStock = previousStock - item.quantity;
+        const newStock = previousStock + change;
 
         // Update product stock count
-        const productRef = doc(db, 'products', item.productId);
+        const productRef = doc(db, 'products', pId);
         batch.update(productRef, {
           stock: newStock,
           updatedAt: serverTimestamp()
@@ -427,32 +570,71 @@ export default function Sales() {
         const logRef = doc(db, 'inventoryLogs', logId);
         batch.set(logRef, {
           storeId,
-          productId: item.productId,
+          productId: pId,
           productName: prod.name,
           productBrand: prod.brand,
           productModelNumber: prod.modelNumber,
-          quantityAdded: -item.quantity,
+          quantityAdded: change,
           previousStock,
           newStock,
           referenceNumber: invoiceNo,
-          notes: `Sold to ${customerName}`,
+          notes: editingSale 
+            ? `Invoice ${invoiceNo} edited (Stock adjusted by ${change > 0 ? '+' : ''}${change})`
+            : `Sold to ${customerName}`,
           createdAt: serverTimestamp()
         });
+      }
 
-        // Toggle selected serial numbers status to "Sold"
-        for (const serialId of item.selectedSerials) {
-          const serialRef = doc(db, 'serialNumbers', serialId);
-          batch.update(serialRef, {
-            status: 'Sold',
+      // 3. Serial status changes
+      const previousSerialNumbersSet = new Set<string>();
+      if (editingSale && editingSale.items) {
+        editingSale.items.forEach(item => {
+          if (item.selectedSerials) {
+            item.selectedSerials.forEach(sn => previousSerialNumbersSet.add(sn));
+          }
+        });
+      }
+
+      const newSerialNumbersSet = new Set<string>();
+      const newSerialIdsSet = new Set<string>();
+      invoiceItems.forEach(item => {
+        item.selectedSerials.forEach(sId => {
+          newSerialIdsSet.add(sId);
+          const sn = allSerials.find(s => s.id === sId);
+          if (sn) {
+            newSerialNumbersSet.add(sn.serialNumber);
+          } else {
+            newSerialNumbersSet.add(sId);
+          }
+        });
+      });
+
+      // Serials to revert to 'Available': previously selected but not currently selected
+      const serialsToMakeAvailable = [...previousSerialNumbersSet].filter(sn => !newSerialNumbersSet.has(sn));
+
+      for (const sn of serialsToMakeAvailable) {
+        const matched = allSerials.find(s => s.serialNumber === sn);
+        if (matched) {
+          batch.update(doc(db, 'serialNumbers', matched.id), {
+            status: 'Available',
             updatedAt: serverTimestamp()
           });
         }
       }
 
+      // Serials to make 'Sold': currently selected
+      for (const sId of [...newSerialIdsSet]) {
+        batch.update(doc(db, 'serialNumbers', sId), {
+          status: 'Sold',
+          updatedAt: serverTimestamp()
+        });
+      }
+
       await batch.commit();
 
-      toast.success(`Invoice ${invoiceNo} recorded successfully!`);
+      toast.success(editingSale ? `Invoice ${invoiceNo} updated successfully!` : `Invoice ${invoiceNo} recorded successfully!`);
       setShowModal(false);
+      setEditingSale(null);
       
       if (printOnCreate) {
         const createdSale: Sale = {
@@ -475,7 +657,7 @@ export default function Sales() {
       setCustomerMode('select');
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
-      toast.error('Failed to create sales invoice');
+      toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');
     } finally {
       setSaving(false);
     }
@@ -806,6 +988,7 @@ export default function Sales() {
         </div>
         <button 
           onClick={() => {
+            setEditingSale(null);
             setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
             setShowModal(true);
           }}
@@ -908,6 +1091,22 @@ export default function Sales() {
                           <Printer className="w-3.5 h-3.5" />
                           <span className="text-xs font-bold">Print</span>
                         </button>
+                        <button 
+                          onClick={() => handleEditClick(sale)}
+                          className="text-amber-600 hover:text-amber-800 p-1.5 hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-1"
+                          title="Edit Invoice"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span className="text-xs font-bold">Edit</span>
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteInvoice(sale)}
+                          className="text-red-600 hover:text-red-800 p-1.5 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1"
+                          title="Delete Invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="text-xs font-bold">Delete</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -930,13 +1129,13 @@ export default function Sales() {
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Create Sales Invoice</h3>
-                    <p className="text-xs text-slate-500">Record a customer sale, select product line items, and deduct serialized stock</p>
+                    <h3 className="text-lg font-bold text-slate-900">{editingSale ? 'Edit Sales Invoice' : 'Create Sales Invoice'}</h3>
+                    <p className="text-xs text-slate-500">{editingSale ? 'Update this customer sale, product line items, and adjust serialized stock' : 'Record a customer sale, select product line items, and deduct serialized stock'}</p>
                   </div>
                 </div>
                 <button 
                   type="button" 
-                  onClick={() => setShowModal(false)} 
+                  onClick={() => { setShowModal(false); setEditingSale(null); }} 
                   className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -1044,7 +1243,10 @@ export default function Sales() {
                     <div className="space-y-3.5">
                       {invoiceItems.map((item, index) => {
                         const selectedProduct = products.find(p => p.id === item.productId);
-                        const productSerials = allSerials.filter(sn => sn.productId === item.productId);
+                        const productSerials = allSerials.filter(sn => 
+                          sn.productId === item.productId && 
+                          (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
+                        );
                         
                         return (
                           <div key={index} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-sm hover:border-slate-350 transition-all">
@@ -1088,7 +1290,16 @@ export default function Sales() {
                                   type="number"
                                   required
                                   min="1"
-                                  max={selectedProduct ? selectedProduct.stock : 999}
+                                  max={(() => {
+                                    let previousQty = 0;
+                                    if (editingSale && editingSale.items) {
+                                      const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
+                                      if (prevItem) {
+                                        previousQty = prevItem.quantity;
+                                      }
+                                    }
+                                    return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
+                                  })()}
                                   className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
                                   value={item.quantity || ''}
                                   onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
@@ -1222,7 +1433,7 @@ export default function Sales() {
                   <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button 
                       type="button" 
-                      onClick={() => setShowModal(false)} 
+                      onClick={() => { setShowModal(false); setEditingSale(null); }} 
                       className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-4 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
                     >
                       Cancel
@@ -1236,7 +1447,7 @@ export default function Sales() {
                       {saving && !printOnCreate ? (
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-800"></div>
                       ) : (
-                        'Create Invoice'
+                        editingSale ? 'Update Invoice' : 'Create Invoice'
                       )}
                     </button>
                     <button 
@@ -1250,7 +1461,7 @@ export default function Sales() {
                       ) : (
                         <>
                           <Printer className="w-4 h-4" />
-                          Save & Print
+                          {editingSale ? 'Update & Print' : 'Save & Print'}
                         </>
                       )}
                     </button>
