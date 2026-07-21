@@ -23,7 +23,8 @@ import {
   Info, 
   Hash, 
   CheckCircle2, 
-  Building2 
+  Building2,
+  Printer
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -119,6 +120,7 @@ export default function Sales() {
     selectedSerials: string[];
   }>>([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   const [saving, setSaving] = useState(false);
+  const [printOnCreate, setPrintOnCreate] = useState(false);
 
   // 1. Fetch Sales List
   useEffect(() => {
@@ -452,6 +454,20 @@ export default function Sales() {
       toast.success(`Invoice ${invoiceNo} recorded successfully!`);
       setShowModal(false);
       
+      if (printOnCreate) {
+        const createdSale: Sale = {
+          id: saleId,
+          invoiceNo,
+          customerId,
+          customerName,
+          items: itemsToSave,
+          total: totalAmount,
+          status: 'Paid',
+          date: newSaleDoc.date,
+        };
+        printInvoice(createdSale);
+      }
+
       // Reset form states
       setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
       setSelectedCustomerId('');
@@ -463,6 +479,306 @@ export default function Sales() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const printInvoice = (sale: Sale) => {
+    // Create a temporary hidden iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      toast.error('Failed to initialize print process');
+      return;
+    }
+
+    const itemsRows = sale.items && sale.items.length > 0 
+      ? sale.items.map(item => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px 14px; text-align: left; vertical-align: top;">
+            <div style="font-weight: bold; color: #1e293b; font-size: 13px;">${item.productName}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
+              ${item.brand} • ${item.modelNumber} • ${item.category}
+            </div>
+            ${item.selectedSerials && item.selectedSerials.length > 0 ? `
+              <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px;">
+                <span style="font-size: 9px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Serials:</span>
+                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 9px; background-color: #f1f5f9; color: #334155; padding: 1px 4px; border-radius: 3px; border: 1px solid #e2e8f0; margin-right: 4px; display: inline-block;">${sn}</span>`).join('')}
+              </div>
+            ` : ''}
+          </td>
+          <td style="padding: 10px 14px; text-align: center; font-weight: 500; color: #334155; vertical-align: top;">$${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 10px 14px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top;">${item.quantity}</td>
+          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.discount > 0 ? `$${item.discount.toFixed(2)}` : '-'}</td>
+          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.warranty || 'No Warranty'}</td>
+          <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top;">$${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
+        </tr>
+      `).join('')
+      : `
+        <tr>
+          <td colspan="6" style="padding: 20px 0; text-align: center; color: #64748b; font-style: italic;">
+            No itemized details recorded.
+          </td>
+        </tr>
+      `;
+
+    const subtotal = sale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0) || sale.total;
+    const totalDiscount = sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Invoice - ${sale.invoiceNo}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 40px;
+            color: #334155;
+            background-color: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .receipt-container {
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          .logo-container {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            background-color: #f0b90b;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 900;
+            border: 1px solid #e2e8f0;
+          }
+          .logo-img {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 1px solid #e2e8f0;
+          }
+          .company-name {
+            font-size: 22px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+            line-height: 1.2;
+          }
+          .document-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #059669;
+            font-weight: 900;
+            margin: 4px 0 0 0;
+          }
+          .meta-grid {
+            width: 100%;
+            border-collapse: collapse;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .meta-grid td {
+            vertical-align: top;
+            font-size: 12px;
+            padding-bottom: 15px;
+          }
+          .section-title {
+            font-size: 10px;
+            font-weight: 900;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+            display: block;
+          }
+          .info-block {
+            line-height: 1.5;
+          }
+          .info-block strong {
+            color: #0f172a;
+            font-size: 13px;
+          }
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          .items-table th {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 10px 14px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .items-table td {
+            padding: 12px 14px;
+            font-size: 12px;
+          }
+          .totals-table {
+            width: 320px;
+            margin-left: auto;
+            border-collapse: collapse;
+            font-size: 12px;
+          }
+          .totals-table td {
+            padding: 5px 0;
+          }
+          .totals-table .total-row {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0a382c;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 10px;
+          }
+          .footer {
+            margin-top: 50px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 600;
+            line-height: 1.5;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <table class="header-table">
+            <tr>
+              <td>
+                <table style="border-collapse: collapse;">
+                  <tr>
+                    <td style="padding-right: 12px; vertical-align: middle;">
+                      ${storeDetails.logoUrl 
+                        ? `<img src="${storeDetails.logoUrl}" class="logo-img" />`
+                        : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
+                      }
+                    </td>
+                    <td style="vertical-align: middle;">
+                      <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
+                      <p class="document-title">Sales Invoice & Receipt</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <table class="meta-grid">
+            <tr>
+              <td style="width: 50%; padding-right: 20px;">
+                <span class="section-title">Seller Info</span>
+                <div class="info-block">
+                  <strong>${storeDetails.name || 'ElectroManage'}</strong><br>
+                  ${storeDetails.address ? `${storeDetails.address}<br>` : ''}
+                  ${storeDetails.phone ? `Tel: ${storeDetails.phone}<br>` : ''}
+                  ${storeDetails.email ? `Email: ${storeDetails.email}` : ''}
+                </div>
+              </td>
+              <td style="width: 50%; text-align: right;">
+                <span class="section-title">Billed To (Customer)</span>
+                <div class="info-block">
+                  <strong>${sale.customerName}</strong>
+                </div>
+                <div style="margin-top: 12px; line-height: 1.5; color: #475569;">
+                  <div>Invoice No: <span style="font-family: monospace; font-weight: bold; color: #0f172a;">${sale.invoiceNo}</span></div>
+                  <div>Date: <span style="font-weight: 600; color: #0f172a;">${sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}</span></div>
+                  <div>Status: <span style="font-weight: 800; color: #059669; background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">Paid</span></div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="text-align: left; width: 45%;">Product</th>
+                <th style="text-align: center; width: 12%;">Price</th>
+                <th style="text-align: center; width: 8%;">Qty</th>
+                <th style="text-align: center; width: 12%;">Discount</th>
+                <th style="text-align: center; width: 13%;">Warranty</th>
+                <th style="text-align: right; width: 10%;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsRows}
+            </tbody>
+          </table>
+
+          <table class="totals-table">
+            <tr>
+              <td style="color: #64748b; font-weight: 500;">Subtotal (Pre-discount):</td>
+              <td style="text-align: right; font-weight: 600; color: #334155;">$${subtotal.toFixed(2)}</td>
+            </tr>
+            ${totalDiscount > 0 ? `
+              <tr>
+                <td style="color: #e11d48; font-weight: 500;">Total Discount:</td>
+                <td style="text-align: right; font-weight: 600; color: #e11d48;">-$${totalDiscount.toFixed(2)}</td>
+              </tr>
+            ` : ''}
+            <tr>
+              <td style="color: #64748b; font-weight: 500;">Tax / VAT (0%):</td>
+              <td style="text-align: right; font-weight: 600; color: #334155;">$0.00</td>
+            </tr>
+            <tr class="total-row">
+              <td style="padding-top: 10px;">Total Amount Paid:</td>
+              <td style="text-align: right; padding-top: 10px;">$${sale.total?.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          <div class="footer">
+            Thank you for your purchase!<br>
+            For any warranty claims, please present this invoice.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+
+    // Trigger printing once content is fully loaded
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      // Remove iframe from document after a delay to clean up
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 5000);
+    }, 500);
   };
 
   const filteredSales = sales.filter(s => 
@@ -572,17 +888,27 @@ export default function Sales() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
-                      <button 
-                        onClick={() => {
-                          setSelectedSale(sale);
-                          setShowDetailModal(true);
-                        }}
-                        className="text-slate-400 hover:text-slate-800 p-2 hover:bg-slate-50 rounded-lg transition-colors flex items-center ml-auto"
-                        title="View Receipt"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        <span className="text-xs font-bold text-slate-600">View</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button 
+                          onClick={() => {
+                            setSelectedSale(sale);
+                            setShowDetailModal(true);
+                          }}
+                          className="text-slate-500 hover:text-slate-800 p-1.5 hover:bg-slate-100/80 rounded-lg transition-colors flex items-center gap-1"
+                          title="View Receipt"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span className="text-xs font-bold">View</span>
+                        </button>
+                        <button 
+                          onClick={() => printInvoice(sale)}
+                          className="text-emerald-700 hover:text-emerald-900 p-1.5 hover:bg-emerald-50 rounded-lg transition-colors flex items-center gap-1"
+                          title="Print Invoice"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span className="text-xs font-bold">Print</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -594,32 +920,30 @@ export default function Sales() {
 
       {/* 1. Dynamic Invoice Creation Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowModal(false)} />
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full border border-slate-200">
-              <form onSubmit={handleCreateInvoiceSubmit}>
-                <div className="bg-white px-6 pt-6 pb-6 border-b border-slate-100 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-[#0a382c] flex items-center justify-center">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900">Create Sales Invoice</h3>
-                      <p className="text-xs text-slate-500">Record a customer sale, select product line items, and deduct serialized stock</p>
-                    </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center md:justify-end md:pr-12 pt-4 md:pt-10 px-4 pb-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowModal(false)} />
+          <div className="relative z-10 bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all max-w-4xl w-full border border-slate-200 my-auto md:my-0">
+            <form onSubmit={handleCreateInvoiceSubmit}>
+              <div className="bg-white px-6 pt-6 pb-6 border-b border-slate-100 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-50 text-[#0a382c] flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => setShowModal(false)} 
-                    className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Create Sales Invoice</h3>
+                    <p className="text-xs text-slate-500">Record a customer sale, select product line items, and deduct serialized stock</p>
+                  </div>
                 </div>
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)} 
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                <div className="bg-white px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="bg-white px-6 py-6 space-y-6 max-h-[78vh] overflow-y-auto">
                   {/* Two columns: Seller details & Customer details */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Seller details */}
@@ -895,23 +1219,39 @@ export default function Sales() {
                     <span className="text-2xl font-black text-[#0a382c]">${calculateInvoiceTotal().toFixed(2)}</span>
                   </div>
 
-                  <div className="flex gap-3 w-full sm:w-auto">
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button 
                       type="button" 
                       onClick={() => setShowModal(false)} 
-                      className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
+                      className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-4 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
                     >
                       Cancel
                     </button>
                     <button 
-                      type="submit" 
+                      type="submit"
+                      onClick={() => setPrintOnCreate(false)}
                       disabled={saving || calculateInvoiceTotal() <= 0}
-                      className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50"
+                      className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-800 focus:outline-none transition-colors disabled:opacity-50"
                     >
-                      {saving ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      {saving && !printOnCreate ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-800"></div>
                       ) : (
                         'Create Invoice'
+                      )}
+                    </button>
+                    <button 
+                      type="submit"
+                      onClick={() => setPrintOnCreate(true)}
+                      disabled={saving || calculateInvoiceTotal() <= 0}
+                      className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50 gap-1.5"
+                    >
+                      {saving && printOnCreate ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <Printer className="w-4 h-4" />
+                          Save & Print
+                        </>
                       )}
                     </button>
                   </div>
@@ -919,7 +1259,6 @@ export default function Sales() {
               </form>
             </div>
           </div>
-        </div>
       )}
 
       {/* 2. Styled Printable Receipt Detail Modal */}
@@ -1068,12 +1407,21 @@ export default function Sales() {
                 <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Authorized Receipt
                 </div>
-                <button 
-                  onClick={() => setShowDetailModal(false)}
-                  className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md transition-colors"
-                >
-                  Close Receipt
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => printInvoice(selectedSale)}
+                    className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center gap-1.5"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print Invoice
+                  </button>
+                  <button 
+                    onClick={() => setShowDetailModal(false)}
+                    className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md transition-colors"
+                  >
+                    Close Receipt
+                  </button>
+                </div>
               </div>
             </div>
           </div>
