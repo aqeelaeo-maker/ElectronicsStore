@@ -67,6 +67,18 @@ export default function Inventory() {
   const [editRefNumber, setEditRefNumber] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
+  // Product list search & modals
+  const [showAddStockModal, setShowAddStockModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editProdBrand, setEditProdBrand] = useState('');
+  const [editProdCategory, setEditProdCategory] = useState('');
+  const [editProdModel, setEditProdModel] = useState('');
+  const [editProdStock, setEditProdStock] = useState<number>(0);
+  const [editProdPurchasePrice, setEditProdPurchasePrice] = useState<number>(0);
+  const [editProdSalePrice, setEditProdSalePrice] = useState<number>(0);
+  const [savingProductEdit, setSavingProductEdit] = useState(false);
+
   // Searchable dropdown states
   const [productSearchInput, setProductSearchInput] = useState('');
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
@@ -248,6 +260,7 @@ export default function Inventory() {
       setSalePriceInput(0);
       setSelectedVendorId('');
       setReferenceNumber('');
+      setShowAddStockModal(false);
     } catch (error) {
       console.error('Error updating inventory:', error);
       toast.error('Failed to update inventory');
@@ -397,6 +410,74 @@ export default function Inventory() {
     }
   };
 
+  const handleOpenAddStock = (product?: Product) => {
+    if (product) {
+      setSelectedProduct(product);
+      setQuantityToAdd(10);
+      setPurchasePriceInput(product.purchasePrice || 0);
+      setSalePriceInput(product.salePrice || 0);
+    } else {
+      setSelectedProduct(null);
+      setQuantityToAdd(0);
+      setPurchasePriceInput(0);
+      setSalePriceInput(0);
+    }
+    setSelectedVendorId('');
+    setReferenceNumber('');
+    setShowAddStockModal(true);
+  };
+
+  const handleOpenEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setEditProdName(product.name || '');
+    setEditProdBrand(product.brand || '');
+    setEditProdCategory(product.category || '');
+    setEditProdModel(product.modelNumber || '');
+    setEditProdStock(product.stock || 0);
+    setEditProdPurchasePrice(product.purchasePrice || 0);
+    setEditProdSalePrice(product.salePrice || 0);
+  };
+
+  const handleSaveProductEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    setSavingProductEdit(true);
+    try {
+      await updateDoc(doc(db, 'products', editingProduct.id), {
+        name: editProdName,
+        brand: editProdBrand,
+        category: editProdCategory,
+        modelNumber: editProdModel,
+        stock: editProdStock,
+        purchasePrice: editProdPurchasePrice,
+        salePrice: editProdSalePrice,
+        updatedAt: serverTimestamp()
+      });
+      toast.success('Product updated successfully');
+      setEditingProduct(null);
+    } catch (error: any) {
+      console.error('Error updating product:', error);
+      toast.error(`Failed to update product: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setSavingProductEdit(false);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'products', id));
+      toast.success('Product deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting product:', error);
+      toast.error(`Failed to delete product: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -436,37 +517,6 @@ export default function Inventory() {
         
         {/* Navigation Tabs */}
         <div className="flex flex-wrap items-center gap-3">
-          {activeTab === 'current' && (
-            <div className="bg-slate-100 p-1 rounded-xl flex border border-slate-200 text-xs shadow-sm">
-              <button
-                onClick={() => {
-                  setViewMode('cards');
-                  setBulkQuantities({});
-                }}
-                className={`px-3 py-1.5 font-bold rounded-lg transition-all ${
-                  viewMode === 'cards'
-                    ? 'bg-[#0a382c] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Single Item Mode
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode('bulk');
-                  setSelectedProduct(null);
-                }}
-                className={`px-3 py-1.5 font-bold rounded-lg transition-all ${
-                  viewMode === 'bulk'
-                    ? 'bg-[#0a382c] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Bulk Entry Mode
-              </button>
-            </div>
-          )}
-
           <div className="bg-slate-100 p-1 rounded-xl flex border border-slate-200">
             <button
               onClick={() => setActiveTab('current')}
@@ -495,8 +545,115 @@ export default function Inventory() {
       </div>
 
       {activeTab === 'current' ? (
-        viewMode === 'cards' ? (
-          <div className="w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+          <div className="glass-panel rounded-2xl shadow-sm flex-1 flex flex-col overflow-hidden bg-white animate-in fade-in duration-200">
+            <div className="px-6 py-4 border-b border-slate-150 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="relative w-full sm:w-72">
+                <input
+                  type="text"
+                  placeholder="Search products by name, model, brand..."
+                  className="glass-input block w-full pl-10 pr-3 py-2.5 rounded-xl text-xs"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Search className="w-4 h-4 text-slate-450 absolute left-3 top-3" />
+              </div>
+
+              <button
+                onClick={() => handleOpenAddStock()}
+                className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl transition-all shadow-md shadow-emerald-950/10 text-xs font-black cursor-pointer"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Add Stock
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              {loading ? (
+                <div className="flex justify-center py-20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c]"></div>
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="text-center py-20 text-slate-400">
+                  <Package className="w-12 h-12 text-slate-350 mx-auto mb-3" />
+                  <p className="text-base font-bold text-slate-700">No Inventory Items Found</p>
+                  <p className="text-xs text-slate-500 mt-1">Add items using the Add Stock button or in the Products section.</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-100 table-fixed">
+                  <thead className="bg-[#f8faf9] sticky top-0 z-10">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[35%]">Product Info</th>
+                      <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Stock Level</th>
+                      <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[18%]">Purchase Price</th>
+                      <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[18%]">Sale Price</th>
+                      <th scope="col" className="px-6 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[14%]">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-100">
+                    {filteredProducts.map((product) => (
+                      <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 text-sm">{product.name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {product.brand} | Model: {product.modelNumber}
+                          </div>
+                          <div className="mt-1.5">
+                            <span className="text-[10px] font-bold text-[#0a382c] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
+                              {product.category}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStockBadge(product.stock || 0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800 font-mono">
+                          PKR {(product.purchasePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#0a382c] font-mono">
+                          PKR {(product.salePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenAddStock(product)}
+                              className="p-1 text-emerald-800 hover:text-white hover:bg-[#0a382c] rounded-lg transition-all border border-emerald-200 hover:border-transparent cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-1"
+                              title="Quick Add Stock"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditProduct(product)}
+                              className="p-1.5 text-slate-500 hover:text-[#0a382c] hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-150 cursor-pointer"
+                              title="Edit Product"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(product.id, product.name)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-150 cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        ) : (
+          null
+        )}
+
+        {/* Legacy forms wrapped in an unexecuted block to preserve state bindings without syntax issues */}
+        {(() => {
+          const oldUnusedForms = () => (
+            <>
+              <div className="hidden">
             <div className="flex flex-col h-full bg-white">
               <div className="p-3.5 border-b border-slate-150 bg-slate-50/50">
                 <div className="flex justify-between items-center">
@@ -786,8 +943,8 @@ export default function Inventory() {
               </form>
             </div>
           </div>
-        ) : (
-          /* Bulk Entry Mode Layout */
+              <div className="hidden">
+                {/* Bulk Entry Mode Layout */}
           <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
             {/* Left Column: List of All Products with Qty Input */}
             <div className="w-full lg:w-2/3 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
@@ -1022,9 +1179,14 @@ export default function Inventory() {
               </form>
             </div>
           </div>
-        )
-      ) : (
-        /* History / Audit Log Table */
+              </div>
+            </>
+          );
+          return null;
+        })()}
+
+        {activeTab === 'history' && (
+          /* History / Audit Log Table */
         <div className="glass-panel rounded-2xl shadow-sm flex-1 flex flex-col overflow-hidden bg-white">
           <div className="px-6 py-4 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center">
             <h2 className="text-lg font-black text-slate-900">Inventory Transaction Log</h2>
@@ -1262,6 +1424,449 @@ export default function Inventory() {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   ) : (
                     'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Overlay Modal (Generous full-page desktop styling) */}
+      {showAddStockModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 bg-slate-50 border-b border-slate-150 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Add Inventory Stock</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Increment product stock and adjust purchasing/selling prices</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAddStockModal(false);
+                  setSelectedProduct(null);
+                  setProductSearchInput('');
+                  setQuantityToAdd(0);
+                  setPurchasePriceInput(0);
+                  setSalePriceInput(0);
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 hover:bg-slate-150 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddStockSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left side: Product Selection and Supplier Info */}
+                <div className="space-y-4">
+                  <div className="relative" ref={productRef}>
+                    <label htmlFor="productSearch" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Select Product <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="productSearch"
+                        required={!selectedProduct}
+                        autoComplete="off"
+                        placeholder="Search product (name, brand, model)..."
+                        className="glass-input block w-full rounded-xl py-2 px-3 pl-3 pr-10 text-xs text-slate-800 font-medium"
+                        value={productSearchInput}
+                        onChange={(e) => handleProductSearchChange(e.target.value)}
+                        onFocus={() => setIsProductDropdownOpen(true)}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {productSearchInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProduct(null);
+                              setProductSearchInput('');
+                            }}
+                            className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <Search className="w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {isProductDropdownOpen && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 z-50 animate-in fade-in duration-100">
+                        {productSuggestions.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-400">
+                            No matching products found
+                          </div>
+                        ) : (
+                          productSuggestions.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProduct(p);
+                                setProductSearchInput(`${p.brand} ${p.modelNumber} - ${p.name}`);
+                                setQuantityToAdd(10);
+                                setPurchasePriceInput(p.purchasePrice || 0);
+                                setSalePriceInput(p.salePrice || 0);
+                                setIsProductDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex flex-col gap-0.5 cursor-pointer ${
+                                selectedProduct?.id === p.id ? 'bg-emerald-50/50' : ''
+                              }`}
+                            >
+                              <div className="flex justify-between items-center w-full">
+                                <span className="font-bold text-slate-900 truncate">
+                                  {p.brand} {p.modelNumber}
+                                </span>
+                                <span className="shrink-0 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-650">
+                                  Stock: {p.stock || 0}
+                                </span>
+                              </div>
+                              <span className="text-slate-500 truncate">{p.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {selectedProduct && (
+                    <div className="bg-emerald-50/30 px-3 py-2 rounded-xl border border-emerald-100 text-[11px] font-semibold text-slate-700 flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        Selected: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber}</strong>
+                      </span>
+                      <span className="shrink-0 bg-[#0a382c] text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
+                        Stock: {selectedProduct.stock || 0}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="relative" ref={vendorRef}>
+                    <label htmlFor="vendorSearch" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Select Vendor / Supplier (Optional)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        id="vendorSearch"
+                        autoComplete="off"
+                        placeholder="Search supplier..."
+                        className="glass-input block w-full rounded-xl py-2 px-3 pl-3 pr-10 text-xs text-slate-800 font-medium"
+                        value={vendorSearchInput}
+                        onChange={(e) => handleVendorSearchChange(e.target.value)}
+                        onFocus={() => setIsVendorDropdownOpen(true)}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {vendorSearchInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedVendorId('');
+                              setVendorSearchInput('');
+                            }}
+                            className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <Search className="w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {isVendorDropdownOpen && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 z-50 animate-in fade-in duration-100">
+                        {vendorSuggestions.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-400">
+                            No matching vendors found
+                          </div>
+                        ) : (
+                          vendorSuggestions.map((v) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedVendorId(v.id);
+                                setVendorSearchInput(v.companyName);
+                                setIsVendorDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 text-xs hover:bg-slate-50 transition-colors cursor-pointer ${
+                                selectedVendorId === v.id ? 'bg-emerald-50/50' : ''
+                              }`}
+                            >
+                              <span className="font-semibold text-slate-800">{v.companyName}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Reference / Invoice Number (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="refNumber"
+                      placeholder="e.g. INV-2026-001"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                      value={referenceNumber}
+                      onChange={(e) => setReferenceNumber(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Right side: Quantity, prices & updates */}
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Quantity to Add <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="flex gap-1">
+                        {[10, 25, 50, 100].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setQuantityToAdd(val)}
+                            className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 font-bold rounded text-[10px] transition-colors cursor-pointer"
+                          >
+                            +{val}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      id="quantityToAdd"
+                      required
+                      min="1"
+                      placeholder="0"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800 font-bold"
+                      value={quantityToAdd || ''}
+                      onChange={(e) => setQuantityToAdd(Math.max(0, parseInt(e.target.value) || 0))}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Purchase Price (PKR) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="purchasePrice"
+                        required
+                        min="0"
+                        step="0.01"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800 font-bold"
+                        value={purchasePriceInput || ''}
+                        onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Sale Price (PKR) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="salePrice"
+                        required
+                        min="0"
+                        step="0.01"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800 font-bold"
+                        value={salePriceInput || ''}
+                        onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                      />
+                    </div>
+                  </div>
+
+                  {selectedProduct && quantityToAdd > 0 ? (
+                    <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 space-y-1 text-xs animate-in slide-in-from-top-2 duration-150">
+                      <div className="flex justify-between">
+                        <span className="text-slate-650">Current Stock:</span>
+                        <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
+                      </div>
+                      <div className="flex justify-between text-[#0a382c] font-black border-t border-emerald-100 pt-1">
+                        <span>New Projected Stock:</span>
+                        <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-500 text-center">
+                      Select a product to view projected stock levels.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddStockModal(false);
+                    setSelectedProduct(null);
+                    setProductSearchInput('');
+                    setQuantityToAdd(0);
+                    setPurchasePriceInput(0);
+                    setSalePriceInput(0);
+                  }}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !selectedProduct || quantityToAdd <= 0}
+                  className="flex-1 flex justify-center items-center py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
+                >
+                  {saving ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    'Add Stock'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Overlay Modal */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 bg-slate-50 border-b border-slate-150 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Edit Product Details</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Modify general parameters, stock count, and pricing</p>
+              </div>
+              <button
+                onClick={() => setEditingProduct(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 hover:bg-slate-150 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProductEdit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Product Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                    value={editProdName}
+                    onChange={(e) => setEditProdName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Brand <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                    value={editProdBrand}
+                    onChange={(e) => setEditProdBrand(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                    value={editProdCategory}
+                    onChange={(e) => setEditProdCategory(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Model Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                    value={editProdModel}
+                    onChange={(e) => setEditProdModel(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Stock Level <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                    value={editProdStock}
+                    onChange={(e) => setEditProdStock(Math.max(0, parseInt(e.target.value) || 0))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Purchase (PKR) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                    value={editProdPurchasePrice}
+                    onChange={(e) => setEditProdPurchasePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Sale (PKR) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                    value={editProdSalePrice}
+                    onChange={(e) => setEditProdSalePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProductEdit}
+                  className="flex-1 flex justify-center items-center py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
+                >
+                  {savingProductEdit ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    'Save Product'
                   )}
                 </button>
               </div>
