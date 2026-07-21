@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, doc, updateDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Package, History, TrendingUp, User, FileText } from 'lucide-react';
+import { Plus, Search, Package, History, TrendingUp, User, FileText, Edit2, Trash2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -57,6 +57,15 @@ export default function Inventory() {
   const [bulkQuantities, setBulkQuantities] = useState<Record<string, number>>({});
   const [bulkPurchasePrices, setBulkPurchasePrices] = useState<Record<string, number>>({});
   const [bulkSalePrices, setBulkSalePrices] = useState<Record<string, number>>({});
+
+  // Edit Log State
+  const [editingLog, setEditingLog] = useState<InventoryLog | null>(null);
+  const [editQty, setEditQty] = useState<number>(0);
+  const [editPurchasePrice, setEditPurchasePrice] = useState<number>(0);
+  const [editSalePrice, setEditSalePrice] = useState<number>(0);
+  const [editVendorId, setEditVendorId] = useState<string>('');
+  const [editRefNumber, setEditRefNumber] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
   useEffect(() => {
     if (!storeId) return;
@@ -235,6 +244,80 @@ export default function Inventory() {
       toast.error('Failed to update bulk inventory');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteLog = async (log: InventoryLog) => {
+    if (!window.confirm(`Are you sure you want to delete this stock transaction? This will also revert ${log.quantityAdded} units from the product's current stock.`)) {
+      return;
+    }
+
+    try {
+      const product = products.find(p => p.id === log.productId);
+      if (product) {
+        const updatedStock = Math.max(0, (product.stock || 0) - log.quantityAdded);
+        await updateDoc(doc(db, 'products', log.productId), {
+          stock: updatedStock,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await deleteDoc(doc(db, 'inventoryLogs', log.id));
+      toast.success('Transaction log deleted and product stock reverted');
+    } catch (error: any) {
+      console.error('Error deleting transaction log:', error);
+      toast.error(`Failed to delete transaction log: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleOpenEditLog = (log: InventoryLog) => {
+    setEditingLog(log);
+    setEditQty(log.quantityAdded);
+    setEditPurchasePrice(log.purchasePrice || 0);
+    setEditSalePrice(log.salePrice || 0);
+    setEditVendorId(log.vendorId || '');
+    setEditRefNumber(log.referenceNumber || '');
+  };
+
+  const handleSaveEditLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLog) return;
+
+    setSavingEdit(true);
+    try {
+      const product = products.find(p => p.id === editingLog.productId);
+      const qtyDifference = editQty - editingLog.quantityAdded;
+
+      if (product) {
+        const newStock = Math.max(0, (product.stock || 0) + qtyDifference);
+        await updateDoc(doc(db, 'products', editingLog.productId), {
+          stock: newStock,
+          purchasePrice: editPurchasePrice,
+          salePrice: editSalePrice,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      const selectedVendor = vendors.find(v => v.id === editVendorId);
+
+      await updateDoc(doc(db, 'inventoryLogs', editingLog.id), {
+        quantityAdded: editQty,
+        newStock: editingLog.previousStock + editQty,
+        purchasePrice: editPurchasePrice,
+        salePrice: editSalePrice,
+        vendorId: editVendorId || null,
+        vendorName: selectedVendor ? selectedVendor.companyName : null,
+        referenceNumber: editRefNumber.trim() || null,
+        updatedAt: serverTimestamp()
+      });
+
+      toast.success('Transaction log and product stock updated successfully');
+      setEditingLog(null);
+    } catch (error: any) {
+      console.error('Error updating transaction log:', error);
+      toast.error(`Failed to update transaction: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -420,165 +503,215 @@ export default function Inventory() {
 
             {/* Right Column: Add Stock Form */}
             <div className="w-full lg:w-1/2 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
-              {!selectedProduct ? (
-                <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-500 min-h-[300px]">
-                  <TrendingUp className="w-16 h-16 text-slate-300 mb-4" />
-                  <p className="text-base font-bold text-slate-700 mb-1">Select a Product</p>
-                  <p className="text-xs max-w-xs mx-auto text-slate-500 leading-relaxed">
-                    Click the "Add Stock" button on any product card on the left to add incoming inventory.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col h-full bg-white">
-                  <div className="p-4 border-b border-slate-150 bg-slate-50/50">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900">Add Stock</h2>
-                        <p className="text-xs text-slate-500 mt-0.5">{selectedProduct.name}</p>
-                      </div>
-                      <button
-                        onClick={() => setSelectedProduct(null)}
-                        className="text-slate-500 hover:text-slate-800 text-xs font-semibold"
-                      >
-                        Clear
-                      </button>
+              <div className="flex flex-col h-full bg-white">
+                <div className="p-4 border-b border-slate-150 bg-slate-50/50">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-base font-black text-slate-900">Add Stock</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">Manage inventory additions & update pricing</p>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-4 text-xs pt-3 border-t border-slate-200">
+                    {selectedProduct && (
+                      <button
+                        onClick={() => {
+                          setSelectedProduct(null);
+                          setQuantityToAdd(0);
+                          setPurchasePriceInput(0);
+                          setSalePriceInput(0);
+                        }}
+                        className="text-slate-500 hover:text-slate-850 text-xs font-bold bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors border border-slate-200"
+                      >
+                        Clear Selection
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <form onSubmit={handleAddStockSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
+                  {/* Select Product - dropdown */}
+                  <div>
+                    <label htmlFor="productSelect" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Select Product <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      id="productSelect"
+                      required
+                      className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
+                      value={selectedProduct?.id || ''}
+                      onChange={(e) => {
+                        const prod = products.find(p => p.id === e.target.value);
+                        if (prod) {
+                          setSelectedProduct(prod);
+                          setQuantityToAdd(10);
+                          setPurchasePriceInput(prod.purchasePrice || 0);
+                          setSalePriceInput(prod.salePrice || 0);
+                        } else {
+                          setSelectedProduct(null);
+                          setQuantityToAdd(0);
+                          setPurchasePriceInput(0);
+                          setSalePriceInput(0);
+                        }
+                      }}
+                    >
+                      <option value="">-- Choose a Product --</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Selected Product Info (Single line only!) */}
+                  {selectedProduct && (
+                    <div className="bg-emerald-50/30 px-3 py-2.5 rounded-xl border border-emerald-100 text-xs font-semibold text-slate-700 flex items-center justify-between gap-2 overflow-hidden animate-in slide-in-from-top-2 duration-150">
+                      <span className="truncate">
+                        Product: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber} - {selectedProduct.name}</strong>
+                      </span>
+                      <span className="shrink-0 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                        Stock: {selectedProduct.stock || 0}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Select Vendor / Supplier - dropdown */}
+                  <div>
+                    <label htmlFor="vendor" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Select Vendor / Supplier (Optional)
+                    </label>
+                    <select
+                      id="vendor"
+                      className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
+                      value={selectedVendorId}
+                      onChange={(e) => setSelectedVendorId(e.target.value)}
+                    >
+                      <option value="">Choose Supplier</option>
+                      {vendors.map(v => (
+                         <option key={v.id} value={v.id}>{v.companyName}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="border-t border-slate-100 my-4 pt-4">
+                    <span className="block text-[10px] font-extrabold text-slate-450 uppercase tracking-wider mb-3">
+                      Stock Entry Details
+                    </span>
+                    
+                    <div className="space-y-4">
                       <div>
-                        <span className="text-slate-400 block">Model</span>
-                        <span className="font-bold text-slate-800">{selectedProduct.modelNumber}</span>
+                        <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Quantity to Add <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="mt-1.5 flex items-center gap-3">
+                          <input
+                            type="number"
+                            id="quantityToAdd"
+                            required
+                            min="1"
+                            disabled={!selectedProduct}
+                            placeholder={selectedProduct ? "Enter quantity" : "First select a product"}
+                            className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold disabled:opacity-50"
+                            value={quantityToAdd || ''}
+                            onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
+                          />
+                          <div className="flex gap-1">
+                            {[10, 25, 50, 100].map(val => (
+                              <button
+                                key={val}
+                                type="button"
+                                disabled={!selectedProduct}
+                                onClick={() => setQuantityToAdd(val)}
+                                className="px-2 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition-colors disabled:opacity-50"
+                              >
+                                +{val}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Purchase Price ($) <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            id="purchasePrice"
+                            required
+                            min="0"
+                            step="0.01"
+                            disabled={!selectedProduct}
+                            placeholder="0.00"
+                            className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                            value={purchasePriceInput || ''}
+                            onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Sale Price ($) <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            id="salePrice"
+                            required
+                            min="0"
+                            step="0.01"
+                            disabled={!selectedProduct}
+                            placeholder="0.00"
+                            className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                            value={salePriceInput || ''}
+                            onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                          />
+                        </div>
+                      </div>
+
                       <div>
-                        <span className="text-slate-400 block">Current Stock</span>
-                        <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
+                        <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Reference / Invoice Number (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          id="refNumber"
+                          disabled={!selectedProduct}
+                          placeholder="e.g. INV-2026-001"
+                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 placeholder-slate-400 disabled:opacity-50"
+                          value={referenceNumber}
+                          onChange={(e) => setReferenceNumber(e.target.value)}
+                        />
                       </div>
                     </div>
                   </div>
 
-                  <form onSubmit={handleAddStockSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
-                    <div>
-                      <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Quantity to Add <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="mt-1.5 flex items-center gap-3">
-                        <input
-                          type="number"
-                          id="quantityToAdd"
-                          required
-                          min="1"
-                          className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold"
-                          value={quantityToAdd || ''}
-                          onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
-                        />
-                        <div className="flex gap-1">
-                          {[10, 25, 50, 100].map(val => (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => setQuantityToAdd(val)}
-                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition-colors"
-                            >
-                              +{val}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Purchase Price ($) <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          id="purchasePrice"
-                          required
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold"
-                          value={purchasePriceInput || ''}
-                          onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Sale Price ($) <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          id="salePrice"
-                          required
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold"
-                          value={salePriceInput || ''}
-                          onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="vendor" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Supplier / Vendor (Optional)
-                      </label>
-                      <select
-                        id="vendor"
-                        className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
-                        value={selectedVendorId}
-                        onChange={(e) => setSelectedVendorId(e.target.value)}
-                      >
-                        <option value="">Select Vendor</option>
-                        {vendors.map(v => (
-                           <option key={v.id} value={v.id}>{v.companyName}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                        Reference / Invoice Number (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        id="refNumber"
-                        placeholder="e.g. INV-2026-001"
-                        className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 placeholder-slate-400"
-                        value={referenceNumber}
-                        onChange={(e) => setReferenceNumber(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2 text-xs mt-6">
+                  {selectedProduct && quantityToAdd > 0 && (
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2 text-xs mt-4 animate-in slide-in-from-top-2 duration-150">
                       <div className="flex justify-between">
-                        <span className="text-slate-600">Previous Stock:</span>
+                        <span className="text-slate-650">Previous Stock:</span>
                         <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
                       </div>
-                      <div className="flex justify-between text-emerald-700 font-extrabold border-t border-emerald-100 pt-2">
+                      <div className="flex justify-between text-emerald-800 font-black border-t border-emerald-100 pt-2">
                         <span>New Projected Stock:</span>
                         <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
                       </div>
                     </div>
+                  )}
 
-                    <button
-                      type="submit"
-                      disabled={saving || quantityToAdd <= 0}
-                      className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 mt-6 shadow-emerald-950/10"
-                    >
-                      {saving ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <Plus className="w-5 h-5 mr-2" />
-                          Save Inventory Addition
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </div>
-              )}
+                  <button
+                    type="submit"
+                    disabled={saving || !selectedProduct || quantityToAdd <= 0}
+                    className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-md text-sm font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 mt-6 shadow-emerald-950/10 cursor-pointer"
+                  >
+                    {saving ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5 mr-2" />
+                        Save Inventory Addition
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         ) : (
@@ -839,11 +972,12 @@ export default function Inventory() {
               <table className="min-w-full divide-y divide-slate-100 table-fixed">
                 <thead className="bg-[#f8faf9] sticky top-0">
                   <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/4">Product</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/6">Qty Added</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/6">Stock Path</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/4">Supplier & Ref</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/6">Date</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[24%]">Product</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[12%]">Qty Added</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[12%]">Stock Path</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[22%]">Supplier & Ref</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Date</th>
+                    <th scope="col" className="px-6 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
@@ -914,12 +1048,152 @@ export default function Inventory() {
                         <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-semibold">
                           {formattedDate}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEditLog(log)}
+                              className="p-1.5 text-slate-500 hover:text-[#0a382c] hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-150 cursor-pointer"
+                              title="Edit Stock Entry"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteLog(log)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-150 cursor-pointer"
+                              title="Delete Stock Entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Overlay Modal */}
+      {editingLog && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in duration-200">
+            <div className="p-4 bg-slate-50 border-b border-slate-150 flex justify-between items-center">
+              <div>
+                <h3 className="text-base font-black text-slate-900">Edit Stock Transaction</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{editingLog.productName}</p>
+              </div>
+              <button
+                onClick={() => setEditingLog(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-150 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveEditLog} className="p-6 space-y-4">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <span>Model: <strong>{editingLog.productModelNumber}</strong></span>
+                <span>Original Added: <strong>{editingLog.quantityAdded} units</strong></span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Quantity Added <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold"
+                  value={editQty}
+                  onChange={(e) => setEditQty(Math.max(1, parseInt(e.target.value) || 0))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Purchase Price ($) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold"
+                    value={editPurchasePrice}
+                    onChange={(e) => setEditPurchasePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Sale Price ($) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold"
+                    value={editSalePrice}
+                    onChange={(e) => setEditSalePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Supplier / Vendor
+                </label>
+                <select
+                  className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
+                  value={editVendorId}
+                  onChange={(e) => setEditVendorId(e.target.value)}
+                >
+                  <option value="">No Supplier</option>
+                  {vendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.companyName}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Reference / Invoice Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. INV-2026-001"
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800"
+                  value={editRefNumber}
+                  onChange={(e) => setEditRefNumber(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setEditingLog(null)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="flex-1 flex justify-center items-center py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
+                >
+                  {savingEdit ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
