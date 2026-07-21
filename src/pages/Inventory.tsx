@@ -420,298 +420,215 @@ export default function Inventory() {
 
       {activeTab === 'current' ? (
         viewMode === 'cards' ? (
-          <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
-            {/* Left Column: Products List with search */}
-            <div className="w-full lg:w-1/2 flex flex-col glass-panel rounded-2xl shadow-sm overflow-hidden">
+          <div className="max-w-2xl mx-auto w-full flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+            <div className="flex flex-col h-full bg-white">
               <div className="p-4 border-b border-slate-150 bg-slate-50/50">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search products by name, brand, category, or model..."
-                    className="glass-input block w-full pl-10 pr-3 py-2.5 rounded-xl text-xs"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  <Search className="w-4 h-4 text-slate-450 absolute left-3.5 top-3.5" />
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">Add Stock</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Manage inventory additions & update pricing</p>
+                  </div>
+                  {selectedProduct && (
+                    <button
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        setQuantityToAdd(0);
+                        setPurchasePriceInput(0);
+                        setSalePriceInput(0);
+                      }}
+                      className="text-slate-500 hover:text-slate-850 text-xs font-bold bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors border border-slate-200"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="overflow-y-auto flex-1 p-4 bg-white">
-                {loading ? (
-                  <div className="flex justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c]"></div>
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400">
-                    <Package className="w-12 h-12 text-slate-350 mx-auto mb-3" />
-                    <p className="text-base font-bold text-slate-700">No Products Found</p>
-                    <p className="text-xs text-slate-500 mt-1">Add products in the Products section first.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {filteredProducts.map((product) => {
-                      const isSelected = selectedProduct?.id === product.id;
-                      return (
-                        <div
-                          key={product.id}
-                          className={`p-4 rounded-xl border transition-all ${
-                            isSelected
-                              ? 'border-emerald-500 bg-emerald-50/40 shadow-sm shadow-emerald-500/5 ring-1 ring-emerald-500/20'
-                              : 'border-slate-200 hover:border-slate-300 hover:bg-[#f8faf9]'
-                          }`}
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded border border-emerald-150">
-                                {product.category}
-                              </span>
-                              <h3 className="font-bold text-slate-900 mt-2 line-clamp-1">{product.name}</h3>
-                              <p className="text-xs text-slate-500 mt-0.5">{product.brand} | Model: {product.modelNumber}</p>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
-                            <div>
-                              <span className="text-[10px] text-slate-400 block uppercase tracking-wider font-extrabold">Current Stock</span>
-                              <div className="mt-1">{getStockBadge(product.stock || 0)}</div>
-                            </div>
-                            
-                            <button
-                              onClick={() => {
-                                setSelectedProduct(product);
-                                setQuantityToAdd(10);
-                                setPurchasePriceInput(product.purchasePrice || 0);
-                                setSalePriceInput(product.salePrice || 0);
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center shadow-sm ${
-                                isSelected
-                                  ? 'bg-[#0a382c] text-white shadow-md shadow-emerald-950/10'
-                                  : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
-                              }`}
-                            >
-                              <Plus className="w-3.5 h-3.5 mr-1" />
-                              Add Stock
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+              <form onSubmit={handleAddStockSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
+                {/* Select Product - dropdown */}
+                <div>
+                  <label htmlFor="productSelect" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Select Product <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    id="productSelect"
+                    required
+                    className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
+                    value={selectedProduct?.id || ''}
+                    onChange={(e) => {
+                      const prod = products.find(p => p.id === e.target.value);
+                      if (prod) {
+                        setSelectedProduct(prod);
+                        setQuantityToAdd(10);
+                        setPurchasePriceInput(prod.purchasePrice || 0);
+                        setSalePriceInput(prod.salePrice || 0);
+                      } else {
+                        setSelectedProduct(null);
+                        setQuantityToAdd(0);
+                        setPurchasePriceInput(0);
+                        setSalePriceInput(0);
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose a Product --</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Product Info (Single line only!) */}
+                {selectedProduct && (
+                  <div className="bg-emerald-50/30 px-3 py-2.5 rounded-xl border border-emerald-100 text-xs font-semibold text-slate-700 flex items-center justify-between gap-2 overflow-hidden animate-in slide-in-from-top-2 duration-150">
+                    <span className="truncate">
+                      Product: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber} - {selectedProduct.name}</strong>
+                    </span>
+                    <span className="shrink-0 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                      Stock: {selectedProduct.stock || 0}
+                    </span>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Right Column: Add Stock Form */}
-            <div className="w-full lg:w-1/2 flex flex-col glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
-              <div className="flex flex-col h-full bg-white">
-                <div className="p-4 border-b border-slate-150 bg-slate-50/50">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h2 className="text-base font-black text-slate-900">Add Stock</h2>
-                      <p className="text-xs text-slate-500 mt-0.5">Manage inventory additions & update pricing</p>
-                    </div>
-                    {selectedProduct && (
-                      <button
-                        onClick={() => {
-                          setSelectedProduct(null);
-                          setQuantityToAdd(0);
-                          setPurchasePriceInput(0);
-                          setSalePriceInput(0);
-                        }}
-                        className="text-slate-500 hover:text-slate-850 text-xs font-bold bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors border border-slate-200"
-                      >
-                        Clear Selection
-                      </button>
-                    )}
-                  </div>
+                {/* Select Vendor / Supplier - dropdown */}
+                <div>
+                  <label htmlFor="vendor" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Select Vendor / Supplier (Optional)
+                  </label>
+                  <select
+                    id="vendor"
+                    className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
+                    value={selectedVendorId}
+                    onChange={(e) => setSelectedVendorId(e.target.value)}
+                  >
+                    <option value="">Choose Supplier</option>
+                    {vendors.map(v => (
+                       <option key={v.id} value={v.id}>{v.companyName}</option>
+                    ))}
+                  </select>
                 </div>
 
-                <form onSubmit={handleAddStockSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
-                  {/* Select Product - dropdown */}
-                  <div>
-                    <label htmlFor="productSelect" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                      Select Product <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      id="productSelect"
-                      required
-                      className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
-                      value={selectedProduct?.id || ''}
-                      onChange={(e) => {
-                        const prod = products.find(p => p.id === e.target.value);
-                        if (prod) {
-                          setSelectedProduct(prod);
-                          setQuantityToAdd(10);
-                          setPurchasePriceInput(prod.purchasePrice || 0);
-                          setSalePriceInput(prod.salePrice || 0);
-                        } else {
-                          setSelectedProduct(null);
-                          setQuantityToAdd(0);
-                          setPurchasePriceInput(0);
-                          setSalePriceInput(0);
-                        }
-                      }}
-                    >
-                      <option value="">-- Choose a Product --</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Selected Product Info (Single line only!) */}
-                  {selectedProduct && (
-                    <div className="bg-emerald-50/30 px-3 py-2.5 rounded-xl border border-emerald-100 text-xs font-semibold text-slate-700 flex items-center justify-between gap-2 overflow-hidden animate-in slide-in-from-top-2 duration-150">
-                      <span className="truncate">
-                        Product: <strong className="text-slate-900">{selectedProduct.brand} {selectedProduct.modelNumber} - {selectedProduct.name}</strong>
-                      </span>
-                      <span className="shrink-0 bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-                        Stock: {selectedProduct.stock || 0}
-                      </span>
+                <div className="border-t border-slate-100 my-4 pt-4">
+                  <span className="block text-[10px] font-extrabold text-slate-450 uppercase tracking-wider mb-3">
+                    Stock Entry Details
+                  </span>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        Quantity to Add <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="mt-1.5 flex items-center gap-3">
+                        <input
+                          type="number"
+                          id="quantityToAdd"
+                          required
+                          min="1"
+                          disabled={!selectedProduct}
+                          placeholder={selectedProduct ? "Enter quantity" : "First select a product"}
+                          className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold disabled:opacity-50"
+                          value={quantityToAdd || ''}
+                          onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
+                        />
+                        <div className="flex gap-1">
+                          {[10, 25, 50, 100].map(val => (
+                            <button
+                              key={val}
+                              type="button"
+                              disabled={!selectedProduct}
+                              onClick={() => setQuantityToAdd(val)}
+                              className="px-2 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition-colors disabled:opacity-50"
+                            >
+                              +{val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Select Vendor / Supplier - dropdown */}
-                  <div>
-                    <label htmlFor="vendor" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                      Select Vendor / Supplier (Optional)
-                    </label>
-                    <select
-                      id="vendor"
-                      className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-medium"
-                      value={selectedVendorId}
-                      onChange={(e) => setSelectedVendorId(e.target.value)}
-                    >
-                      <option value="">Choose Supplier</option>
-                      {vendors.map(v => (
-                         <option key={v.id} value={v.id}>{v.companyName}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="border-t border-slate-100 my-4 pt-4">
-                    <span className="block text-[10px] font-extrabold text-slate-450 uppercase tracking-wider mb-3">
-                      Stock Entry Details
-                    </span>
-                    
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="quantityToAdd" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Quantity to Add <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="mt-1.5 flex items-center gap-3">
-                          <input
-                            type="number"
-                            id="quantityToAdd"
-                            required
-                            min="1"
-                            disabled={!selectedProduct}
-                            placeholder={selectedProduct ? "Enter quantity" : "First select a product"}
-                            className="glass-input block w-full rounded-xl py-2 px-3 text-slate-800 font-bold disabled:opacity-50"
-                            value={quantityToAdd || ''}
-                            onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 0))}
-                          />
-                          <div className="flex gap-1">
-                            {[10, 25, 50, 100].map(val => (
-                              <button
-                                key={val}
-                                type="button"
-                                disabled={!selectedProduct}
-                                onClick={() => setQuantityToAdd(val)}
-                                className="px-2 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition-colors disabled:opacity-50"
-                              >
-                                +{val}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            Purchase Price ($) <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            id="purchasePrice"
-                            required
-                            min="0"
-                            step="0.01"
-                            disabled={!selectedProduct}
-                            placeholder="0.00"
-                            className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
-                            value={purchasePriceInput || ''}
-                            onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                            Sale Price ($) <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            id="salePrice"
-                            required
-                            min="0"
-                            step="0.01"
-                            disabled={!selectedProduct}
-                            placeholder="0.00"
-                            className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
-                            value={salePriceInput || ''}
-                            onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                          Reference / Invoice Number (Optional)
+                        <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Purchase Price ($) <span className="text-rose-500">*</span>
                         </label>
                         <input
-                          type="text"
-                          id="refNumber"
+                          type="number"
+                          id="purchasePrice"
+                          required
+                          min="0"
+                          step="0.01"
                           disabled={!selectedProduct}
-                          placeholder="e.g. INV-2026-001"
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 placeholder-slate-400 disabled:opacity-50"
-                          value={referenceNumber}
-                          onChange={(e) => setReferenceNumber(e.target.value)}
+                          placeholder="0.00"
+                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                          value={purchasePriceInput || ''}
+                          onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="salePrice" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                          Sale Price ($) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          id="salePrice"
+                          required
+                          min="0"
+                          step="0.01"
+                          disabled={!selectedProduct}
+                          placeholder="0.00"
+                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 font-bold disabled:opacity-50"
+                          value={salePriceInput || ''}
+                          onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
                         />
                       </div>
                     </div>
-                  </div>
 
-                  {selectedProduct && quantityToAdd > 0 && (
-                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2 text-xs mt-4 animate-in slide-in-from-top-2 duration-150">
-                      <div className="flex justify-between">
-                        <span className="text-slate-650">Previous Stock:</span>
-                        <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
-                      </div>
-                      <div className="flex justify-between text-emerald-800 font-black border-t border-emerald-100 pt-2">
-                        <span>New Projected Stock:</span>
-                        <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
-                      </div>
+                    <div>
+                      <label htmlFor="refNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                        Reference / Invoice Number (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        id="refNumber"
+                        disabled={!selectedProduct}
+                        placeholder="e.g. INV-2026-001"
+                        className="glass-input block w-full rounded-xl py-2.5 px-3 text-slate-800 placeholder-slate-400 disabled:opacity-50"
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                      />
                     </div>
-                  )}
+                  </div>
+                </div>
 
-                  <button
-                    type="submit"
-                    disabled={saving || !selectedProduct || quantityToAdd <= 0}
-                    className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-md text-sm font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 mt-6 shadow-emerald-950/10 cursor-pointer"
-                  >
-                    {saving ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <Plus className="w-5 h-5 mr-2" />
-                        Save Inventory Addition
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
+                {selectedProduct && quantityToAdd > 0 && (
+                  <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-2 text-xs mt-4 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex justify-between">
+                      <span className="text-slate-650">Previous Stock:</span>
+                      <span className="font-bold text-slate-800">{selectedProduct.stock || 0} units</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-800 font-black border-t border-emerald-100 pt-2">
+                      <span>New Projected Stock:</span>
+                      <span>{(selectedProduct.stock || 0) + quantityToAdd} units</span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={saving || !selectedProduct || quantityToAdd <= 0}
+                  className="w-full flex justify-center items-center py-3.5 px-4 border border-transparent rounded-xl shadow-md text-sm font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 mt-6 shadow-emerald-950/10 cursor-pointer"
+                >
+                  {saving ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5 mr-2" />
+                      Save Inventory Addition
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
           </div>
         ) : (
