@@ -695,11 +695,11 @@ export default function Sales() {
               </div>
             ` : ''}
           </td>
-          <td style="padding: 10px 14px; text-align: center; font-weight: 500; color: #334155; vertical-align: top;">$${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 10px 14px; text-align: center; font-weight: 500; color: #334155; vertical-align: top;">PKR ${item.salePrice.toFixed(2)}</td>
           <td style="padding: 10px 14px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top;">${item.quantity}</td>
-          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.discount > 0 ? `$${item.discount.toFixed(2)}` : '-'}</td>
+          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}</td>
           <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.warranty || 'No Warranty'}</td>
-          <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top;">$${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
+          <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top;">PKR ${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
@@ -921,21 +921,21 @@ export default function Sales() {
           <table class="totals-table">
             <tr>
               <td style="color: #64748b; font-weight: 500;">Subtotal (Pre-discount):</td>
-              <td style="text-align: right; font-weight: 600; color: #334155;">$${subtotal.toFixed(2)}</td>
+              <td style="text-align: right; font-weight: 600; color: #334155;">PKR ${subtotal.toFixed(2)}</td>
             </tr>
             ${totalDiscount > 0 ? `
               <tr>
                 <td style="color: #e11d48; font-weight: 500;">Total Discount:</td>
-                <td style="text-align: right; font-weight: 600; color: #e11d48;">-$${totalDiscount.toFixed(2)}</td>
+                <td style="text-align: right; font-weight: 600; color: #e11d48;">-PKR ${totalDiscount.toFixed(2)}</td>
               </tr>
             ` : ''}
             <tr>
               <td style="color: #64748b; font-weight: 500;">Tax / VAT (0%):</td>
-              <td style="text-align: right; font-weight: 600; color: #334155;">$0.00</td>
+              <td style="text-align: right; font-weight: 600; color: #334155;">PKR 0.00</td>
             </tr>
             <tr class="total-row">
               <td style="padding-top: 10px;">Total Amount Paid:</td>
-              <td style="text-align: right; padding-top: 10px;">$${sale.total?.toFixed(2)}</td>
+              <td style="text-align: right; padding-top: 10px;">PKR ${sale.total?.toFixed(2)}</td>
             </tr>
           </table>
 
@@ -1063,7 +1063,7 @@ export default function Sales() {
                       {sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-950">
-                      ${sale.total?.toFixed(2)}
+                      PKR {sale.total?.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
@@ -1271,7 +1271,7 @@ export default function Sales() {
 
                               {/* Unit Price */}
                               <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price ($)</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
                                 <input
                                   type="number"
                                   required
@@ -1308,7 +1308,7 @@ export default function Sales() {
 
                               {/* Discount */}
                               <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount ($)</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
                                 <input
                                   type="number"
                                   min="0"
@@ -1342,7 +1342,7 @@ export default function Sales() {
                                 <div className="text-right">
                                   <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
                                   <span className="text-xs font-black text-slate-900">
-                                    ${Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                                    PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
                                   </span>
                                 </div>
                                 <button
@@ -1427,7 +1427,7 @@ export default function Sales() {
                 <div className="bg-[#f8faf9] px-6 py-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200 flex-shrink-0">
                   <div className="text-center sm:text-left">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold block">Invoice Total Amount</span>
-                    <span className="text-2xl font-black text-[#0a382c]">${calculateInvoiceTotal().toFixed(2)}</span>
+                    <span className="text-2xl font-black text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -1561,16 +1561,16 @@ export default function Sales() {
                                   </div>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-center font-semibold text-slate-700">${item.salePrice.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-center font-semibold text-slate-700">PKR {item.salePrice.toFixed(2)}</td>
                               <td className="px-4 py-3 text-center font-bold text-slate-900">{item.quantity}</td>
                               <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                                {item.discount && item.discount > 0 ? `$${item.discount.toFixed(2)}` : '-'}
+                                {item.discount && item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}
                               </td>
                               <td className="px-4 py-3 text-center text-slate-600 font-semibold">
                                 {item.warranty || 'No Warranty'}
                               </td>
                               <td className="px-4 py-3 text-right font-bold text-slate-900">
-                                ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
+                                PKR {(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
                               </td>
                             </tr>
                           ))}
@@ -1580,7 +1580,7 @@ export default function Sales() {
                   ) : (
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-center">
                       <p className="text-xs text-slate-500 italic">No direct line item details recorded. This was entered as a quick-sum invoice.</p>
-                      <div className="mt-3 text-sm font-bold text-slate-800">Total Invoice Amount: ${selectedSale.total?.toFixed(2)}</div>
+                      <div className="mt-3 text-sm font-bold text-slate-800">Total Invoice Amount: PKR {selectedSale.total?.toFixed(2)}</div>
                     </div>
                   )}
                 </div>
@@ -1591,24 +1591,24 @@ export default function Sales() {
                     <div className="flex justify-between font-semibold text-slate-500">
                       <span>Subtotal (Pre-discount):</span>
                       <span>
-                        ${selectedSale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0).toFixed(2) || selectedSale.total?.toFixed(2)}
+                        PKR {selectedSale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0).toFixed(2) || selectedSale.total?.toFixed(2)}
                       </span>
                     </div>
                     {selectedSale.items?.some(item => item.discount > 0) && (
                       <div className="flex justify-between font-semibold text-rose-600">
                         <span>Total Discount:</span>
                         <span>
-                          -${selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}
+                          -PKR {selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}
                         </span>
                       </div>
                     )}
                     <div className="flex justify-between font-semibold text-slate-500">
                       <span>Tax / VAT (0%):</span>
-                      <span>$0.00</span>
+                      <span>PKR 0.00</span>
                     </div>
                     <div className="flex justify-between text-base font-black text-[#0a382c] border-t border-slate-100 pt-2.5">
                       <span>Total Amount Paid:</span>
-                      <span>${selectedSale.total?.toFixed(2)}</span>
+                      <span>PKR {selectedSale.total?.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

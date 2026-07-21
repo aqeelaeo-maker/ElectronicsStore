@@ -275,7 +275,7 @@ export default function Products() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                      ${product.salePrice.toFixed(2)}
+                      PKR {product.salePrice.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full uppercase tracking-wider ${

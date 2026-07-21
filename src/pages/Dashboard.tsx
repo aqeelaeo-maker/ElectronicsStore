@@ -121,7 +121,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Sales" 
-          value={`$${totalSales.toFixed(2)}`} 
+          value={`PKR ${totalSales.toFixed(2)}`} 
           icon={DollarSign} 
           trend="+12.5%"
           colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
@@ -159,7 +159,7 @@ export default function Dashboard() {
               <BarChart data={mockSalesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `$${val}`} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `PKR ${val}`} />
                 <Tooltip 
                   cursor={{ fill: '#f4f7f6', opacity: 0.5 }}
                   contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', color: '#0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
@@ -189,7 +189,7 @@ export default function Dashboard() {
                       <p className="text-xs text-slate-500 mt-0.5">{sale.customerName}</p>
                     </div>
                   </div>
-                  <span className="text-sm font-bold text-slate-900">${sale.total?.toFixed(2)}</span>
+                  <span className="text-sm font-bold text-slate-900">PKR {sale.total?.toFixed(2)}</span>
                 </div>
               ))}
               {recentSales.length === 0 && (
@@ -208,7 +208,7 @@ export default function Dashboard() {
                 <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
                   <div>
                     <p className="text-sm font-semibold text-slate-950">{product.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">${product.salePrice?.toFixed(2)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">PKR {product.salePrice?.toFixed(2)}</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full ${

@@ -718,7 +718,7 @@ export default function Inventory() {
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label htmlFor="purchasePrice" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          Purchase Price ($) <span className="text-rose-500">*</span>
+                          Purchase Price (PKR) <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="number"
@@ -735,7 +735,7 @@ export default function Inventory() {
                       </div>
                       <div>
                         <label htmlFor="salePrice" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          Sale Price ($) <span className="text-rose-500">*</span>
+                          Sale Price (PKR) <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="number"
@@ -1075,12 +1075,12 @@ export default function Inventory() {
                             <div className="text-[10px] font-mono mt-1.5 flex gap-2">
                               {log.purchasePrice !== undefined && (
                                 <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                                  Buy: <strong>${log.purchasePrice.toFixed(2)}</strong>
+                                  Buy: <strong>PKR {log.purchasePrice.toFixed(2)}</strong>
                                 </span>
                               )}
                               {log.salePrice !== undefined && (
                                 <span className="bg-[#e8f5e9] text-emerald-800 px-1.5 py-0.5 rounded border border-[#c8e6c9]">
-                                  Sell: <strong>${log.salePrice.toFixed(2)}</strong>
+                                  Sell: <strong>PKR {log.salePrice.toFixed(2)}</strong>
                                 </span>
                               )}
                             </div>
@@ -1188,7 +1188,7 @@ export default function Inventory() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Purchase Price ($) <span className="text-rose-500">*</span>
+                    Purchase Price (PKR) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1202,7 +1202,7 @@ export default function Inventory() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    Sale Price ($) <span className="text-rose-500">*</span>
+                    Sale Price (PKR) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
