@@ -63,6 +63,8 @@ interface SaleItem {
   category: string;
   quantity: number;
   salePrice: number;
+  discount: number;
+  warranty: string;
   subtotal: number;
   selectedSerials: string[];
 }
@@ -84,7 +86,19 @@ export default function Sales() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [allSerials, setAllSerials] = useState<SerialNumber[]>([]);
-  const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
+  const [storeDetails, setStoreDetails] = useState<{
+    name: string;
+    logoUrl: string;
+    phone: string;
+    address: string;
+    email: string;
+  }>({
+    name: '',
+    logoUrl: '',
+    phone: '',
+    address: '',
+    email: ''
+  });
   
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -100,8 +114,10 @@ export default function Sales() {
     productId: string;
     quantity: number;
     salePrice: number;
+    discount: number;
+    warranty: string;
     selectedSerials: string[];
-  }>>([{ productId: '', quantity: 1, salePrice: 0, selectedSerials: [] }]);
+  }>>([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   const [saving, setSaving] = useState(false);
 
   // 1. Fetch Sales List
@@ -201,7 +217,10 @@ export default function Sales() {
         const data = docSnap.data();
         setStoreDetails({
           name: data.name || '',
-          logoUrl: data.logoUrl || ''
+          logoUrl: data.logoUrl || '',
+          phone: data.phone || '',
+          address: data.address || '',
+          email: data.email || ''
         });
       }
     }, (error) => {
@@ -213,12 +232,12 @@ export default function Sales() {
 
   // Form Management Helpers
   const handleAddItemRow = () => {
-    setInvoiceItems([...invoiceItems, { productId: '', quantity: 1, salePrice: 0, selectedSerials: [] }]);
+    setInvoiceItems([...invoiceItems, { productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   };
 
   const handleRemoveItemRow = (index: number) => {
     const updated = invoiceItems.filter((_, i) => i !== index);
-    setInvoiceItems(updated.length > 0 ? updated : [{ productId: '', quantity: 1, salePrice: 0, selectedSerials: [] }]);
+    setInvoiceItems(updated.length > 0 ? updated : [{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   };
 
   const handleItemProductChange = (index: number, pId: string) => {
@@ -228,6 +247,8 @@ export default function Sales() {
       productId: pId,
       quantity: 1,
       salePrice: product ? product.salePrice : 0,
+      discount: 0,
+      warranty: 'No Warranty',
       selectedSerials: []
     };
     setInvoiceItems(updated);
@@ -260,8 +281,26 @@ export default function Sales() {
     setInvoiceItems(updated);
   };
 
+  const handleItemDiscountChange = (index: number, discount: number) => {
+    const updated = [...invoiceItems];
+    updated[index] = {
+      ...updated[index],
+      discount: Math.max(0, discount)
+    };
+    setInvoiceItems(updated);
+  };
+
+  const handleItemWarrantyChange = (index: number, warranty: string) => {
+    const updated = [...invoiceItems];
+    updated[index] = {
+      ...updated[index],
+      warranty
+    };
+    setInvoiceItems(updated);
+  };
+
   const calculateInvoiceTotal = () => {
-    return invoiceItems.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+    return invoiceItems.reduce((sum, item) => sum + Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)), 0);
   };
 
   // Submit Detailed Invoice Creation using Atomic Batch writes
@@ -316,7 +355,14 @@ export default function Sales() {
     }
 
     setSaving(true);
-    const invoiceNo = `INV-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    // Generate sequential invoice numbers like INV-year-0001
+    const currentYear = new Date().getFullYear();
+    const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
+    const nextSeq = yearSales.length + 1;
+    const paddedSeq = String(nextSeq).padStart(4, '0');
+    const invoiceNo = `INV-${currentYear}-${paddedSeq}`;
+
     const batch = writeBatch(db);
 
     const itemsToSave: SaleItem[] = invoiceItems.map(item => {
@@ -329,7 +375,9 @@ export default function Sales() {
         category: prod.category,
         quantity: item.quantity,
         salePrice: item.salePrice,
-        subtotal: item.quantity * item.salePrice,
+        discount: item.discount || 0,
+        warranty: item.warranty || 'No Warranty',
+        subtotal: Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)),
         selectedSerials: item.selectedSerials.map(sId => {
           const sn = allSerials.find(s => s.id === sId);
           return sn ? sn.serialNumber : sId;
@@ -405,7 +453,7 @@ export default function Sales() {
       setShowModal(false);
       
       // Reset form states
-      setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, selectedSerials: [] }]);
+      setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
       setSelectedCustomerId('');
       setManualCustomerName('');
       setCustomerMode('select');
@@ -572,60 +620,95 @@ export default function Sales() {
                 </div>
 
                 <div className="bg-white px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                  {/* Customer Information Panel */}
-                  <div className="bg-[#f8faf9] p-4 rounded-xl border border-slate-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-[#0a382c]" /> Customer Details
-                      </span>
-                      <div className="bg-slate-200/60 p-0.5 rounded-lg flex border border-slate-200 text-[10px] font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setCustomerMode('select')}
-                          className={`px-2.5 py-1 rounded ${customerMode === 'select' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                        >
-                          Select Existing
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCustomerMode('manual')}
-                          className={`px-2.5 py-1 rounded ${customerMode === 'manual' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                        >
-                          Walk-in / Manual
-                        </button>
+                  {/* Two columns: Seller details & Customer details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Seller details */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                      <div>
+                        <span className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
+                          <Building2 className="w-3.5 h-3.5 text-[#0a382c]" /> Seller Info (Company Profile)
+                        </span>
+                        <div className="flex items-start gap-3">
+                          {storeDetails.logoUrl ? (
+                            <img src={storeDetails.logoUrl} alt="Seller Logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 flex-shrink-0" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-sm flex-shrink-0 border border-slate-200">
+                              {getInitials(storeDetails.name || 'ElectroManage')}
+                            </div>
+                          )}
+                          <div className="text-xs space-y-0.5">
+                            <span className="font-extrabold text-slate-800 text-xs block leading-snug">{storeDetails.name || 'ElectroManage'}</span>
+                            {storeDetails.address && (
+                              <span className="text-slate-500 block">{storeDetails.address}</span>
+                            )}
+                            {storeDetails.phone && (
+                              <span className="text-slate-500 block">Tel: {storeDetails.phone}</span>
+                            )}
+                            {storeDetails.email && (
+                              <span className="text-slate-500 block">Email: {storeDetails.email}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {customerMode === 'select' ? (
+                    {/* Customer Information Panel */}
+                    <div className="bg-[#f8faf9] p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                       <div>
-                        <label htmlFor="customerId" className="sr-only">Select Customer</label>
-                        <select
-                          id="customerId"
-                          required={customerMode === 'select'}
-                          className="glass-input block w-full rounded-xl py-2.5 px-3 text-sm"
-                          value={selectedCustomerId}
-                          onChange={(e) => setSelectedCustomerId(e.target.value)}
-                        >
-                          <option value="">-- Choose Customer --</option>
-                          {customers.map(c => (
-                            <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
-                          ))}
-                        </select>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-[#0a382c]" /> Customer Details
+                          </span>
+                          <div className="bg-slate-200/60 p-0.5 rounded-lg flex border border-slate-200 text-[10px] font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setCustomerMode('select')}
+                              className={`px-2.5 py-1 rounded ${customerMode === 'select' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                            >
+                              Select Existing
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCustomerMode('manual')}
+                              className={`px-2.5 py-1 rounded ${customerMode === 'manual' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                            >
+                              Walk-in / Manual
+                            </button>
+                          </div>
+                        </div>
+
+                        {customerMode === 'select' ? (
+                          <div className="mt-2">
+                            <label htmlFor="customerId" className="sr-only">Select Customer</label>
+                            <select
+                              id="customerId"
+                              required={customerMode === 'select'}
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                              value={selectedCustomerId}
+                              onChange={(e) => setSelectedCustomerId(e.target.value)}
+                            >
+                              <option value="">-- Choose Customer --</option>
+                              {customers.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="mt-2">
+                            <label htmlFor="manualName" className="sr-only">Customer Name</label>
+                            <input
+                              id="manualName"
+                              type="text"
+                              required={customerMode === 'manual'}
+                              placeholder="Enter Customer Full Name..."
+                              className="glass-input block w-full rounded-xl py-2 px-4 text-xs"
+                              value={manualCustomerName}
+                              onChange={(e) => setManualCustomerName(e.target.value)}
+                            />
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div>
-                        <label htmlFor="manualName" className="sr-only">Customer Name</label>
-                        <input
-                          id="manualName"
-                          type="text"
-                          required={customerMode === 'manual'}
-                          placeholder="Enter Customer Full Name..."
-                          className="glass-input block w-full rounded-xl py-2.5 px-4 text-sm"
-                          value={manualCustomerName}
-                          onChange={(e) => setManualCustomerName(e.target.value)}
-                        />
-                      </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Line Items Table */}
@@ -643,7 +726,7 @@ export default function Sales() {
                           <div key={index} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-sm hover:border-slate-350 transition-all">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                               {/* Product Selection */}
-                              <div className="md:col-span-6">
+                              <div className="md:col-span-4">
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Product</label>
                                 <select
                                   required
@@ -675,24 +758,57 @@ export default function Sales() {
                               </div>
 
                               {/* Quantity */}
-                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Qty</label>
+                              <div className="md:col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
                                 <input
                                   type="number"
                                   required
                                   min="1"
                                   max={selectedProduct ? selectedProduct.stock : 999}
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-bold text-center"
+                                  className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
                                   value={item.quantity || ''}
                                   onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
                                 />
                               </div>
 
+                              {/* Discount */}
+                              <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount ($)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                  value={item.discount || ''}
+                                  onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
+                                />
+                              </div>
+
+                              {/* Warranty */}
+                              <div className="md:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
+                                <select
+                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                  value={item.warranty || 'No Warranty'}
+                                  onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
+                                >
+                                  <option value="No Warranty">No Warranty</option>
+                                  <option value="3 Months">3 Months</option>
+                                  <option value="6 Months">6 Months</option>
+                                  <option value="1 Year">1 Year</option>
+                                  <option value="2 Years">2 Years</option>
+                                  <option value="3 Years">3 Years</option>
+                                </select>
+                              </div>
+
                               {/* Subtotal */}
-                              <div className="md:col-span-1.5 flex items-center justify-between md:justify-end gap-3 w-full pb-1 md:pb-0">
+                              <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
                                 <div className="text-right">
                                   <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
-                                  <span className="text-xs font-black text-slate-900">${(item.quantity * item.salePrice).toFixed(2)}</span>
+                                  <span className="text-xs font-black text-slate-900">
+                                    ${Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                                  </span>
                                 </div>
                                 <button
                                   type="button"
@@ -836,20 +952,29 @@ export default function Sales() {
               </div>
 
               <div className="bg-white p-6 space-y-6">
-                {/* Meta details */}
-                <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-5 text-xs">
+                {/* Meta & Company details */}
+                <div className="grid grid-cols-2 gap-6 border-b border-slate-100 pb-5 text-xs">
                   <div>
-                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1">Invoice Info</span>
-                    <span className="font-mono font-bold text-slate-800 text-sm block">{selectedSale.invoiceNo}</span>
-                    <span className="text-slate-500 font-semibold mt-1 block flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      {selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}
-                    </span>
+                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Seller (Company Profile)</span>
+                    <span className="font-extrabold text-slate-900 text-sm block">{storeDetails.name || 'ElectroManage'}</span>
+                    {storeDetails.address && (
+                      <span className="text-slate-500 block mt-0.5">{storeDetails.address}</span>
+                    )}
+                    {storeDetails.phone && (
+                      <span className="text-slate-500 block mt-0.5">Tel: {storeDetails.phone}</span>
+                    )}
+                    {storeDetails.email && (
+                      <span className="text-slate-500 block mt-0.5">Email: {storeDetails.email}</span>
+                    )}
                   </div>
                   <div className="text-right">
-                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1">Customer Details</span>
-                    <span className="font-bold text-slate-900 text-sm block">{selectedSale.customerName}</span>
-                    <span className="text-slate-500 block mt-1">Status: <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[10px] uppercase">Paid</span></span>
+                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Billed To (Customer)</span>
+                    <span className="font-extrabold text-slate-900 text-sm block">{selectedSale.customerName}</span>
+                    <div className="text-slate-500 mt-2 space-y-0.5">
+                      <div>Invoice No: <span className="font-mono font-bold text-slate-800">{selectedSale.invoiceNo}</span></div>
+                      <div>Date: <span className="font-semibold">{selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}</span></div>
+                      <div>Status: <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[10px] uppercase">Paid</span></div>
+                    </div>
                   </div>
                 </div>
 
@@ -864,6 +989,8 @@ export default function Sales() {
                             <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
                             <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
                             <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Qty</th>
+                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Discount</th>
+                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Warranty</th>
                             <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total</th>
                           </tr>
                         </thead>
@@ -886,7 +1013,15 @@ export default function Sales() {
                               </td>
                               <td className="px-4 py-3 text-center font-semibold text-slate-700">${item.salePrice.toFixed(2)}</td>
                               <td className="px-4 py-3 text-center font-bold text-slate-900">{item.quantity}</td>
-                              <td className="px-4 py-3 text-right font-bold text-slate-900">${item.subtotal.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-center text-slate-600 font-semibold">
+                                {item.discount && item.discount > 0 ? `$${item.discount.toFixed(2)}` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-center text-slate-600 font-semibold">
+                                {item.warranty || 'No Warranty'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-900">
+                                ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -904,9 +1039,19 @@ export default function Sales() {
                 <div className="flex justify-end pt-2 border-t border-slate-100">
                   <div className="w-1/2 text-right space-y-1.5 text-xs">
                     <div className="flex justify-between font-semibold text-slate-500">
-                      <span>Subtotal:</span>
-                      <span>${selectedSale.total?.toFixed(2)}</span>
+                      <span>Subtotal (Pre-discount):</span>
+                      <span>
+                        ${selectedSale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0).toFixed(2) || selectedSale.total?.toFixed(2)}
+                      </span>
                     </div>
+                    {selectedSale.items?.some(item => item.discount > 0) && (
+                      <div className="flex justify-between font-semibold text-rose-600">
+                        <span>Total Discount:</span>
+                        <span>
+                          -${selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-semibold text-slate-500">
                       <span>Tax / VAT (0%):</span>
                       <span>$0.00</span>
