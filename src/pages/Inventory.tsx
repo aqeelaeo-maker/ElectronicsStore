@@ -67,6 +67,82 @@ export default function Inventory() {
   const [editRefNumber, setEditRefNumber] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
+  // Searchable dropdown states
+  const [productSearchInput, setProductSearchInput] = useState('');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [vendorSearchInput, setVendorSearchInput] = useState('');
+  const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
+
+  const productRef = React.useRef<HTMLDivElement>(null);
+  const vendorRef = React.useRef<HTMLDivElement>(null);
+
+  // Sync search inputs with selection
+  useEffect(() => {
+    if (selectedProduct) {
+      setProductSearchInput(`${selectedProduct.brand} ${selectedProduct.modelNumber} - ${selectedProduct.name}`);
+    } else {
+      setProductSearchInput('');
+    }
+  }, [selectedProduct]);
+
+  useEffect(() => {
+    if (selectedVendorId) {
+      const vendor = vendors.find(v => v.id === selectedVendorId);
+      if (vendor) {
+        setVendorSearchInput(vendor.companyName);
+      }
+    } else {
+      setVendorSearchInput('');
+    }
+  }, [selectedVendorId, vendors]);
+
+  // Handle clicking outside to close dropdowns
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (productRef.current && !productRef.current.contains(event.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
+      if (vendorRef.current && !vendorRef.current.contains(event.target as Node)) {
+        setIsVendorDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleProductSearchChange = (val: string) => {
+    setProductSearchInput(val);
+    setIsProductDropdownOpen(true);
+    if (!val) {
+      setSelectedProduct(null);
+    }
+  };
+
+  const handleVendorSearchChange = (val: string) => {
+    setVendorSearchInput(val);
+    setIsVendorDropdownOpen(true);
+    if (!val) {
+      setSelectedVendorId('');
+    }
+  };
+
+  const productSuggestions = products.filter(p => {
+    const searchStr = productSearchInput.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(searchStr) ||
+      p.brand.toLowerCase().includes(searchStr) ||
+      p.modelNumber.toLowerCase().includes(searchStr) ||
+      p.category.toLowerCase().includes(searchStr)
+    );
+  });
+
+  const vendorSuggestions = vendors.filter(v => {
+    const searchStr = vendorSearchInput.toLowerCase();
+    return v.companyName.toLowerCase().includes(searchStr);
+  });
+
   useEffect(() => {
     if (!storeId) return;
 
@@ -448,37 +524,75 @@ export default function Inventory() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Left Column: Product Selection and Supplier/Vendor Details */}
                   <div className="space-y-3">
-                    <div>
-                      <label htmlFor="productSelect" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    <div className="relative" ref={productRef}>
+                      <label htmlFor="productSearch" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Select Product <span className="text-rose-500">*</span>
                       </label>
-                      <select
-                        id="productSelect"
-                        required
-                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-medium"
-                        value={selectedProduct?.id || ''}
-                        onChange={(e) => {
-                          const prod = products.find(p => p.id === e.target.value);
-                          if (prod) {
-                            setSelectedProduct(prod);
-                            setQuantityToAdd(10);
-                            setPurchasePriceInput(prod.purchasePrice || 0);
-                            setSalePriceInput(prod.salePrice || 0);
-                          } else {
-                            setSelectedProduct(null);
-                            setQuantityToAdd(0);
-                            setPurchasePriceInput(0);
-                            setSalePriceInput(0);
-                          }
-                        }}
-                      >
-                        <option value="">-- Choose a Product --</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.brand} {p.modelNumber} - {p.name} (Stock: {p.stock || 0})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          id="productSearch"
+                          required={!selectedProduct}
+                          autoComplete="off"
+                          placeholder="Type to search product (name, brand, model)..."
+                          className="glass-input block w-full rounded-xl py-1.5 pl-2.5 pr-8 text-xs text-slate-800 font-medium bg-white border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
+                          value={productSearchInput}
+                          onChange={(e) => handleProductSearchChange(e.target.value)}
+                          onFocus={() => setIsProductDropdownOpen(true)}
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {productSearchInput && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedProduct(null);
+                                setProductSearchInput('');
+                              }}
+                              className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                          <Search className="w-3 h-3 text-slate-450 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {isProductDropdownOpen && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 animate-in fade-in duration-100">
+                          {productSuggestions.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400">
+                              No matching products found
+                            </div>
+                          ) : (
+                            productSuggestions.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProduct(p);
+                                  setQuantityToAdd(10);
+                                  setPurchasePriceInput(p.purchasePrice || 0);
+                                  setSalePriceInput(p.salePrice || 0);
+                                  setIsProductDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex flex-col gap-0.5 cursor-pointer ${
+                                  selectedProduct?.id === p.id ? 'bg-emerald-50/50' : ''
+                                }`}
+                              >
+                                <div className="flex justify-between items-center w-full">
+                                  <span className="font-bold text-slate-900 truncate">
+                                    {p.brand} {p.modelNumber}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-medium text-slate-600">
+                                    Stock: {p.stock || 0}
+                                  </span>
+                                </div>
+                                <span className="text-slate-500 truncate">{p.name}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {selectedProduct && (
@@ -492,21 +606,63 @@ export default function Inventory() {
                       </div>
                     )}
 
-                    <div>
-                      <label htmlFor="vendor" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    <div className="relative" ref={vendorRef}>
+                      <label htmlFor="vendorSearch" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                         Select Vendor / Supplier (Optional)
                       </label>
-                      <select
-                        id="vendor"
-                        className="glass-input block w-full rounded-xl py-1.5 px-2.5 text-xs text-slate-800 font-medium"
-                        value={selectedVendorId}
-                        onChange={(e) => setSelectedVendorId(e.target.value)}
-                      >
-                        <option value="">Choose Supplier</option>
-                        {vendors.map(v => (
-                           <option key={v.id} value={v.id}>{v.companyName}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          id="vendorSearch"
+                          autoComplete="off"
+                          placeholder="Type to search vendor/supplier..."
+                          className="glass-input block w-full rounded-xl py-1.5 pl-2.5 pr-8 text-xs text-slate-800 font-medium bg-white border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/20"
+                          value={vendorSearchInput}
+                          onChange={(e) => handleVendorSearchChange(e.target.value)}
+                          onFocus={() => setIsVendorDropdownOpen(true)}
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {vendorSearchInput && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedVendorId('');
+                                setVendorSearchInput('');
+                              }}
+                              className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                          <Search className="w-3 h-3 text-slate-450 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {isVendorDropdownOpen && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 animate-in fade-in duration-100">
+                          {vendorSuggestions.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400">
+                              No matching vendors found
+                            </div>
+                          ) : (
+                            vendorSuggestions.map((v) => (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVendorId(v.id);
+                                  setIsVendorDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors cursor-pointer ${
+                                  selectedVendorId === v.id ? 'bg-emerald-50/50' : ''
+                                }`}
+                              >
+                                <span className="font-semibold text-slate-800">{v.companyName}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div>
