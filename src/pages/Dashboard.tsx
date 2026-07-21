@@ -99,17 +99,172 @@ export default function Dashboard() {
   const lowStockProducts = products.filter(p => p.stock < 10).length;
 
   const recentSales = sales.slice(0, 4);
-  const topProducts = [...products].sort((a, b) => b.salePrice - a.salePrice).slice(0, 3); // using price as mock metric for top selling
 
-  const mockSalesData = [
-    { name: 'Jan', sales: 4000, profit: 2400 },
-    { name: 'Feb', sales: 3000, profit: 1398 },
-    { name: 'Mar', sales: 2000, profit: 9800 },
-    { name: 'Apr', sales: 2780, profit: 3908 },
-    { name: 'May', sales: 1890, profit: 4800 },
-    { name: 'Jun', sales: 2390, profit: 3800 },
-    { name: 'Jul', sales: 3490, profit: 4300 },
-  ];
+  // Calculate top products based on actual total value sold from real invoices
+  const topProducts = useMemo(() => {
+    const productSalesMap: Record<string, { product: any; qtySold: number; valSold: number }> = {};
+    
+    sales.forEach(sale => {
+      if (sale.items && Array.isArray(sale.items)) {
+        sale.items.forEach((item: any) => {
+          if (!productSalesMap[item.productId]) {
+            productSalesMap[item.productId] = {
+              product: products.find(p => p.id === item.productId) || {
+                id: item.productId,
+                name: item.productName,
+                salePrice: item.salePrice || 0,
+                stock: 0
+              },
+              qtySold: 0,
+              valSold: 0
+            };
+          }
+          productSalesMap[item.productId].qtySold += (item.quantity || 0);
+          productSalesMap[item.productId].valSold += (item.subtotal || 0);
+        });
+      }
+    });
+
+    const aggregated = Object.values(productSalesMap);
+    if (aggregated.length > 0) {
+      return aggregated
+        .sort((a, b) => b.valSold - a.valSold)
+        .slice(0, 3)
+        .map(item => ({
+          id: item.product.id || Math.random().toString(),
+          name: item.product.name,
+          salePrice: item.product.salePrice,
+          stock: item.product.stock ?? 0,
+          valSold: item.valSold,
+          qtySold: item.qtySold
+        }));
+    }
+
+    // Fallback to highest priced products if no sales have been recorded yet
+    return [...products].sort((a, b) => b.salePrice - a.salePrice).slice(0, 3);
+  }, [sales, products]);
+
+  // Calculate real month-over-month sales trend
+  const salesTrend = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    let thisMonthTotal = 0;
+    let lastMonthTotal = 0;
+
+    sales.forEach(sale => {
+      if (!sale.date) return;
+      const d = new Date(sale.date);
+      if (isNaN(d.getTime())) return;
+
+      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        thisMonthTotal += sale.total || 0;
+      } else if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
+        lastMonthTotal += sale.total || 0;
+      }
+    });
+
+    if (lastMonthTotal === 0) {
+      return thisMonthTotal > 0 ? '+100.0%' : '0.0%';
+    }
+
+    const diff = ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100;
+    return `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`;
+  }, [sales]);
+
+  // Calculate real customer signup trend
+  const customerTrend = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+    let thisMonthCount = 0;
+    let lastMonthCount = 0;
+
+    customers.forEach(cust => {
+      if (!cust.createdAt) return;
+      const d = typeof cust.createdAt.toDate === 'function'
+        ? cust.createdAt.toDate()
+        : new Date(cust.createdAt?.seconds * 1000 || cust.createdAt);
+        
+      if (isNaN(d.getTime())) return;
+
+      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        thisMonthCount++;
+      } else if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
+        lastMonthCount++;
+      }
+    });
+
+    if (lastMonthCount === 0) {
+      return thisMonthCount > 0 ? '+100.0%' : '0.0%';
+    }
+
+    const diff = ((thisMonthCount - lastMonthCount) / lastMonthCount) * 100;
+    return `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`;
+  }, [customers]);
+
+  // Dynamically group real sales and profit into the last 7 months
+  const salesData = useMemo(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const result: { name: string; yearMonth: string; sales: number; profit: number }[] = [];
+    
+    const now = new Date();
+    // Create sliding window of last 7 months including current month
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mName = months[d.getMonth()];
+      const year = d.getFullYear();
+      const yearMonth = `${year}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      result.push({
+        name: `${mName} ${year % 100}`,
+        yearMonth,
+        sales: 0,
+        profit: 0
+      });
+    }
+
+    sales.forEach(sale => {
+      if (!sale.date) return;
+      const saleDate = new Date(sale.date);
+      if (isNaN(saleDate.getTime())) return;
+      
+      const yearMonth = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}`;
+      const bucket = result.find(b => b.yearMonth === yearMonth);
+      if (bucket) {
+        const totalSale = sale.total || 0;
+        bucket.sales += totalSale;
+        
+        let saleProfit = 0;
+        if (sale.items && Array.isArray(sale.items)) {
+          sale.items.forEach((item: any) => {
+            const prod = products.find(p => p.id === item.productId);
+            const purchasePrice = prod ? (prod.purchasePrice || 0) : 0;
+            const itemSubtotal = item.subtotal ?? ((item.quantity * item.salePrice) - (item.discount || 0));
+            const itemCost = item.quantity * purchasePrice;
+            saleProfit += (itemSubtotal - itemCost);
+          });
+        } else {
+          // Default fallback to 30% profit margin if items aren't stored
+          saleProfit = totalSale * 0.3;
+        }
+        bucket.profit += saleProfit;
+      }
+    });
+
+    return result.map(({ name, sales, profit }) => ({
+      name,
+      sales: Math.round(sales),
+      profit: Math.round(profit)
+    }));
+  }, [sales, products]);
 
   return (
     <div className="space-y-8">
@@ -123,7 +278,7 @@ export default function Dashboard() {
           title="Total Sales" 
           value={`PKR ${totalSales.toFixed(2)}`} 
           icon={DollarSign} 
-          trend="+12.5%"
+          trend={salesTrend}
           colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
         />
         <StatCard 
@@ -136,7 +291,7 @@ export default function Dashboard() {
           title="Total Customers" 
           value={totalCustomers} 
           icon={Users} 
-          trend="+5.2%"
+          trend={customerTrend}
           colorClass="bg-blue-50 text-blue-700 border border-blue-100"
         />
         <StatCard 
@@ -156,7 +311,7 @@ export default function Dashboard() {
           </h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockSalesData}>
+              <BarChart data={salesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `PKR ${val}`} />
