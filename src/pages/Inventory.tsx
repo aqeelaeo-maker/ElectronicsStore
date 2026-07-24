@@ -159,9 +159,7 @@ export default function Inventory() {
     if (!storeId) return;
 
     // 1. Fetch Products
-    const productsQuery = role === 'Super Admin'
-      ? query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
       const data: Product[] = [];
@@ -176,9 +174,7 @@ export default function Inventory() {
     });
 
     // 2. Fetch Vendors
-    const vendorsQuery = role === 'Super Admin'
-      ? query(collection(db, 'vendors'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'vendors'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const vendorsQuery = query(collection(db, 'vendors'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribeVendors = onSnapshot(vendorsQuery, (snapshot) => {
       const data: Vendor[] = [];
@@ -191,9 +187,7 @@ export default function Inventory() {
     });
 
     // 3. Fetch Inventory Logs
-    const logsQuery = role === 'Super Admin'
-      ? query(collection(db, 'inventoryLogs'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const logsQuery = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       const data: InventoryLog[] = [];
@@ -210,7 +204,7 @@ export default function Inventory() {
       unsubscribeVendors();
       unsubscribeLogs();
     };
-  }, [storeId, role]);
+  }, [storeId]);
 
   const handleAddStockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

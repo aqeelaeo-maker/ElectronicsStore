@@ -36,9 +36,7 @@ export default function SerialNumbers() {
   useEffect(() => {
     if (!storeId) return;
     
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
       
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
@@ -54,7 +52,7 @@ export default function SerialNumbers() {
     });
     
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   useEffect(() => {
     if (!selectedProduct || !storeId) {
@@ -64,16 +62,11 @@ export default function SerialNumbers() {
     
     setLoadingSerials(true);
     
-    const q = role === 'Super Admin'
-      ? query(
-          collection(db, 'serialNumbers'), 
-          where('productId', '==', selectedProduct.id)
-        )
-      : query(
-          collection(db, 'serialNumbers'), 
-          where('storeId', '==', storeId),
-          where('productId', '==', selectedProduct.id)
-        );
+    const q = query(
+      collection(db, 'serialNumbers'), 
+      where('storeId', '==', storeId),
+      where('productId', '==', selectedProduct.id)
+    );
       
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: SerialNumber[] = [];
@@ -97,7 +90,7 @@ export default function SerialNumbers() {
     });
     
     return () => unsubscribe();
-  }, [selectedProduct, storeId, role]);
+  }, [selectedProduct, storeId]);
 
   const handleAddSerialNumber = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,9 +107,10 @@ export default function SerialNumbers() {
         return;
       }
 
-      // Check if the serial number already exists across ALL products in Firestore
+      // Check if the serial number already exists across products in this store
       const serialQuery = query(
         collection(db, 'serialNumbers'),
+        where('storeId', '==', storeId),
         where('serialNumber', '==', targetSerialNumber)
       );
       const querySnapshot = await getDocs(serialQuery);

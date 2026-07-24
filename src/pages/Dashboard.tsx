@@ -56,14 +56,10 @@ export default function Dashboard() {
     if (!storeId) return;
 
     const baseQuery = (colName: string) => 
-      role === 'Super Admin' 
-        ? collection(db, colName) 
-        : query(collection(db, colName), where('storeId', '==', storeId));
+      query(collection(db, colName), where('storeId', '==', storeId));
 
     // Listen to Sales
-    const qSales = role === 'Super Admin' 
-      ? query(collection(db, 'sales'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const qSales = query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
       const data: any[] = [];
@@ -91,7 +87,7 @@ export default function Dashboard() {
       unsubscribeProducts();
       unsubscribeCustomers();
     };
-  }, [storeId, role]);
+  }, [storeId]);
 
   const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + (sale.total || 0), 0), [sales]);
   const totalProducts = products.length;

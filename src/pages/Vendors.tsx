@@ -26,9 +26,7 @@ export default function Vendors() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'vendors'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'vendors'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'vendors'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Vendor[] = [];
@@ -44,7 +42,7 @@ export default function Vendors() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   const handleAddVendor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

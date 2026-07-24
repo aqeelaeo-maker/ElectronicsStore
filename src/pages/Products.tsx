@@ -27,9 +27,7 @@ export default function Products() {
   useEffect(() => {
     if (!storeId) return;
     
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
       
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
@@ -45,7 +43,7 @@ export default function Products() {
     });
     
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

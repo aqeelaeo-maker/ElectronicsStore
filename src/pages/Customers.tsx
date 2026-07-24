@@ -25,9 +25,7 @@ export default function Customers() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'customers'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Customer[] = [];
@@ -43,7 +41,7 @@ export default function Customers() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

@@ -5,11 +5,9 @@ import {
   Package, 
   Hash, 
   ShoppingCart, 
-  ShoppingBag, 
   Users, 
   Building2, 
   Archive, 
-  FileText,
   Settings,
   LogOut,
   Menu,
@@ -19,17 +17,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import OfflineSyncBanner from './OfflineSyncBanner';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Serial Numbers', href: '/serials', icon: Hash },
   { name: 'Sales', href: '/sales', icon: ShoppingCart },
-  { name: 'Purchases', href: '/purchases', icon: ShoppingBag },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Vendors', href: '/vendors', icon: Building2 },
   { name: 'Inventory', href: '/inventory', icon: Archive },
-  { name: 'Reports', href: '/reports', icon: FileText },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
@@ -169,6 +166,7 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden relative z-10">
+        <OfflineSyncBanner />
         <header className="h-16 bg-white border-b border-slate-200/80 flex items-center justify-between px-4 lg:px-8 shrink-0 shadow-sm z-20">
           <button 
             onClick={() => setSidebarOpen(true)}

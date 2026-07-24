@@ -130,9 +130,7 @@ export default function Sales() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'sales'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Sale[] = [];
@@ -148,15 +146,13 @@ export default function Sales() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   // 2. Fetch Products for Lookup
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'products'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
@@ -169,15 +165,13 @@ export default function Sales() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   // 3. Fetch Customers for Lookup
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'customers'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Customer[] = [];
@@ -190,15 +184,13 @@ export default function Sales() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   // 4. Fetch Serial Numbers for Verification & Selection
   useEffect(() => {
     if (!storeId) return;
 
-    const q = role === 'Super Admin'
-      ? query(collection(db, 'serialNumbers'))
-      : query(collection(db, 'serialNumbers'), where('storeId', '==', storeId));
+    const q = query(collection(db, 'serialNumbers'), where('storeId', '==', storeId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: SerialNumber[] = [];
@@ -211,7 +203,7 @@ export default function Sales() {
     });
 
     return () => unsubscribe();
-  }, [storeId, role]);
+  }, [storeId]);
 
   // 5. Fetch Store Details
   useEffect(() => {
