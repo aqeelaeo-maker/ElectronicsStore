@@ -130,18 +130,24 @@ export default function Sales() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = query(collection(db, 'sales'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'sales'), where('storeId', '==', storeId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Sale[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Sale);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setSales(data);
       setLoading(false);
     }, (error) => {
       console.error('Error fetching sales:', error);
-      toast.error('Failed to load sales');
       setLoading(false);
     });
 
@@ -152,13 +158,20 @@ export default function Sales() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'products'), where('storeId', '==', storeId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Product[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Product);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setProducts(data);
     }, (error) => {
       console.error('Error fetching products:', error);
@@ -171,13 +184,20 @@ export default function Sales() {
   useEffect(() => {
     if (!storeId) return;
 
-    const q = query(collection(db, 'customers'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'customers'), where('storeId', '==', storeId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data: Customer[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Customer);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setCustomers(data);
     }, (error) => {
       console.error('Error fetching customers:', error);

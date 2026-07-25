@@ -159,41 +159,62 @@ export default function Inventory() {
     if (!storeId) return;
 
     // 1. Fetch Products
-    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId));
 
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
       const data: Product[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Product);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setProducts(data);
       setLoading(false);
     }, (error) => {
       console.error('Error fetching products:', error);
-      toast.error('Failed to load products');
+      setLoading(false);
     });
 
     // 2. Fetch Vendors
-    const vendorsQuery = query(collection(db, 'vendors'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const vendorsQuery = query(collection(db, 'vendors'), where('storeId', '==', storeId));
 
     const unsubscribeVendors = onSnapshot(vendorsQuery, (snapshot) => {
       const data: Vendor[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as Vendor);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setVendors(data);
     }, (error) => {
       console.error('Error fetching vendors:', error);
     });
 
     // 3. Fetch Inventory Logs
-    const logsQuery = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId), orderBy('createdAt', 'desc'));
+    const logsQuery = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId));
 
     const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
       const data: InventoryLog[] = [];
       snapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as InventoryLog);
       });
+
+      data.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+
       setLogs(data);
     }, (error) => {
       console.error('Error fetching inventory logs:', error);
