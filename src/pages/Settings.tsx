@@ -10,6 +10,7 @@ export interface BankAccount {
   accountNumber: string;
   accountTitle?: string;
   openingBalance?: number;
+  balance?: number;
 }
 
 interface StoreSettings {
@@ -103,13 +104,16 @@ export default function Settings() {
             if (Array.isArray(data.bankAccounts)) {
               loadedAccounts = data.bankAccounts.map((item: any) => {
                 if (typeof item === 'string') {
-                  return { bankName: 'Bank', accountNumber: item, openingBalance: 0 };
+                  return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
                 }
+                const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
+                const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
                 return {
                   bankName: item.bankName || '',
                   accountNumber: item.accountNumber || '',
                   accountTitle: item.accountTitle || '',
-                  openingBalance: typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0)
+                  openingBalance: opBal,
+                  balance: curBal
                 };
               });
             }
@@ -177,7 +181,8 @@ export default function Settings() {
     const newAccount: BankAccount = {
       bankName: bankName || 'Bank Account',
       accountNumber: accountNumber || 'N/A',
-      openingBalance: openingBalance
+      openingBalance: openingBalance,
+      balance: openingBalance
     };
 
     setStoreSettings(prev => ({
@@ -370,7 +375,7 @@ export default function Settings() {
 
               <div className="flex-1 min-w-0">
                 <label htmlFor="newOpeningBalance" className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Opening Balance
+                  Opening Balance (PKR)
                 </label>
                 <input
                   type="number"
@@ -407,7 +412,7 @@ export default function Settings() {
                     key={index}
                     className="flex justify-between items-center p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-slate-300 transition-colors"
                   >
-                    <div className="space-y-0.5 min-w-0 pr-2">
+                    <div className="space-y-1 min-w-0 pr-2">
                       <div className="flex items-center gap-1.5">
                         <CreditCard className="w-3.5 h-3.5 text-[#0a382c] shrink-0" />
                         <span className="text-xs font-bold text-slate-900 truncate">{account.bankName}</span>
@@ -415,9 +420,14 @@ export default function Settings() {
                       <p className="text-xs font-mono font-bold text-slate-700 truncate">
                         Acc: {account.accountNumber}
                       </p>
-                      <p className="text-[11px] text-slate-500 font-semibold truncate">
-                        Opening Balance: ${(account.openingBalance ?? 0).toFixed(2)}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px]">
+                        <span className="text-emerald-700 font-extrabold font-mono">
+                          Balance: PKR {(account.balance !== undefined ? account.balance : (account.openingBalance ?? 0)).toFixed(2)}
+                        </span>
+                        <span className="text-slate-400 font-medium">
+                          (Opening: PKR {(account.openingBalance ?? 0).toFixed(2)})
+                        </span>
+                      </div>
                     </div>
                     <button
                       type="button"

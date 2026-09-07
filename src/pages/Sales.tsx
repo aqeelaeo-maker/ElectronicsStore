@@ -28,7 +28,10 @@ import {
   Building2,
   Printer,
   Pencil,
-  ArrowLeft
+  ArrowLeft,
+  CreditCard,
+  Banknote,
+  Globe
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -83,6 +86,10 @@ interface Sale {
   date: string;
   status: string;
   items?: SaleItem[];
+  paymentMode?: 'Cash' | 'Online';
+  bankAccountNumber?: string | null;
+  bankName?: string | null;
+  accountTitle?: string | null;
 }
 
 export default function Sales() {
@@ -97,7 +104,7 @@ export default function Sales() {
     phone: string;
     address: string;
     email: string;
-    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number }[];
+    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number; balance?: number }[];
   }>({
     name: '',
     logoUrl: '',
@@ -115,9 +122,9 @@ export default function Sales() {
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   // New Invoice Form States
-  const [customerMode, setCustomerMode] = useState<'select' | 'manual'>('select');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [manualCustomerName, setManualCustomerName] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('walk-in');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
+  const [selectedBankAccNumber, setSelectedBankAccNumber] = useState('');
   const [invoiceItems, setInvoiceItems] = useState<Array<{
     productId: string;
     quantity: number;
@@ -236,17 +243,20 @@ export default function Sales() {
     const unsubscribe = onSnapshot(storeRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number }[] = [];
+        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number; balance?: number }[] = [];
         if (Array.isArray(data.bankAccounts)) {
           loadedAccounts = data.bankAccounts.map((item: any) => {
             if (typeof item === 'string') {
-              return { bankName: 'Bank', accountNumber: item, openingBalance: 0 };
+              return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
             }
+            const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
+            const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
             return {
               bankName: item.bankName || '',
               accountNumber: item.accountNumber || '',
               accountTitle: item.accountTitle || '',
-              openingBalance: typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0)
+              openingBalance: opBal,
+              balance: curBal
             };
           });
         }
@@ -343,9 +353,15 @@ export default function Sales() {
   // Handle setting up edit mode
   const handleEditClick = (sale: Sale) => {
     setEditingSale(sale);
-    setCustomerMode(sale.customerId ? 'select' : 'manual');
-    setSelectedCustomerId(sale.customerId || '');
-    setManualCustomerName(sale.customerId ? '' : sale.customerName);
+    if (sale.customerId && customers.some(c => c.id === sale.customerId)) {
+      setSelectedCustomerId(sale.customerId);
+    } else if (sale.customerName && sale.customerName !== 'Walk In Customer') {
+      setSelectedCustomerId(sale.customerName);
+    } else {
+      setSelectedCustomerId('walk-in');
+    }
+    setPaymentMode(sale.paymentMode || 'Cash');
+    setSelectedBankAccNumber(sale.bankAccountNumber || '');
     
     if (sale.items) {
       const mappedItems = sale.items.map(item => {
@@ -431,6 +447,34 @@ export default function Sales() {
         }
       }
       
+      // If deleted invoice was paid online, revert the bank account balance
+      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && storeId) {
+        const storeRef = doc(db, 'stores', storeId);
+        const storeSnap = await getDoc(storeRef);
+        if (storeSnap.exists()) {
+          const storeData = storeSnap.data();
+          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+          currentAccounts = currentAccounts.map((acc: any) => {
+            const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
+            const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
+            if (acc.accountNumber === sale.bankAccountNumber) {
+              return {
+                ...acc,
+                balance: Number((curBal - sale.total).toFixed(2))
+              };
+            }
+            return {
+              ...acc,
+              balance: curBal
+            };
+          });
+          batch.update(storeRef, {
+            bankAccounts: currentAccounts,
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
       // Delete the invoice document
       batch.delete(doc(db, 'sales', sale.id));
       
@@ -452,23 +496,22 @@ export default function Sales() {
       return;
     }
 
-    let customerName = '';
+    let customerName = 'Walk In Customer';
     let customerId: string | null = null;
 
-    if (customerMode === 'select') {
-      if (!selectedCustomerId) {
-        toast.error('Please select a customer');
-        return;
-      }
+    if (selectedCustomerId && selectedCustomerId !== 'walk-in') {
       const cust = customers.find(c => c.id === selectedCustomerId);
-      customerName = cust ? cust.name : '';
-      customerId = selectedCustomerId;
-    } else {
-      if (!manualCustomerName.trim()) {
-        toast.error('Please enter customer name');
-        return;
+      if (cust) {
+        customerName = cust.name;
+        customerId = cust.id;
+      } else {
+        customerName = selectedCustomerId;
+        customerId = null;
       }
-      customerName = manualCustomerName.trim();
+    } else {
+      const walkInCust = customers.find(c => c.name?.trim().toLowerCase() === 'walk in customer' || c.name?.trim().toLowerCase() === 'walk-in customer');
+      customerName = 'Walk In Customer';
+      customerId = walkInCust ? walkInCust.id : null;
     }
 
     // Validation
@@ -506,6 +549,19 @@ export default function Sales() {
       );
       if (productSerials.length > 0 && item.selectedSerials.length !== item.quantity) {
         toast.error(`Please select exactly ${item.quantity} serial number(s) for "${prod.name}"`);
+        return;
+      }
+    }
+
+    // Payment mode validation
+    if (paymentMode === 'Online') {
+      if (!selectedBankAccNumber) {
+        toast.error('Please select a bank account for online payment');
+        return;
+      }
+      const matched = storeDetails.bankAccounts?.find(b => b.accountNumber === selectedBankAccNumber);
+      if (!matched) {
+        toast.error('Selected bank account was not found in store settings');
         return;
       }
     }
@@ -549,6 +605,10 @@ export default function Sales() {
     const totalAmount = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
     const saleId = editingSale ? editingSale.id : doc(collection(db, 'sales')).id;
 
+    const matchedBank = paymentMode === 'Online'
+      ? storeDetails.bankAccounts?.find(b => b.accountNumber === selectedBankAccNumber)
+      : null;
+
     const newSaleDoc = {
       id: saleId,
       invoiceNo,
@@ -557,6 +617,10 @@ export default function Sales() {
       items: itemsToSave,
       total: totalAmount,
       status: 'Paid',
+      paymentMode,
+      bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
+      bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
+      accountTitle: paymentMode === 'Online' && matchedBank ? (matchedBank.accountTitle || '') : null,
       date: editingSale ? editingSale.date : new Date().toISOString(),
       storeId,
       createdAt: editingSale ? (editingSale as any).createdAt || serverTimestamp() : serverTimestamp(),
@@ -661,6 +725,69 @@ export default function Sales() {
         });
       }
 
+      // 4. Update Bank Account Balance in Store document if online payment is involved
+      if (storeId) {
+        const storeRef = doc(db, 'stores', storeId);
+        const storeSnap = await getDoc(storeRef);
+        if (storeSnap.exists()) {
+          const storeData = storeSnap.data();
+          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+          let bankChanged = false;
+
+          // Normalize accounts
+          currentAccounts = currentAccounts.map((item: any) => {
+            if (typeof item === 'string') {
+              return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
+            }
+            const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
+            const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
+            return {
+              ...item,
+              bankName: item.bankName || '',
+              accountNumber: item.accountNumber || '',
+              accountTitle: item.accountTitle || '',
+              openingBalance: opBal,
+              balance: curBal
+            };
+          });
+
+          // If editing an existing sale that was paid Online, revert its previous payment
+          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber) {
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === editingSale.bankAccountNumber) {
+                bankChanged = true;
+                return {
+                  ...acc,
+                  balance: Number(((acc.balance || 0) - editingSale.total).toFixed(2))
+                };
+              }
+              return acc;
+            });
+          }
+
+          // If current invoice is Online, add totalAmount to selected bank account
+          if (paymentMode === 'Online' && selectedBankAccNumber) {
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === selectedBankAccNumber) {
+                bankChanged = true;
+                return {
+                  ...acc,
+                  balance: Number(((acc.balance || 0) + totalAmount).toFixed(2))
+                };
+              }
+              return acc;
+            });
+          }
+
+          if (bankChanged || paymentMode === 'Online') {
+            batch.update(storeRef, {
+              bankAccounts: currentAccounts,
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+      }
+
       await batch.commit();
 
       toast.success(editingSale ? `Invoice ${invoiceNo} updated successfully!` : `Invoice ${invoiceNo} recorded successfully!`);
@@ -677,15 +804,19 @@ export default function Sales() {
           total: totalAmount,
           status: 'Paid',
           date: newSaleDoc.date,
+          paymentMode,
+          bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
+          bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : undefined,
+          accountTitle: paymentMode === 'Online' && matchedBank ? matchedBank.accountTitle : undefined,
         };
         printInvoice(createdSale);
       }
 
       // Reset form states
       setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
-      setSelectedCustomerId('');
-      setManualCustomerName('');
-      setCustomerMode('select');
+      setSelectedCustomerId('walk-in');
+      setPaymentMode('Cash');
+      setSelectedBankAccNumber('');
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
       toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');
@@ -928,6 +1059,7 @@ export default function Sales() {
                   <div>Invoice No: <span style="font-family: monospace; font-weight: bold; color: #0f172a;">${sale.invoiceNo}</span></div>
                   <div>Date: <span style="font-weight: 600; color: #0f172a;">${sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}</span></div>
                   <div>Status: <span style="font-weight: 800; color: #059669; background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">Paid</span></div>
+                  <div>Payment Mode: <strong style="color: #0f172a;">${sale.paymentMode || 'Cash'}</strong>${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 10px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</div>
                 </div>
               </td>
             </tr>
@@ -1041,7 +1173,7 @@ export default function Sales() {
           </div>
           <button 
             type="button" 
-            onClick={() => { setShowModal(false); setEditingSale(null); }} 
+            onClick={() => { setShowModal(false); setEditingSale(null); setSelectedCustomerId('walk-in'); setPaymentMode('Cash'); setSelectedBankAccNumber(''); }} 
             className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs text-sm font-bold"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1053,62 +1185,157 @@ export default function Sales() {
         <div className="glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
           <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col">
             <div className="p-6 sm:p-8 space-y-6">
-              {/* Customer & Invoice Details (Seller Info completely removed) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Customer, Payment Mode & Invoice Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {/* Customer Information Panel */}
-                <div className="lg:col-span-2 bg-[#f8faf9] p-5 rounded-2xl border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-4 h-4 text-[#0a382c]" /> Customer Details
-                    </span>
-                    <div className="bg-slate-200/60 p-0.5 rounded-lg flex border border-slate-200 text-[10px] font-bold">
-                      <button
-                        type="button"
-                        onClick={() => setCustomerMode('select')}
-                        className={`px-3 py-1 rounded-md transition-colors ${customerMode === 'select' ? 'bg-[#0a382c] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
-                      >
-                        Select Existing
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomerMode('manual')}
-                        className={`px-3 py-1 rounded-md transition-colors ${customerMode === 'manual' ? 'bg-[#0a382c] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
-                      >
-                        Walk-in / Manual
-                      </button>
+                <div className="bg-[#f8faf9] p-5 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-[#0a382c]" /> Customer Details
+                      </span>
                     </div>
-                  </div>
 
-                  {customerMode === 'select' ? (
                     <div className="mt-2">
-                      <label htmlFor="customerId" className="block text-[11px] font-bold text-slate-500 mb-1.5">Registered Customer</label>
+                      <label htmlFor="customerId" className="block text-[11px] font-bold text-slate-600 mb-1.5">Registered Customer</label>
                       <select
                         id="customerId"
-                        required={customerMode === 'select'}
-                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
                         value={selectedCustomerId}
                         onChange={(e) => setSelectedCustomerId(e.target.value)}
                       >
-                        <option value="">-- Choose Customer --</option>
-                        {customers.map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
-                        ))}
+                        <option value="walk-in">Walk In Customer</option>
+                        {editingSale && !customers.some(c => c.id === editingSale.customerId) && editingSale.customerName && editingSale.customerName !== 'Walk In Customer' && (
+                          <option value={editingSale.customerName}>{editingSale.customerName}</option>
+                        )}
+                        {customers
+                          .filter(c => c.name?.trim().toLowerCase() !== 'walk in customer' && c.name?.trim().toLowerCase() !== 'walk-in customer')
+                          .map(c => (
+                            <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
+                          ))}
                       </select>
                     </div>
-                  ) : (
-                    <div className="mt-2">
-                      <label htmlFor="manualName" className="block text-[11px] font-bold text-slate-500 mb-1.5">Customer Full Name</label>
-                      <input
-                        id="manualName"
-                        type="text"
-                        required={customerMode === 'manual'}
-                        placeholder="Enter Customer Full Name..."
-                        className="glass-input block w-full rounded-xl py-2 px-4 text-xs"
-                        value={manualCustomerName}
-                        onChange={(e) => setManualCustomerName(e.target.value)}
-                      />
+
+                    {selectedCustomerId !== 'walk-in' && (() => {
+                      const selectedCust = customers.find(c => c.id === selectedCustomerId);
+                      if (!selectedCust) return null;
+                      return (
+                        <div className="mt-2.5 p-2 rounded-xl bg-white border border-slate-200/70 text-[11px] text-slate-600 space-y-0.5">
+                          {selectedCust.mobile && <div>Phone: <span className="font-bold text-slate-800">{selectedCust.mobile}</span></div>}
+                          {selectedCust.address && <div>Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Payment Mode Panel */}
+                <div className="bg-[#f8faf9] p-5 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-[#0a382c]" /> Payment Mode
+                      </span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        paymentMode === 'Cash' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {paymentMode}
+                      </span>
                     </div>
-                  )}
+
+                    {/* Mode Buttons: 1. Cash, 2. Online */}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        type="button"
+                        id="paymentModeCashBtn"
+                        onClick={() => {
+                          setPaymentMode('Cash');
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                          paymentMode === 'Cash'
+                            ? 'bg-[#0a382c] text-white border-[#0a382c] shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <Banknote className="w-4 h-4" />
+                        1. Cash
+                      </button>
+
+                      <button
+                        type="button"
+                        id="paymentModeOnlineBtn"
+                        onClick={() => {
+                          setPaymentMode('Online');
+                          if (!selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
+                            setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
+                          }
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                          paymentMode === 'Online'
+                            ? 'bg-[#0a382c] text-white border-[#0a382c] shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <Globe className="w-4 h-4" />
+                        2. Online
+                      </button>
+                    </div>
+
+                    {/* Bank Account Selection if Online */}
+                    {paymentMode === 'Online' && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-200/80">
+                        <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                          Select Bank Account <span className="text-red-500">*</span>
+                        </label>
+                        {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
+                          <div>
+                            <select
+                              id="bankAccountSelect"
+                              required={paymentMode === 'Online'}
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                              value={selectedBankAccNumber}
+                              onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                            >
+                              <option value="">-- Select Bank Account --</option>
+                              {storeDetails.bankAccounts.map((acc, idx) => (
+                                <option key={idx} value={acc.accountNumber}>
+                                  {acc.bankName} - {acc.accountNumber} {acc.accountTitle ? `(${acc.accountTitle})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedBankAccNumber && (() => {
+                              const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
+                              if (!chosenAcc) return null;
+                              const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
+                              return (
+                                <div className="mt-2 p-2 rounded-xl bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-600 font-medium">Bank Balance:</span>
+                                    <span className="font-mono font-black text-[#0a382c]">
+                                      PKR {currentBal.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {calculateInvoiceTotal() > 0 && (
+                                    <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 mt-1 font-semibold">
+                                      <span>After This Invoice:</span>
+                                      <span className="font-mono font-bold">
+                                        PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
+                            <p className="font-bold mb-0.5">No Bank Accounts Configured</p>
+                            <p className="text-[10px]">Please add a bank account in Settings to accept online payments.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Invoice Information Panel */}
@@ -1117,7 +1344,7 @@ export default function Sales() {
                     <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5 mb-3">
                       <Calendar className="w-4 h-4 text-[#0a382c]" /> Invoice Information
                     </span>
-                    <div className="space-y-2.5 text-xs">
+                    <div className="space-y-2 text-xs">
                       <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                         <span className="text-slate-500 font-medium">Invoice Date:</span>
                         <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span>
@@ -1125,6 +1352,15 @@ export default function Sales() {
                       <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
                         <span className="text-slate-500 font-medium">Payment Status:</span>
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800">Paid</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                        <span className="text-slate-500 font-medium">Payment Mode:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-flex items-center gap-1 ${
+                          paymentMode === 'Online' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {paymentMode === 'Online' ? <Globe className="w-3 h-3" /> : <Banknote className="w-3 h-3" />}
+                          {paymentMode}
+                        </span>
                       </div>
                       {editingSale && (
                         <div className="flex justify-between items-center py-1">
@@ -1341,7 +1577,13 @@ export default function Sales() {
               <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
                 <button 
                   type="button" 
-                  onClick={() => { setShowModal(false); setEditingSale(null); }} 
+                  onClick={() => { 
+                    setShowModal(false); 
+                    setEditingSale(null); 
+                    setSelectedCustomerId('walk-in'); 
+                    setPaymentMode('Cash');
+                    setSelectedBankAccNumber('');
+                  }} 
                   className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
                 >
                   Cancel
@@ -1391,6 +1633,9 @@ export default function Sales() {
         <button 
           onClick={() => {
             setEditingSale(null);
+            setSelectedCustomerId('walk-in');
+            setPaymentMode('Cash');
+            setSelectedBankAccNumber('');
             setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
             setShowModal(true);
           }}
@@ -1468,9 +1713,22 @@ export default function Sales() {
                       PKR {sale.total?.toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
-                        {sale.status}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="px-2.5 py-0.5 inline-flex text-[10px] leading-4 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
+                          {sale.status}
+                        </span>
+                        <span className={`px-2 py-0.5 inline-flex items-center gap-1 text-[10px] font-bold rounded-md ${
+                          sale.paymentMode === 'Online'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                            : 'bg-amber-50 text-amber-800 border border-amber-100'
+                        }`}>
+                          {sale.paymentMode === 'Online' ? <Globe className="w-3 h-3 text-blue-600" /> : <Banknote className="w-3 h-3 text-amber-600" />}
+                          {sale.paymentMode || 'Cash'}
+                          {sale.paymentMode === 'Online' && sale.bankName && (
+                            <span className="text-[9px] font-medium text-blue-600 max-w-[90px] truncate">({sale.bankName})</span>
+                          )}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                       <div className="flex items-center justify-end gap-1.5">
@@ -1581,10 +1839,26 @@ export default function Sales() {
                   <div className="text-right">
                     <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Billed To (Customer)</span>
                     <span className="font-extrabold text-slate-900 text-sm block">{selectedSale.customerName}</span>
-                    <div className="text-slate-500 mt-2 space-y-0.5">
+                    <div className="text-slate-500 mt-2 space-y-1">
                       <div>Invoice No: <span className="font-mono font-bold text-slate-800">{selectedSale.invoiceNo}</span></div>
                       <div>Date: <span className="font-semibold">{selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}</span></div>
                       <div>Status: <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[10px] uppercase">Paid</span></div>
+                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                        <span className="text-[11px] text-slate-500 font-medium">Payment Mode:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold inline-flex items-center gap-1 ${
+                          selectedSale.paymentMode === 'Online'
+                            ? 'bg-blue-50 text-blue-800 border border-blue-100'
+                            : 'bg-amber-50 text-amber-800 border border-amber-100'
+                        }`}>
+                          {selectedSale.paymentMode === 'Online' ? <Globe className="w-3 h-3 text-blue-600" /> : <Banknote className="w-3 h-3 text-amber-600" />}
+                          {selectedSale.paymentMode || 'Cash'}
+                        </span>
+                      </div>
+                      {selectedSale.paymentMode === 'Online' && selectedSale.bankName && (
+                        <div className="text-[11px] text-slate-600 font-semibold">
+                          Bank: {selectedSale.bankName} ({selectedSale.bankAccountNumber})
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
