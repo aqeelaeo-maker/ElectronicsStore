@@ -137,8 +137,8 @@ export default function Products() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">{isEditing ? 'Edit Stock' : 'Add Stock'}</h1>
-            <p className="text-sm text-slate-500 mt-1">{isEditing ? 'Update the stock details' : 'Enter the details for the new stock product'}</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">{isEditing ? 'Edit Product' : 'Add Product'}</h1>
+            <p className="text-sm text-slate-500 mt-1">{isEditing ? 'Update the product details' : 'Enter the details for the new product'}</p>
           </div>
           <button 
             onClick={() => {
@@ -195,7 +195,7 @@ export default function Products() {
                 Cancel
               </button>
               <button type="submit" className="inline-flex justify-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-sm font-bold shadow-md shadow-emerald-950/10 focus:outline-none transition-colors">
-                {isEditing ? 'Update Stock' : 'Save Stock'}
+                {isEditing ? 'Update Product' : 'Save Product'}
               </button>
             </div>
           </form>
@@ -216,7 +216,7 @@ export default function Products() {
           className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Add Stock
+          Add Product
         </button>
       </div>
 

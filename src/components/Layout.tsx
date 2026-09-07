@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
+  ShoppingCart,
   Package, 
-  Hash, 
-  ShoppingCart, 
   Users, 
   Building2, 
   Archive, 
@@ -21,9 +20,8 @@ import OfflineSyncBanner from './OfflineSyncBanner';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Products', href: '/products', icon: Package },
-  { name: 'Serial Numbers', href: '/serials', icon: Hash },
   { name: 'Sales', href: '/sales', icon: ShoppingCart },
+  { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Vendors', href: '/vendors', icon: Building2 },
   { name: 'Inventory', href: '/inventory', icon: Archive },
