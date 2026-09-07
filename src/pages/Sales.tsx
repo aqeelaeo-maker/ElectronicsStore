@@ -27,7 +27,8 @@ import {
   CheckCircle2, 
   Building2,
   Printer,
-  Pencil
+  Pencil,
+  ArrowLeft
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -1019,6 +1020,366 @@ export default function Sales() {
       .toUpperCase();
   };
 
+  if (showModal) {
+    return (
+      <div className="space-y-6">
+        {/* Full-Page Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-emerald-50 text-[#0a382c] flex items-center justify-center">
+              <FileText className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+                {editingSale ? 'Edit Sales Invoice' : 'Create Sales Invoice'}
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                {editingSale ? 'Update this customer sale, product line items, and adjust serialized stock' : 'Record a customer sale, select product line items, and deduct serialized stock'}
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => { setShowModal(false); setEditingSale(null); }} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs text-sm font-bold"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Sales
+          </button>
+        </div>
+
+        {/* Full Page Invoice Creation Card */}
+        <div className="glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
+          <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col">
+            <div className="p-6 sm:p-8 space-y-6">
+              {/* Customer & Invoice Details (Seller Info completely removed) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Customer Information Panel */}
+                <div className="lg:col-span-2 bg-[#f8faf9] p-5 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-[#0a382c]" /> Customer Details
+                    </span>
+                    <div className="bg-slate-200/60 p-0.5 rounded-lg flex border border-slate-200 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setCustomerMode('select')}
+                        className={`px-3 py-1 rounded-md transition-colors ${customerMode === 'select' ? 'bg-[#0a382c] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
+                      >
+                        Select Existing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomerMode('manual')}
+                        className={`px-3 py-1 rounded-md transition-colors ${customerMode === 'manual' ? 'bg-[#0a382c] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
+                      >
+                        Walk-in / Manual
+                      </button>
+                    </div>
+                  </div>
+
+                  {customerMode === 'select' ? (
+                    <div className="mt-2">
+                      <label htmlFor="customerId" className="block text-[11px] font-bold text-slate-500 mb-1.5">Registered Customer</label>
+                      <select
+                        id="customerId"
+                        required={customerMode === 'select'}
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                        value={selectedCustomerId}
+                        onChange={(e) => setSelectedCustomerId(e.target.value)}
+                      >
+                        <option value="">-- Choose Customer --</option>
+                        {customers.map(c => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <label htmlFor="manualName" className="block text-[11px] font-bold text-slate-500 mb-1.5">Customer Full Name</label>
+                      <input
+                        id="manualName"
+                        type="text"
+                        required={customerMode === 'manual'}
+                        placeholder="Enter Customer Full Name..."
+                        className="glass-input block w-full rounded-xl py-2 px-4 text-xs"
+                        value={manualCustomerName}
+                        onChange={(e) => setManualCustomerName(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Invoice Information Panel */}
+                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                      <Calendar className="w-4 h-4 text-[#0a382c]" /> Invoice Information
+                    </span>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                        <span className="text-slate-500 font-medium">Invoice Date:</span>
+                        <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                        <span className="text-slate-500 font-medium">Payment Status:</span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800">Paid</span>
+                      </div>
+                      {editingSale && (
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-slate-500 font-medium">Invoice #:</span>
+                          <span className="font-mono font-bold text-slate-900">{editingSale.invoiceNo}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line Items Table */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
+                    Product Line Items
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {invoiceItems.length} item{invoiceItems.length === 1 ? '' : 's'} added
+                  </span>
+                </div>
+
+                <div className="space-y-3.5">
+                  {invoiceItems.map((item, index) => {
+                    const selectedProduct = products.find(p => p.id === item.productId);
+                    const productSerials = allSerials.filter(sn => 
+                      sn.productId === item.productId && 
+                      (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
+                    );
+                    
+                    return (
+                      <div key={index} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs hover:border-slate-350 transition-all">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          {/* Product Selection */}
+                          <div className="md:col-span-4">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Product</label>
+                            <select
+                              required
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                              value={item.productId}
+                              onChange={(e) => handleItemProductChange(index, e.target.value)}
+                            >
+                              <option value="">-- Select Product --</option>
+                              {products.map(p => (
+                                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                                  {p.name} ({p.brand} - {p.modelNumber}) [In Stock: {p.stock}]
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Unit Price */}
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              step="0.01"
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                              value={item.salePrice || ''}
+                              onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="md:col-span-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              max={(() => {
+                                let previousQty = 0;
+                                if (editingSale && editingSale.items) {
+                                  const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
+                                  if (prevItem) {
+                                    previousQty = prevItem.quantity;
+                                  }
+                                }
+                                return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
+                              })()}
+                              className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
+                              value={item.quantity || ''}
+                              onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
+                            />
+                          </div>
+
+                          {/* Discount */}
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                              value={item.discount || ''}
+                              onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+
+                          {/* Warranty */}
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
+                            <select
+                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                              value={item.warranty || 'No Warranty'}
+                              onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
+                            >
+                              <option value="No Warranty">No Warranty</option>
+                              <option value="3 Months">3 Months</option>
+                              <option value="6 Months">6 Months</option>
+                              <option value="1 Year">1 Year</option>
+                              <option value="2 Years">2 Years</option>
+                              <option value="3 Years">3 Years</option>
+                            </select>
+                          </div>
+
+                          {/* Subtotal */}
+                          <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
+                            <div className="text-right">
+                              <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
+                              <span className="text-xs font-black text-slate-900">
+                                PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItemRow(index)}
+                              className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                              title="Delete row"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Serial Number Selector for Electronics */}
+                        {selectedProduct && productSerials.length > 0 && (
+                          <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                Select Sold Serial Numbers (Required: {item.quantity})
+                              </span>
+                              <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                {productSerials.length} Available
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
+                              {productSerials.map(sn => {
+                                const isChecked = item.selectedSerials.includes(sn.id);
+                                return (
+                                  <label key={sn.id} className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                    isChecked 
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' 
+                                      : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                                  }`}>
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-slate-300 text-[#0a382c] focus:ring-[#0a382c] h-3.5 w-3.5"
+                                      checked={isChecked}
+                                      disabled={!isChecked && item.selectedSerials.length >= item.quantity}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        let newSerials = [...item.selectedSerials];
+                                        if (checked) {
+                                          if (newSerials.length < item.quantity) {
+                                            newSerials.push(sn.id);
+                                          }
+                                        } else {
+                                          newSerials = newSerials.filter(id => id !== sn.id);
+                                        }
+                                        const updatedItems = [...invoiceItems];
+                                        updatedItems[index] = { ...item, selectedSerials: newSerials };
+                                        setInvoiceItems(updatedItems);
+                                      }}
+                                    />
+                                    <span className="font-mono truncate">{sn.serialNumber}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {item.selectedSerials.length !== item.quantity && (
+                              <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                                <Info className="w-3 h-3" /> Please check exactly {item.quantity} serial number(s) to verify item delivery. (Selected: {item.selectedSerials.length})
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddItemRow}
+                  className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 px-4 py-2.5 rounded-xl transition-all shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1.5" />
+                  Add Item Row
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#f8faf9] px-6 py-4 sm:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200">
+              <div className="text-center sm:text-left">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold block">Invoice Total Amount</span>
+                <span className="text-2xl font-black text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
+                <button 
+                  type="button" 
+                  onClick={() => { setShowModal(false); setEditingSale(null); }} 
+                  className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  onClick={() => setPrintOnCreate(false)}
+                  disabled={saving || calculateInvoiceTotal() <= 0}
+                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-800 focus:outline-none transition-colors disabled:opacity-50"
+                >
+                  {saving && !printOnCreate ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-800"></div>
+                  ) : (
+                    editingSale ? 'Update Invoice' : 'Create Invoice'
+                  )}
+                </button>
+                <button 
+                  type="submit"
+                  onClick={() => setPrintOnCreate(true)}
+                  disabled={saving || calculateInvoiceTotal() <= 0}
+                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50 gap-1.5"
+                >
+                  {saving && printOnCreate ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  ) : (
+                    <>
+                      <Printer className="w-4 h-4" />
+                      {editingSale ? 'Update & Print' : 'Save & Print'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1156,361 +1517,6 @@ export default function Sales() {
           </table>
         </div>
       </div>
-
-      {/* 1. Dynamic Invoice Creation Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center md:justify-end md:pr-12 pt-2 md:pt-6 px-4 pb-4">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all max-w-4xl w-full border border-slate-200 mt-2 md:mt-4 mb-2 md:mb-4 flex flex-col max-h-[92vh]">
-            <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col h-full max-h-[92vh] overflow-hidden">
-              <div className="bg-white px-6 pt-5 pb-5 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-50 text-[#0a382c] flex items-center justify-center">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">{editingSale ? 'Edit Sales Invoice' : 'Create Sales Invoice'}</h3>
-                    <p className="text-xs text-slate-500">{editingSale ? 'Update this customer sale, product line items, and adjust serialized stock' : 'Record a customer sale, select product line items, and deduct serialized stock'}</p>
-                  </div>
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => { setShowModal(false); setEditingSale(null); }} 
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="bg-white px-6 py-6 space-y-6 overflow-y-auto flex-1">
-                  {/* Two columns: Seller details & Customer details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Seller details */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
-                      <div>
-                        <span className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
-                          <Building2 className="w-3.5 h-3.5 text-[#0a382c]" /> Seller Info (Company Profile)
-                        </span>
-                        <div className="flex items-start gap-3">
-                          {storeDetails.logoUrl ? (
-                            <img src={storeDetails.logoUrl} alt="Seller Logo" className="h-12 w-12 rounded-lg object-cover border border-slate-200 flex-shrink-0" referrerPolicy="no-referrer" />
-                          ) : (
-                            <div className="h-12 w-12 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-sm flex-shrink-0 border border-slate-200">
-                              {getInitials(storeDetails.name || 'ElectroManage')}
-                            </div>
-                          )}
-                          <div className="text-xs space-y-0.5">
-                            <span className="font-extrabold text-slate-800 text-xs block leading-snug">{storeDetails.name || 'ElectroManage'}</span>
-                            {storeDetails.address && (
-                              <span className="text-slate-500 block">{storeDetails.address}</span>
-                            )}
-                            {storeDetails.phone && (
-                              <span className="text-slate-500 block">Tel: {storeDetails.phone}</span>
-                            )}
-                            {storeDetails.email && (
-                              <span className="text-slate-500 block">Email: {storeDetails.email}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Customer Information Panel */}
-                    <div className="bg-[#f8faf9] p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
-                            <User className="w-3.5 h-3.5 text-[#0a382c]" /> Customer Details
-                          </span>
-                          <div className="bg-slate-200/60 p-0.5 rounded-lg flex border border-slate-200 text-[10px] font-bold">
-                            <button
-                              type="button"
-                              onClick={() => setCustomerMode('select')}
-                              className={`px-2.5 py-1 rounded ${customerMode === 'select' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                            >
-                              Select Existing
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomerMode('manual')}
-                              className={`px-2.5 py-1 rounded ${customerMode === 'manual' ? 'bg-[#0a382c] text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
-                            >
-                              Walk-in / Manual
-                            </button>
-                          </div>
-                        </div>
-
-                        {customerMode === 'select' ? (
-                          <div className="mt-2">
-                            <label htmlFor="customerId" className="sr-only">Select Customer</label>
-                            <select
-                              id="customerId"
-                              required={customerMode === 'select'}
-                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                              value={selectedCustomerId}
-                              onChange={(e) => setSelectedCustomerId(e.target.value)}
-                            >
-                              <option value="">-- Choose Customer --</option>
-                              {customers.map(c => (
-                                <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <div className="mt-2">
-                            <label htmlFor="manualName" className="sr-only">Customer Name</label>
-                            <input
-                              id="manualName"
-                              type="text"
-                              required={customerMode === 'manual'}
-                              placeholder="Enter Customer Full Name..."
-                              className="glass-input block w-full rounded-xl py-2 px-4 text-xs"
-                              value={manualCustomerName}
-                              onChange={(e) => setManualCustomerName(e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Line Items Table */}
-                  <div className="space-y-4">
-                    <span className="text-xs font-black text-slate-600 uppercase tracking-wider block">
-                      Product Line Items
-                    </span>
-
-                    <div className="space-y-3.5">
-                      {invoiceItems.map((item, index) => {
-                        const selectedProduct = products.find(p => p.id === item.productId);
-                        const productSerials = allSerials.filter(sn => 
-                          sn.productId === item.productId && 
-                          (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
-                        );
-                        
-                        return (
-                          <div key={index} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-sm hover:border-slate-350 transition-all">
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                              {/* Product Selection */}
-                              <div className="md:col-span-4">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Product</label>
-                                <select
-                                  required
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                  value={item.productId}
-                                  onChange={(e) => handleItemProductChange(index, e.target.value)}
-                                >
-                                  <option value="">-- Select Product --</option>
-                                  {products.map(p => (
-                                    <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                                      {p.name} ({p.brand} - {p.modelNumber}) [In Stock: {p.stock}]
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {/* Unit Price */}
-                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="0"
-                                  step="0.01"
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                  value={item.salePrice || ''}
-                                  onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-
-                              {/* Quantity */}
-                              <div className="md:col-span-1">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="1"
-                                  max={(() => {
-                                    let previousQty = 0;
-                                    if (editingSale && editingSale.items) {
-                                      const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
-                                      if (prevItem) {
-                                        previousQty = prevItem.quantity;
-                                      }
-                                    }
-                                    return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
-                                  })()}
-                                  className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
-                                  value={item.quantity || ''}
-                                  onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
-                                />
-                              </div>
-
-                              {/* Discount */}
-                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                  value={item.discount || ''}
-                                  onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-
-                              {/* Warranty */}
-                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
-                                <select
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                  value={item.warranty || 'No Warranty'}
-                                  onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
-                                >
-                                  <option value="No Warranty">No Warranty</option>
-                                  <option value="3 Months">3 Months</option>
-                                  <option value="6 Months">6 Months</option>
-                                  <option value="1 Year">1 Year</option>
-                                  <option value="2 Years">2 Years</option>
-                                  <option value="3 Years">3 Years</option>
-                                </select>
-                              </div>
-
-                              {/* Subtotal */}
-                              <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
-                                <div className="text-right">
-                                  <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
-                                  <span className="text-xs font-black text-slate-900">
-                                    PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveItemRow(index)}
-                                  className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-2"
-                                  title="Delete row"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Serial Number Selector for Electronics */}
-                            {selectedProduct && productSerials.length > 0 && (
-                              <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                                    Select Sold Serial Numbers (Required: {item.quantity})
-                                  </span>
-                                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                                    {productSerials.length} Available
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-24 overflow-y-auto pr-1">
-                                  {productSerials.map(sn => {
-                                    const isChecked = item.selectedSerials.includes(sn.id);
-                                    return (
-                                      <label key={sn.id} className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                                        isChecked 
-                                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' 
-                                          : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                                      }`}>
-                                        <input
-                                          type="checkbox"
-                                          className="rounded border-slate-300 text-[#0a382c] focus:ring-[#0a382c] h-3.5 w-3.5"
-                                          checked={isChecked}
-                                          disabled={!isChecked && item.selectedSerials.length >= item.quantity}
-                                          onChange={(e) => {
-                                            const checked = e.target.checked;
-                                            let newSerials = [...item.selectedSerials];
-                                            if (checked) {
-                                              if (newSerials.length < item.quantity) {
-                                                newSerials.push(sn.id);
-                                              }
-                                            } else {
-                                              newSerials = newSerials.filter(id => id !== sn.id);
-                                            }
-                                            const updatedItems = [...invoiceItems];
-                                            updatedItems[index] = { ...item, selectedSerials: newSerials };
-                                            setInvoiceItems(updatedItems);
-                                          }}
-                                        />
-                                        <span className="font-mono truncate">{sn.serialNumber}</span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                                {item.selectedSerials.length !== item.quantity && (
-                                  <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                                    <Info className="w-3 h-3" /> Please check exactly {item.quantity} serial number(s) to verify item delivery. (Selected: {item.selectedSerials.length})
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleAddItemRow}
-                      className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl transition-all shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1.5" />
-                      Add Item Row
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-[#f8faf9] px-6 py-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200 flex-shrink-0">
-                  <div className="text-center sm:text-left">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold block">Invoice Total Amount</span>
-                    <span className="text-2xl font-black text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                    <button 
-                      type="button" 
-                      onClick={() => { setShowModal(false); setEditingSale(null); }} 
-                      className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-4 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      onClick={() => setPrintOnCreate(false)}
-                      disabled={saving || calculateInvoiceTotal() <= 0}
-                      className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-800 focus:outline-none transition-colors disabled:opacity-50"
-                    >
-                      {saving && !printOnCreate ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-800"></div>
-                      ) : (
-                        editingSale ? 'Update Invoice' : 'Create Invoice'
-                      )}
-                    </button>
-                    <button 
-                      type="submit"
-                      onClick={() => setPrintOnCreate(true)}
-                      disabled={saving || calculateInvoiceTotal() <= 0}
-                      className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50 gap-1.5"
-                    >
-                      {saving && printOnCreate ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <Printer className="w-4 h-4" />
-                          {editingSale ? 'Update & Print' : 'Save & Print'}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </div>
-      )}
 
       {/* 2. Styled Printable Receipt Detail Modal */}
       {showDetailModal && selectedSale && (

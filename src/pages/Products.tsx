@@ -67,7 +67,7 @@ export default function Products() {
       modelNumber: formData.get('modelNumber'),
       purchasePrice: 0,
       salePrice: 0,
-      stock: Number(formData.get('stock')),
+      stock: 0,
       storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -75,11 +75,11 @@ export default function Products() {
 
     try {
       await addDoc(collection(db, 'products'), newProduct);
-      toast.success('Stock added successfully');
+      toast.success('Product added successfully');
       setShowAddForm(false);
     } catch (error) {
-      console.error('Error adding stock:', error);
-      toast.error('Failed to add stock');
+      console.error('Error adding product:', error);
+      toast.error('Failed to add product');
     }
   };
 
@@ -95,17 +95,17 @@ export default function Products() {
       modelNumber: formData.get('modelNumber'),
       purchasePrice: editingProduct.purchasePrice || 0,
       salePrice: editingProduct.salePrice || 0,
-      stock: Number(formData.get('stock')),
+      stock: editingProduct.stock || 0,
       updatedAt: serverTimestamp(),
     };
 
     try {
       await updateDoc(doc(db, 'products', editingProduct.id), updatedProduct);
-      toast.success('Stock updated successfully');
+      toast.success('Product updated successfully');
       setEditingProduct(null);
     } catch (error) {
-      console.error('Error updating stock:', error);
-      toast.error('Failed to update stock');
+      console.error('Error updating product:', error);
+      toast.error('Failed to update product');
     }
   };
 
@@ -180,10 +180,6 @@ export default function Products() {
                 <div>
                   <label htmlFor="modelNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Model Number</label>
                   <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
-                </div>
-                <div>
-                  <label htmlFor="stock" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Initial Stock</label>
-                  <input type="number" name="stock" id="stock" defaultValue={initialData.stock} required min="0" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
               </div>
             </div>
