@@ -125,6 +125,7 @@ export default function Sales() {
   const [selectedCustomerId, setSelectedCustomerId] = useState('walk-in');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [selectedBankAccNumber, setSelectedBankAccNumber] = useState('');
+  const [invoiceStatus, setInvoiceStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [invoiceItems, setInvoiceItems] = useState<Array<{
     productId: string;
     quantity: number;
@@ -362,6 +363,7 @@ export default function Sales() {
     }
     setPaymentMode(sale.paymentMode || 'Cash');
     setSelectedBankAccNumber(sale.bankAccountNumber || '');
+    setInvoiceStatus((sale.status as 'Paid' | 'Pending') || 'Paid');
     
     if (sale.items) {
       const mappedItems = sale.items.map(item => {
@@ -447,8 +449,8 @@ export default function Sales() {
         }
       }
       
-      // If deleted invoice was paid online, revert the bank account balance
-      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && storeId) {
+      // If deleted invoice was paid online and status was not Pending, revert the bank account balance
+      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && sale.status !== 'Pending' && storeId) {
         const storeRef = doc(db, 'stores', storeId);
         const storeSnap = await getDoc(storeRef);
         if (storeSnap.exists()) {
@@ -616,7 +618,7 @@ export default function Sales() {
       customerName,
       items: itemsToSave,
       total: totalAmount,
-      status: 'Paid',
+      status: invoiceStatus,
       paymentMode,
       bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
       bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
@@ -751,8 +753,8 @@ export default function Sales() {
             };
           });
 
-          // If editing an existing sale that was paid Online, revert its previous payment
-          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber) {
+          // If editing an existing sale that was paid Online and was Paid, revert its previous payment
+          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber && editingSale.status !== 'Pending') {
             currentAccounts = currentAccounts.map((acc: any) => {
               if (acc.accountNumber === editingSale.bankAccountNumber) {
                 bankChanged = true;
@@ -765,8 +767,8 @@ export default function Sales() {
             });
           }
 
-          // If current invoice is Online, add totalAmount to selected bank account
-          if (paymentMode === 'Online' && selectedBankAccNumber) {
+          // If current invoice is Online and marked Paid, add totalAmount to selected bank account
+          if (paymentMode === 'Online' && selectedBankAccNumber && invoiceStatus === 'Paid') {
             currentAccounts = currentAccounts.map((acc: any) => {
               if (acc.accountNumber === selectedBankAccNumber) {
                 bankChanged = true;
@@ -779,7 +781,7 @@ export default function Sales() {
             });
           }
 
-          if (bankChanged || paymentMode === 'Online') {
+          if (bankChanged) {
             batch.update(storeRef, {
               bankAccounts: currentAccounts,
               updatedAt: serverTimestamp()
@@ -802,7 +804,7 @@ export default function Sales() {
           customerName,
           items: itemsToSave,
           total: totalAmount,
-          status: 'Paid',
+          status: invoiceStatus,
           date: newSaleDoc.date,
           paymentMode,
           bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
@@ -817,6 +819,7 @@ export default function Sales() {
       setSelectedCustomerId('walk-in');
       setPaymentMode('Cash');
       setSelectedBankAccNumber('');
+      setInvoiceStatus('Paid');
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
       toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');
@@ -1058,7 +1061,7 @@ export default function Sales() {
                 <div style="margin-top: 12px; line-height: 1.5; color: #475569;">
                   <div>Invoice No: <span style="font-family: monospace; font-weight: bold; color: #0f172a;">${sale.invoiceNo}</span></div>
                   <div>Date: <span style="font-weight: 600; color: #0f172a;">${sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}</span></div>
-                  <div>Status: <span style="font-weight: 800; color: #059669; background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">Paid</span></div>
+                  <div>Status: <span style="font-weight: 800; color: ${sale.status === 'Pending' ? '#b45309' : '#059669'}; background-color: ${sale.status === 'Pending' ? '#fef3c7' : '#ecfdf5'}; border: 1px solid ${sale.status === 'Pending' ? '#fde68a' : '#a7f3d0'}; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">${sale.status || 'Paid'}</span></div>
                   <div>Payment Mode: <strong style="color: #0f172a;">${sale.paymentMode || 'Cash'}</strong>${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 10px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</div>
                 </div>
               </td>
@@ -1097,7 +1100,7 @@ export default function Sales() {
               <td style="text-align: right; font-weight: 600; color: #334155;">PKR 0.00</td>
             </tr>
             <tr class="total-row">
-              <td style="padding-top: 10px;">Total Amount Paid:</td>
+              <td style="padding-top: 10px;">${sale.status === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}</td>
               <td style="text-align: right; padding-top: 10px;">PKR ${sale.total?.toFixed(2)}</td>
             </tr>
           </table>
@@ -1185,193 +1188,147 @@ export default function Sales() {
         <div className="glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
           <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col">
             <div className="p-6 sm:p-8 space-y-6">
-              {/* Single Panel for Customer Details, Payment Mode & Invoice Information */}
-              <div className="bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-5 items-start">
+              {/* Single Compact Panel for Customer, Payment Mode & Status */}
+              <div className="bg-[#f8faf9] p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
                   
-                  {/* Customer Details */}
-                  <div className="md:col-span-4 flex flex-col justify-between h-full">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-[#0a382c]" /> Customer Details
-                        </span>
-                      </div>
-                      <div>
-                        <label htmlFor="customerId" className="block text-[11px] font-bold text-slate-600 mb-1">
-                          Registered Customer
-                        </label>
-                        <select
-                          id="customerId"
-                          className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
-                          value={selectedCustomerId}
-                          onChange={(e) => setSelectedCustomerId(e.target.value)}
-                        >
-                          <option value="walk-in">Walk In Customer</option>
-                          {editingSale && !customers.some(c => c.id === editingSale.customerId) && editingSale.customerName && editingSale.customerName !== 'Walk In Customer' && (
-                            <option value={editingSale.customerName}>{editingSale.customerName}</option>
-                          )}
-                          {customers
-                            .filter(c => c.name?.trim().toLowerCase() !== 'walk in customer' && c.name?.trim().toLowerCase() !== 'walk-in customer')
-                            .map(c => (
-                              <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
-                            ))}
-                        </select>
-                      </div>
+                  {/* Select Customer */}
+                  <div className="md:col-span-5">
+                    <label htmlFor="customerId" className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Select Customer
+                    </label>
+                    <select
+                      id="customerId"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      value={selectedCustomerId}
+                      onChange={(e) => setSelectedCustomerId(e.target.value)}
+                    >
+                      <option value="walk-in">Walk In Customer</option>
+                      {editingSale && !customers.some(c => c.id === editingSale.customerId) && editingSale.customerName && editingSale.customerName !== 'Walk In Customer' && (
+                        <option value={editingSale.customerName}>{editingSale.customerName}</option>
+                      )}
+                      {customers
+                        .filter(c => c.name?.trim().toLowerCase() !== 'walk in customer' && c.name?.trim().toLowerCase() !== 'walk-in customer')
+                        .map(c => (
+                          <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
+                        ))}
+                    </select>
 
-                      {selectedCustomerId !== 'walk-in' && (() => {
-                        const selectedCust = customers.find(c => c.id === selectedCustomerId);
-                        if (!selectedCust) return null;
-                        return (
-                          <div className="mt-2 p-2 rounded-xl bg-white border border-slate-200/70 text-[11px] text-slate-600 space-y-0.5">
-                            {selectedCust.mobile && <div>Phone: <span className="font-bold text-slate-800">{selectedCust.mobile}</span></div>}
-                            {selectedCust.address && <div className="truncate">Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                    {selectedCustomerId !== 'walk-in' && (() => {
+                      const selectedCust = customers.find(c => c.id === selectedCustomerId);
+                      if (!selectedCust) return null;
+                      return (
+                        <div className="mt-1.5 p-2 rounded-lg bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5">
+                          {selectedCust.mobile && <div>Phone: <span className="font-bold text-slate-800">{selectedCust.mobile}</span></div>}
+                          {selectedCust.address && <div className="truncate">Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
+                        </div>
+                      );
+                    })()}
                   </div>
 
-                  {/* Payment Mode */}
-                  <div className="md:col-span-5 md:border-l md:border-slate-200/80 md:pl-4 lg:pl-5 flex flex-col justify-between h-full">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <CreditCard className="w-3.5 h-3.5 text-[#0a382c]" /> Payment Mode
-                        </span>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                          paymentMode === 'Cash' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {paymentMode}
-                        </span>
-                      </div>
+                  {/* Select Payment Mode */}
+                  <div className="md:col-span-4">
+                    <label htmlFor="paymentModeSelect" className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Select Payment Mode
+                    </label>
+                    <select
+                      id="paymentModeSelect"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      value={paymentMode}
+                      onChange={(e) => {
+                        const mode = e.target.value as 'Cash' | 'Online';
+                        setPaymentMode(mode);
+                        if (mode === 'Online' && !selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
+                          setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
+                        }
+                      }}
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Online">Online</option>
+                    </select>
 
-                      {/* Mode Buttons: 1. Cash, 2. Online */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          id="paymentModeCashBtn"
-                          onClick={() => {
-                            setPaymentMode('Cash');
-                          }}
-                          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                            paymentMode === 'Cash'
-                              ? 'bg-[#0a382c] text-white border-[#0a382c] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <Banknote className="w-3.5 h-3.5" />
-                          1. Cash
-                        </button>
-
-                        <button
-                          type="button"
-                          id="paymentModeOnlineBtn"
-                          onClick={() => {
-                            setPaymentMode('Online');
-                            if (!selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
-                              setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
-                            }
-                          }}
-                          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                            paymentMode === 'Online'
-                              ? 'bg-[#0a382c] text-white border-[#0a382c] shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <Globe className="w-3.5 h-3.5" />
-                          2. Online
-                        </button>
-                      </div>
-
-                      {/* Bank Account Selection if Online */}
-                      {paymentMode === 'Online' && (
-                        <div className="mt-2.5 pt-2 border-t border-slate-200/80">
-                          <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600 mb-1">
-                            Select Bank Account <span className="text-red-500">*</span>
-                          </label>
-                          {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
-                            <div>
-                              <select
-                                id="bankAccountSelect"
-                                required={paymentMode === 'Online'}
-                                className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white"
-                                value={selectedBankAccNumber}
-                                onChange={(e) => setSelectedBankAccNumber(e.target.value)}
-                              >
-                                <option value="">-- Select Bank Account --</option>
-                                {storeDetails.bankAccounts.map((acc, idx) => (
-                                  <option key={idx} value={acc.accountNumber}>
-                                    {acc.bankName} - {acc.accountNumber} {acc.accountTitle ? `(${acc.accountTitle})` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                              {selectedBankAccNumber && (() => {
-                                const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
-                                if (!chosenAcc) return null;
-                                const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
-                                return (
-                                  <div className="mt-1.5 p-2 rounded-xl bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-slate-600 font-medium">Bank Balance:</span>
-                                      <span className="font-mono font-black text-[#0a382c]">
-                                        PKR {currentBal.toFixed(2)}
+                    {/* Bank Account Selection if Online */}
+                    {paymentMode === 'Online' && (
+                      <div className="mt-2 pt-2 border-t border-slate-200/80">
+                        <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Select Bank Account <span className="text-red-500">*</span>
+                        </label>
+                        {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
+                          <div>
+                            <select
+                              id="bankAccountSelect"
+                              required={paymentMode === 'Online'}
+                              className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white"
+                              value={selectedBankAccNumber}
+                              onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                            >
+                              <option value="">-- Select Bank Account --</option>
+                              {storeDetails.bankAccounts.map((acc, idx) => (
+                                <option key={idx} value={acc.accountNumber}>
+                                  {acc.bankName} - {acc.accountNumber} {acc.accountTitle ? `(${acc.accountTitle})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedBankAccNumber && (() => {
+                              const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
+                              if (!chosenAcc) return null;
+                              const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
+                              return (
+                                <div className="mt-1.5 p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-600 font-medium">Bank Balance:</span>
+                                    <span className="font-mono font-black text-[#0a382c]">
+                                      PKR {currentBal.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {calculateInvoiceTotal() > 0 && (
+                                    <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 mt-1 font-semibold">
+                                      <span>{invoiceStatus === 'Paid' ? 'After This Invoice:' : 'If Paid:'}</span>
+                                      <span className="font-mono font-bold">
+                                        PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
                                       </span>
                                     </div>
-                                    {calculateInvoiceTotal() > 0 && (
-                                      <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 mt-1 font-semibold">
-                                        <span>After This Invoice:</span>
-                                        <span className="font-mono font-bold">
-                                          PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          ) : (
-                            <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
-                              <p className="font-bold">No Bank Accounts Configured</p>
-                              <p className="text-[10px]">Add a bank account in Settings to accept online payments.</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Invoice Information */}
-                  <div className="md:col-span-3 md:border-l md:border-slate-200/80 md:pl-4 lg:pl-5 flex flex-col justify-between h-full">
-                    <div>
-                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                        <Calendar className="w-3.5 h-3.5 text-[#0a382c]" /> Invoice Info
-                      </span>
-                      <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 space-y-1.5 text-xs">
-                        <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-500 font-medium">Date:</span>
-                          <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-500 font-medium">Status:</span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800">Paid</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-500 font-medium">Mode:</span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase inline-flex items-center gap-1 ${
-                            paymentMode === 'Online' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {paymentMode === 'Online' ? <Globe className="w-2.5 h-2.5" /> : <Banknote className="w-2.5 h-2.5" />}
-                            {paymentMode}
-                          </span>
-                        </div>
-                        {editingSale && (
-                          <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-100">
-                            <span className="text-slate-500 font-medium">Invoice #:</span>
-                            <span className="font-mono font-bold text-slate-900">{editingSale.invoiceNo}</span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
+                            <p className="font-bold">No Bank Accounts Configured</p>
+                            <p className="text-[10px]">Add a bank account in Settings to accept online payments.</p>
                           </div>
                         )}
                       </div>
+                    )}
+                  </div>
+
+                  {/* Status */}
+                  <div className="md:col-span-3">
+                    <label htmlFor="statusSelect" className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Status:
+                    </label>
+                    <select
+                      id="statusSelect"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      value={invoiceStatus}
+                      onChange={(e) => setInvoiceStatus(e.target.value as 'Paid' | 'Pending')}
+                    >
+                      <option value="Paid">Paid</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+
+                    <div className="mt-2 text-[11px] text-slate-500 space-y-0.5">
+                      <div className="flex justify-between items-center">
+                        <span>Date:</span>
+                        <span className="font-semibold text-slate-700">{new Date().toLocaleDateString()}</span>
+                      </div>
+                      {editingSale && (
+                        <div className="flex justify-between items-center">
+                          <span>Invoice #:</span>
+                          <span className="font-mono font-bold text-slate-800">{editingSale.invoiceNo}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1588,6 +1545,7 @@ export default function Sales() {
                     setSelectedCustomerId('walk-in'); 
                     setPaymentMode('Cash');
                     setSelectedBankAccNumber('');
+                    setInvoiceStatus('Paid');
                   }} 
                   className="flex-1 sm:flex-none inline-flex justify-center rounded-xl border border-slate-200 px-5 py-2.5 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors"
                 >
@@ -1641,6 +1599,7 @@ export default function Sales() {
             setSelectedCustomerId('walk-in');
             setPaymentMode('Cash');
             setSelectedBankAccNumber('');
+            setInvoiceStatus('Paid');
             setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
             setShowModal(true);
           }}
@@ -1719,8 +1678,12 @@ export default function Sales() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col gap-1 items-start">
-                        <span className="px-2.5 py-0.5 inline-flex text-[10px] leading-4 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
-                          {sale.status}
+                        <span className={`px-2.5 py-0.5 inline-flex text-[10px] leading-4 font-black rounded-full uppercase tracking-wider ${
+                          sale.status === 'Pending'
+                            ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                            : 'bg-emerald-50 border border-emerald-150 text-emerald-800'
+                        }`}>
+                          {sale.status || 'Paid'}
                         </span>
                         <span className={`px-2 py-0.5 inline-flex items-center gap-1 text-[10px] font-bold rounded-md ${
                           sale.paymentMode === 'Online'
@@ -1847,7 +1810,11 @@ export default function Sales() {
                     <div className="text-slate-500 mt-2 space-y-1">
                       <div>Invoice No: <span className="font-mono font-bold text-slate-800">{selectedSale.invoiceNo}</span></div>
                       <div>Date: <span className="font-semibold">{selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}</span></div>
-                      <div>Status: <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 border border-emerald-100 rounded text-[10px] uppercase">Paid</span></div>
+                      <div>Status: <span className={`font-bold px-2 py-0.5 border rounded text-[10px] uppercase ${
+                        selectedSale.status === 'Pending'
+                          ? 'text-amber-700 bg-amber-50 border-amber-200'
+                          : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                      }`}>{selectedSale.status || 'Paid'}</span></div>
                       <div className="flex items-center justify-end gap-1.5 pt-0.5">
                         <span className="text-[11px] text-slate-500 font-medium">Payment Mode:</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold inline-flex items-center gap-1 ${
