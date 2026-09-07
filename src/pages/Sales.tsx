@@ -96,12 +96,14 @@ export default function Sales() {
     phone: string;
     address: string;
     email: string;
+    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string }[];
   }>({
     name: '',
     logoUrl: '',
     phone: '',
     address: '',
-    email: ''
+    email: '',
+    bankAccounts: []
   });
   
   const [loading, setLoading] = useState(true);
@@ -233,12 +235,27 @@ export default function Sales() {
     const unsubscribe = onSnapshot(storeRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string }[] = [];
+        if (Array.isArray(data.bankAccounts)) {
+          loadedAccounts = data.bankAccounts.map((item: any) => {
+            if (typeof item === 'string') {
+              return { bankName: 'Bank', accountNumber: item, accountTitle: '' };
+            }
+            return {
+              bankName: item.bankName || '',
+              accountNumber: item.accountNumber || '',
+              accountTitle: item.accountTitle || ''
+            };
+          });
+        }
+
         setStoreDetails({
           name: data.name || '',
           logoUrl: data.logoUrl || '',
           phone: data.phone || '',
           address: data.address || '',
-          email: data.email || ''
+          email: data.email || '',
+          bankAccounts: loadedAccounts
         });
       }
     }, (error) => {
@@ -951,6 +968,17 @@ export default function Sales() {
             </tr>
           </table>
 
+          ${storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? `
+            <div style="margin-top: 16px; font-size: 11px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+              <strong style="color: #0f172a; font-size: 11px; display: block; margin-bottom: 4px;">Bank Account Details for Payment:</strong>
+              ${storeDetails.bankAccounts.map(acc => `
+                <div style="color: #334155; margin-bottom: 2px;">
+                  <strong>${acc.bankName}:</strong> Acc #: <span style="font-family: monospace; font-weight: 700;">${acc.accountNumber}</span> ${acc.accountTitle ? `(${acc.accountTitle})` : ''}
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
           <div class="footer">
             Thank you for your purchase!<br>
             For any warranty claims, please present this invoice.
@@ -1527,6 +1555,20 @@ export default function Sales() {
                     )}
                     {storeDetails.email && (
                       <span className="text-slate-500 block mt-0.5">Email: {storeDetails.email}</span>
+                    )}
+
+                    {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 && (
+                      <div className="mt-3 pt-2 border-t border-slate-100">
+                        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">Store Bank Accounts</span>
+                        <div className="space-y-1">
+                          {storeDetails.bankAccounts.map((acc, idx) => (
+                            <div key={idx} className="text-[11px] text-slate-700 bg-slate-50 p-1.5 rounded-md border border-slate-200/60">
+                              <span className="font-bold">{acc.bankName}:</span> <span className="font-mono font-bold text-slate-900">{acc.accountNumber}</span>
+                              {acc.accountTitle && <span className="text-slate-500 block text-[10px]">Title: {acc.accountTitle}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                   <div className="text-right">

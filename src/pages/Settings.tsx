@@ -3,7 +3,13 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, ShieldAlert, Store, Trash2 } from 'lucide-react';
+import { Building2, CreditCard, Plus, Save, ShieldAlert, Store, Trash2 } from 'lucide-react';
+
+export interface BankAccount {
+  bankName: string;
+  accountNumber: string;
+  accountTitle?: string;
+}
 
 interface StoreSettings {
   name: string;
@@ -11,6 +17,7 @@ interface StoreSettings {
   phone: string;
   address: string;
   email: string;
+  bankAccounts: BankAccount[];
 }
 
 const compressImage = (base64Str: string, maxWidth = 250, maxHeight = 250): Promise<string> => {
@@ -55,13 +62,18 @@ export default function Settings() {
   const { role, storeId } = useAuth();
   const [authorizedEmails, setAuthorizedEmails] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState('');
+
+  const [newBankName, setNewBankName] = useState('');
+  const [newAccountNumber, setNewAccountNumber] = useState('');
+  const [newAccountTitle, setNewAccountTitle] = useState('');
   
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     name: '',
     logoUrl: '',
     phone: '',
     address: '',
-    email: ''
+    email: '',
+    bankAccounts: []
   });
 
   const [loading, setLoading] = useState(true);
@@ -85,12 +97,28 @@ export default function Settings() {
           const storeSnap = await getDoc(storeRef);
           
           if (storeSnap.exists()) {
+            const data = storeSnap.data();
+            let loadedAccounts: BankAccount[] = [];
+            if (Array.isArray(data.bankAccounts)) {
+              loadedAccounts = data.bankAccounts.map((item: any) => {
+                if (typeof item === 'string') {
+                  return { bankName: 'Bank', accountNumber: item, accountTitle: '' };
+                }
+                return {
+                  bankName: item.bankName || '',
+                  accountNumber: item.accountNumber || '',
+                  accountTitle: item.accountTitle || ''
+                };
+              });
+            }
+
             setStoreSettings({
-              name: storeSnap.data().name || '',
-              logoUrl: storeSnap.data().logoUrl || '',
-              phone: storeSnap.data().phone || '',
-              address: storeSnap.data().address || '',
-              email: storeSnap.data().email || ''
+              name: data.name || '',
+              logoUrl: data.logoUrl || '',
+              phone: data.phone || '',
+              address: data.address || '',
+              email: data.email || '',
+              bankAccounts: loadedAccounts
             });
           }
         }
@@ -132,6 +160,40 @@ export default function Settings() {
 
   const handleRemoveEmail = (emailToRemove: string) => {
     setAuthorizedEmails(authorizedEmails.filter(e => e !== emailToRemove));
+  };
+
+  const handleAddBankAccount = () => {
+    const bankName = newBankName.trim();
+    const accountNumber = newAccountNumber.trim();
+    const accountTitle = newAccountTitle.trim();
+
+    if (!bankName && !accountNumber) {
+      toast.warning('Please enter Bank Name or Account Number');
+      return;
+    }
+
+    const newAccount: BankAccount = {
+      bankName: bankName || 'Bank Account',
+      accountNumber: accountNumber || 'N/A',
+      accountTitle: accountTitle || undefined
+    };
+
+    setStoreSettings(prev => ({
+      ...prev,
+      bankAccounts: [...(prev.bankAccounts || []), newAccount]
+    }));
+
+    setNewBankName('');
+    setNewAccountNumber('');
+    setNewAccountTitle('');
+    toast.info('Bank account added. Click "Save Store Details" to apply changes.');
+  };
+
+  const handleRemoveBankAccount = (indexToRemove: number) => {
+    setStoreSettings(prev => ({
+      ...prev,
+      bankAccounts: (prev.bankAccounts || []).filter((_, i) => i !== indexToRemove)
+    }));
   };
 
   const handleSaveStore = async () => {
@@ -262,6 +324,116 @@ export default function Settings() {
               value={storeSettings.address}
               onChange={(e) => setStoreSettings({...storeSettings, address: e.target.value})}
             />
+          </div>
+
+          {/* Bank Accounts Field Section */}
+          <div className="pt-4 border-t border-slate-100">
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#0a382c]" />
+              Store Bank Accounts
+            </label>
+            <p className="text-xs text-slate-500 mb-3">
+              Add bank account details for your store. These can be displayed on sales invoices and receipts.
+            </p>
+
+            {/* Input Row with "Add" button at the end */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 mb-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="flex-1 min-w-0">
+                <label htmlFor="newBankName" className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  id="newBankName"
+                  placeholder="e.g. Chase / Meezan Bank"
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                  value={newBankName}
+                  onChange={(e) => setNewBankName(e.target.value)}
+                />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <label htmlFor="newAccountNumber" className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Account / IBAN Number
+                </label>
+                <input
+                  type="text"
+                  id="newAccountNumber"
+                  placeholder="e.g. 01234567890123"
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                  value={newAccountNumber}
+                  onChange={(e) => setNewAccountNumber(e.target.value)}
+                />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <label htmlFor="newAccountTitle" className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Account Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  id="newAccountTitle"
+                  placeholder="e.g. Store LLC"
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                  value={newAccountTitle}
+                  onChange={(e) => setNewAccountTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddBankAccount();
+                    }
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddBankAccount}
+                className="flex items-center justify-center px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-sm transition-colors text-xs font-bold shrink-0 gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                Add
+              </button>
+            </div>
+
+            {/* List of Added Bank Accounts */}
+            {storeSettings.bankAccounts && storeSettings.bankAccounts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {storeSettings.bankAccounts.map((account, index) => (
+                  <div
+                    key={index}
+                    className="flex justify-between items-center p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-slate-300 transition-colors"
+                  >
+                    <div className="space-y-0.5 min-w-0 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-[#0a382c] shrink-0" />
+                        <span className="text-xs font-bold text-slate-900 truncate">{account.bankName}</span>
+                      </div>
+                      <p className="text-xs font-mono font-bold text-slate-700 truncate">
+                        Acc: {account.accountNumber}
+                      </p>
+                      {account.accountTitle && (
+                        <p className="text-[11px] text-slate-500 font-medium truncate">
+                          Title: {account.accountTitle}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBankAccount(index)}
+                      className="text-rose-500 hover:text-rose-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 shrink-0"
+                      title="Remove bank account"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center bg-slate-50/50">
+                <p className="text-xs text-slate-400 italic">No bank accounts added yet.</p>
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end pt-2">
