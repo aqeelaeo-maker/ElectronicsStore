@@ -92,6 +92,7 @@ export default function App() {
             <Route path="customers" element={<Customers />} />
             <Route path="vendors" element={<Vendors />} />
             <Route path="inventory" element={<Inventory />} />
+            <Route path="inventory/add" element={<Inventory initialAddStock={true} />} />
             <Route path="reports" element={<Placeholder title="Reports" />} />
             <Route path="settings" element={<Settings />} />
           </Route>

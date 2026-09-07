@@ -9,6 +9,7 @@ export interface BankAccount {
   bankName: string;
   accountNumber: string;
   accountTitle?: string;
+  openingBalance?: number;
 }
 
 interface StoreSettings {
@@ -65,7 +66,7 @@ export default function Settings() {
 
   const [newBankName, setNewBankName] = useState('');
   const [newAccountNumber, setNewAccountNumber] = useState('');
-  const [newAccountTitle, setNewAccountTitle] = useState('');
+  const [newOpeningBalance, setNewOpeningBalance] = useState('');
   
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     name: '',
@@ -102,12 +103,13 @@ export default function Settings() {
             if (Array.isArray(data.bankAccounts)) {
               loadedAccounts = data.bankAccounts.map((item: any) => {
                 if (typeof item === 'string') {
-                  return { bankName: 'Bank', accountNumber: item, accountTitle: '' };
+                  return { bankName: 'Bank', accountNumber: item, openingBalance: 0 };
                 }
                 return {
                   bankName: item.bankName || '',
                   accountNumber: item.accountNumber || '',
-                  accountTitle: item.accountTitle || ''
+                  accountTitle: item.accountTitle || '',
+                  openingBalance: typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0)
                 };
               });
             }
@@ -165,7 +167,7 @@ export default function Settings() {
   const handleAddBankAccount = () => {
     const bankName = newBankName.trim();
     const accountNumber = newAccountNumber.trim();
-    const accountTitle = newAccountTitle.trim();
+    const openingBalance = parseFloat(newOpeningBalance) || 0;
 
     if (!bankName && !accountNumber) {
       toast.warning('Please enter Bank Name or Account Number');
@@ -175,7 +177,7 @@ export default function Settings() {
     const newAccount: BankAccount = {
       bankName: bankName || 'Bank Account',
       accountNumber: accountNumber || 'N/A',
-      accountTitle: accountTitle || undefined
+      openingBalance: openingBalance
     };
 
     setStoreSettings(prev => ({
@@ -185,7 +187,7 @@ export default function Settings() {
 
     setNewBankName('');
     setNewAccountNumber('');
-    setNewAccountTitle('');
+    setNewOpeningBalance('');
     toast.info('Bank account added. Click "Save Store Details" to apply changes.');
   };
 
@@ -367,16 +369,17 @@ export default function Settings() {
               </div>
 
               <div className="flex-1 min-w-0">
-                <label htmlFor="newAccountTitle" className="block text-[11px] font-bold text-slate-600 mb-1">
-                  Account Title (Optional)
+                <label htmlFor="newOpeningBalance" className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Opening Balance
                 </label>
                 <input
-                  type="text"
-                  id="newAccountTitle"
-                  placeholder="e.g. Store LLC"
+                  type="number"
+                  id="newOpeningBalance"
+                  placeholder="0.00"
+                  step="0.01"
                   className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
-                  value={newAccountTitle}
-                  onChange={(e) => setNewAccountTitle(e.target.value)}
+                  value={newOpeningBalance}
+                  onChange={(e) => setNewOpeningBalance(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -412,11 +415,9 @@ export default function Settings() {
                       <p className="text-xs font-mono font-bold text-slate-700 truncate">
                         Acc: {account.accountNumber}
                       </p>
-                      {account.accountTitle && (
-                        <p className="text-[11px] text-slate-500 font-medium truncate">
-                          Title: {account.accountTitle}
-                        </p>
-                      )}
+                      <p className="text-[11px] text-slate-500 font-semibold truncate">
+                        Opening Balance: ${(account.openingBalance ?? 0).toFixed(2)}
+                      </p>
                     </div>
                     <button
                       type="button"

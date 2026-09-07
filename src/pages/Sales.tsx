@@ -97,7 +97,7 @@ export default function Sales() {
     phone: string;
     address: string;
     email: string;
-    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string }[];
+    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number }[];
   }>({
     name: '',
     logoUrl: '',
@@ -236,16 +236,17 @@ export default function Sales() {
     const unsubscribe = onSnapshot(storeRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string }[] = [];
+        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number }[] = [];
         if (Array.isArray(data.bankAccounts)) {
           loadedAccounts = data.bankAccounts.map((item: any) => {
             if (typeof item === 'string') {
-              return { bankName: 'Bank', accountNumber: item, accountTitle: '' };
+              return { bankName: 'Bank', accountNumber: item, openingBalance: 0 };
             }
             return {
               bankName: item.bankName || '',
               accountNumber: item.accountNumber || '',
-              accountTitle: item.accountTitle || ''
+              accountTitle: item.accountTitle || '',
+              openingBalance: typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0)
             };
           });
         }
