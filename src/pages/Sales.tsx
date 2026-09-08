@@ -1271,8 +1271,8 @@ export default function Sales() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* LEFT PANEL: Invoice Information (Vertically) */}
-                <div className="lg:col-span-4 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                <div className="lg:col-span-4 bg-[#f8faf9] p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
                     <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                       <FileText className="w-4 h-4 text-[#0a382c]" />
                       Invoice Information
@@ -1286,52 +1286,26 @@ export default function Sales() {
                     </span>
                   </div>
 
-                  {/* 1. Invoice Number : */}
-                  <div>
-                    <label htmlFor="invoiceNumberInput" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                      <span>Invoice Number :</span>
-                      {editingSale ? (
-                        <span className="text-[10px] text-emerald-700 font-semibold">(Editing)</span>
+                  {/* Customer Selection */}
+                  <div className="space-y-1 pb-2.5 border-b border-slate-200/80">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="customerId" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Select Customer:</span>
+                      </label>
+                      {selectedCustomerId === 'walk-in' ? (
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                          Walk-In
+                        </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400 font-semibold">(Auto-generated)</span>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                          Selected
+                        </span>
                       )}
-                    </label>
-                    <input
-                      id="invoiceNumberInput"
-                      type="text"
-                      required
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 focus:border-[#0a382c]"
-                      value={invoiceNumber || (editingSale ? editingSale.invoiceNo : getNextInvoiceNumber())}
-                      onChange={(e) => setInvoiceNumber(e.target.value)}
-                      placeholder="e.g. INV-2026-0001"
-                    />
-                  </div>
-
-                  {/* 2. Date: */}
-                  <div>
-                    <label htmlFor="invoiceDateInput" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Date:</span>
-                    </label>
-                    <input
-                      id="invoiceDateInput"
-                      type="date"
-                      required
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                      value={invoiceDate}
-                      onChange={(e) => setInvoiceDate(e.target.value)}
-                    />
-                  </div>
-
-                  {/* 3. Select Customer: */}
-                  <div>
-                    <label htmlFor="customerId" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Select Customer:</span>
-                    </label>
+                    </div>
                     <select
                       id="customerId"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                      className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                       value={selectedCustomerId}
                       onChange={(e) => setSelectedCustomerId(e.target.value)}
                     >
@@ -1350,7 +1324,7 @@ export default function Sales() {
                       const selectedCust = customers.find(c => c.id === selectedCustomerId);
                       if (!selectedCust) return null;
                       return (
-                        <div className="mt-2 p-2.5 rounded-xl bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
+                        <div className="mt-1.5 p-2 rounded-lg bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
                           <div className="font-bold text-slate-800">{selectedCust.name}</div>
                           {selectedCust.mobile && <div>Phone: <span className="font-semibold text-slate-800">{selectedCust.mobile}</span></div>}
                           {selectedCust.address && <div className="truncate">Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
@@ -1359,103 +1333,139 @@ export default function Sales() {
                     })()}
                   </div>
 
-                  {/* 4. Payment Mode: */}
-                  <div>
-                    <label htmlFor="paymentModeSelect" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                      <CreditCard className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Payment Mode:</span>
-                    </label>
-                    <select
-                      id="paymentModeSelect"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                      value={paymentMode}
-                      onChange={(e) => {
-                        const mode = e.target.value as 'Cash' | 'Online';
-                        setPaymentMode(mode);
-                        if (mode === 'Online' && !selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
-                          setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
-                        }
-                      }}
-                    >
-                      <option value="Cash">Cash</option>
-                      <option value="Online">Online</option>
-                    </select>
+                  {/* Compact Vertically Aligned Key-Value Form with Minimum Space */}
+                  <div className="space-y-2 text-xs pt-0.5">
+                    {/* 1. Invoice Number : */}
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <label htmlFor="invoiceNumberInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                        Invoice Number :
+                      </label>
+                      <div className="col-span-7">
+                        <input
+                          id="invoiceNumberInput"
+                          type="text"
+                          required
+                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 focus:border-[#0a382c]"
+                          value={invoiceNumber || (editingSale ? editingSale.invoiceNo : getNextInvoiceNumber())}
+                          onChange={(e) => setInvoiceNumber(e.target.value)}
+                          placeholder="e.g. INV-2026-0001"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 2. Date: */}
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <label htmlFor="invoiceDateInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                        Date:
+                      </label>
+                      <div className="col-span-7">
+                        <input
+                          id="invoiceDateInput"
+                          type="date"
+                          required
+                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                          value={invoiceDate}
+                          onChange={(e) => setInvoiceDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. Payment Mode */}
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <label htmlFor="paymentModeSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                        Payment Mode:
+                      </label>
+                      <div className="col-span-7">
+                        <select
+                          id="paymentModeSelect"
+                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                          value={paymentMode}
+                          onChange={(e) => {
+                            const mode = e.target.value as 'Cash' | 'Online';
+                            setPaymentMode(mode);
+                            if (mode === 'Online' && !selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
+                              setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
+                            }
+                          }}
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="Online">Online</option>
+                        </select>
+                      </div>
+                    </div>
 
                     {/* Bank Account Selection if Online */}
                     {paymentMode === 'Online' && (
-                      <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 space-y-1.5">
-                        <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600">
-                          Select Bank Account <span className="text-red-500">*</span>
-                        </label>
-                        {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
-                          <div>
-                            <select
-                              id="bankAccountSelect"
-                              required={paymentMode === 'Online'}
-                              className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
-                              value={selectedBankAccNumber}
-                              onChange={(e) => setSelectedBankAccNumber(e.target.value)}
-                            >
-                              <option value="">-- Select Bank Account --</option>
-                              {storeDetails.bankAccounts.map((acc, idx) => (
-                                <option key={idx} value={acc.accountNumber}>
-                                  {acc.bankName} - {acc.accountNumber} {acc.accountTitle ? `(${acc.accountTitle})` : ''}
-                                </option>
-                              ))}
-                            </select>
-                            {selectedBankAccNumber && (() => {
-                              const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
-                              if (!chosenAcc) return null;
-                              const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
-                              return (
-                                <div className="mt-2 p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-slate-600 font-medium">Bank Balance:</span>
-                                    <span className="font-mono font-black text-[#0a382c]">
-                                      PKR {currentBal.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  {calculateInvoiceTotal() > 0 && (
-                                    <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 mt-1 font-semibold">
-                                      <span>{invoiceStatus === 'Paid' ? 'After This Invoice:' : 'If Paid:'}</span>
-                                      <span className="font-mono font-bold">
-                                        PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
-                                      </span>
-                                    </div>
-                                  )}
+                      <div className="bg-white p-2 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5 my-1">
+                        <div className="grid grid-cols-12 gap-2 items-center">
+                          <label htmlFor="bankAccountSelect" className="col-span-5 text-[11px] font-bold text-slate-600 whitespace-nowrap">
+                            Bank Account <span className="text-red-500">*</span>:
+                          </label>
+                          <div className="col-span-7">
+                            {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
+                              <select
+                                id="bankAccountSelect"
+                                required={paymentMode === 'Online'}
+                                className="glass-input block w-full rounded-lg py-1.5 px-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
+                                value={selectedBankAccNumber}
+                                onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                              >
+                                <option value="">-- Select Bank --</option>
+                                {storeDetails.bankAccounts.map((acc, idx) => (
+                                  <option key={idx} value={acc.accountNumber}>
+                                    {acc.bankName} - {acc.accountNumber}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-[10px] text-amber-600 font-bold">No accounts</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {selectedBankAccNumber && (() => {
+                          const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
+                          if (!chosenAcc) return null;
+                          const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
+                          return (
+                            <div className="p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[10px] space-y-0.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-600 font-medium">Bank Balance:</span>
+                                <span className="font-mono font-black text-[#0a382c]">
+                                  PKR {currentBal.toFixed(2)}
+                                </span>
+                              </div>
+                              {calculateInvoiceTotal() > 0 && (
+                                <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 font-semibold">
+                                  <span>{invoiceStatus === 'Paid' ? 'After Sale:' : 'If Paid:'}</span>
+                                  <span className="font-mono font-bold">
+                                    PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
+                                  </span>
                                 </div>
-                              );
-                            })()}
-                          </div>
-                        ) : (
-                          <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[11px]">
-                            <p className="font-bold">No Bank Accounts Configured</p>
-                            <p className="text-[10px]">Add a bank account in Settings to accept online payments.</p>
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
-                  </div>
 
-                  {/* 5. Status: */}
-                  <div>
-                    <label htmlFor="statusSelect" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                      <span>Status :</span>
-                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        invoiceStatus === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                      }`}>
-                        {invoiceStatus}
-                      </span>
-                    </label>
-                    <select
-                      id="statusSelect"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                      value={invoiceStatus}
-                      onChange={(e) => setInvoiceStatus(e.target.value as 'Paid' | 'Pending')}
-                    >
-                      <option value="Paid">Paid</option>
-                      <option value="Pending">Pending</option>
-                    </select>
+                    {/* 4. Status */}
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <label htmlFor="statusSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                        Status:
+                      </label>
+                      <div className="col-span-7">
+                        <select
+                          id="statusSelect"
+                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                          value={invoiceStatus}
+                          onChange={(e) => setInvoiceStatus(e.target.value as 'Paid' | 'Pending')}
+                        >
+                          <option value="Paid">Paid</option>
+                          <option value="Pending">Pending</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
