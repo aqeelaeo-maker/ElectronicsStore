@@ -122,6 +122,8 @@ export default function Sales() {
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   // New Invoice Form States
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('walk-in');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [selectedBankAccNumber, setSelectedBankAccNumber] = useState('');
@@ -136,6 +138,14 @@ export default function Sales() {
   }>>([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   const [saving, setSaving] = useState(false);
   const [printOnCreate, setPrintOnCreate] = useState(false);
+
+  const getNextInvoiceNumber = () => {
+    const currentYear = new Date().getFullYear();
+    const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
+    const nextSeq = yearSales.length + 1;
+    const paddedSeq = String(nextSeq).padStart(4, '0');
+    return `INV-${currentYear}-${paddedSeq}`;
+  };
 
   // 1. Fetch Sales List
   useEffect(() => {
@@ -354,6 +364,8 @@ export default function Sales() {
   // Handle setting up edit mode
   const handleEditClick = (sale: Sale) => {
     setEditingSale(sale);
+    setInvoiceNumber(sale.invoiceNo || '');
+    setInvoiceDate(sale.date ? new Date(sale.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     if (sale.customerId && customers.some(c => c.id === sale.customerId)) {
       setSelectedCustomerId(sale.customerId);
     } else if (sale.customerName && sale.customerName !== 'Walk In Customer') {
@@ -572,15 +584,15 @@ export default function Sales() {
     
     // Determine Invoice Number
     let invoiceNo = '';
-    if (editingSale) {
+    if (invoiceNumber && invoiceNumber.trim()) {
+      invoiceNo = invoiceNumber.trim();
+    } else if (editingSale) {
       invoiceNo = editingSale.invoiceNo;
     } else {
-      const currentYear = new Date().getFullYear();
-      const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
-      const nextSeq = yearSales.length + 1;
-      const paddedSeq = String(nextSeq).padStart(4, '0');
-      invoiceNo = `INV-${currentYear}-${paddedSeq}`;
+      invoiceNo = getNextInvoiceNumber();
     }
+
+    const saleDate = invoiceDate ? new Date(invoiceDate).toISOString() : (editingSale ? editingSale.date : new Date().toISOString());
 
     const batch = writeBatch(db);
 
@@ -623,7 +635,7 @@ export default function Sales() {
       bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
       bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
       accountTitle: paymentMode === 'Online' && matchedBank ? (matchedBank.accountTitle || '') : null,
-      date: editingSale ? editingSale.date : new Date().toISOString(),
+      date: saleDate,
       storeId,
       createdAt: editingSale ? (editingSale as any).createdAt || serverTimestamp() : serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -820,6 +832,8 @@ export default function Sales() {
       setPaymentMode('Cash');
       setSelectedBankAccNumber('');
       setInvoiceStatus('Paid');
+      setInvoiceNumber('');
+      setInvoiceDate(new Date().toISOString().split('T')[0]);
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
       toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');
@@ -1157,6 +1171,61 @@ export default function Sales() {
   };
 
   if (showModal) {
+    const currentInvoiceNo = invoiceNumber.trim() || (editingSale?.invoiceNo || getNextInvoiceNumber());
+    const matchedBank = paymentMode === 'Online'
+      ? storeDetails.bankAccounts?.find(b => b.accountNumber === selectedBankAccNumber)
+      : null;
+
+    const currentCustomer = (() => {
+      if (selectedCustomerId === 'walk-in') {
+        return { id: 'walk-in', name: 'Walk In Customer', mobile: '', address: '', email: '' };
+      }
+      const found = customers.find(c => c.id === selectedCustomerId);
+      if (found) {
+        return { id: found.id, name: found.name, mobile: found.mobile || '', address: found.address || '', email: found.email || '' };
+      }
+      return { id: selectedCustomerId, name: selectedCustomerId, mobile: '', address: '', email: '' };
+    })();
+
+    const draftItems: SaleItem[] = invoiceItems.map(item => {
+      const prod = products.find(p => p.id === item.productId);
+      return {
+        productId: item.productId,
+        productName: prod?.name || (item.productId ? 'Product' : 'Select a Product'),
+        brand: prod?.brand || '',
+        modelNumber: prod?.modelNumber || '',
+        category: prod?.category || '',
+        quantity: item.quantity || 1,
+        salePrice: item.salePrice || 0,
+        discount: item.discount || 0,
+        warranty: item.warranty || 'No Warranty',
+        subtotal: Math.max(0, ((item.quantity || 1) * (item.salePrice || 0)) - (item.discount || 0)),
+        selectedSerials: item.selectedSerials.map(sId => {
+          const sn = allSerials.find(s => s.id === sId);
+          return sn ? sn.serialNumber : sId;
+        })
+      };
+    });
+
+    const draftSubtotal = draftItems.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
+    const draftTotalDiscount = draftItems.reduce((sum, item) => sum + (item.discount || 0), 0);
+    const draftTotal = Math.max(0, draftSubtotal - draftTotalDiscount);
+
+    const currentDraftSale: Sale = {
+      id: editingSale?.id || 'draft-invoice',
+      invoiceNo: currentInvoiceNo,
+      customerId: currentCustomer.id,
+      customerName: currentCustomer.name,
+      items: draftItems,
+      total: draftTotal,
+      status: invoiceStatus,
+      paymentMode,
+      bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
+      bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : undefined,
+      accountTitle: paymentMode === 'Online' && matchedBank ? matchedBank.accountTitle : undefined,
+      date: invoiceDate ? new Date(invoiceDate).toISOString() : new Date().toISOString(),
+    };
+
     return (
       <div className="space-y-6">
         {/* Full-Page Header */}
@@ -1176,7 +1245,16 @@ export default function Sales() {
           </div>
           <button 
             type="button" 
-            onClick={() => { setShowModal(false); setEditingSale(null); setSelectedCustomerId('walk-in'); setPaymentMode('Cash'); setSelectedBankAccNumber(''); }} 
+            onClick={() => { 
+              setShowModal(false); 
+              setEditingSale(null); 
+              setInvoiceNumber('');
+              setInvoiceDate(new Date().toISOString().split('T')[0]);
+              setSelectedCustomerId('walk-in'); 
+              setPaymentMode('Cash'); 
+              setSelectedBankAccNumber('');
+              setInvoiceStatus('Paid');
+            }} 
             className="flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs text-sm font-bold"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1187,19 +1265,73 @@ export default function Sales() {
         {/* Full Page Invoice Creation Card */}
         <div className="glass-panel rounded-2xl shadow-sm border border-slate-200 overflow-hidden bg-white">
           <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col">
-            <div className="p-6 sm:p-8 space-y-6">
-              {/* Single Compact Panel for Customer, Payment Mode & Status */}
-              <div className="bg-[#f8faf9] p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-2xs">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
-                  
-                  {/* Select Customer */}
-                  <div className="md:col-span-5">
-                    <label htmlFor="customerId" className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Select Customer
+            <div className="p-4 sm:p-6 lg:p-8 space-y-8">
+              
+              {/* Top Two Panels: Left = Invoice Information (vertical), Right = Product Line Items (vertical) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT PANEL: Invoice Information (Vertically) */}
+                <div className="lg:col-span-4 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-[#0a382c]" />
+                      Invoice Information
+                    </h3>
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                      invoiceStatus === 'Pending' 
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    }`}>
+                      {invoiceStatus}
+                    </span>
+                  </div>
+
+                  {/* 1. Invoice Number : */}
+                  <div>
+                    <label htmlFor="invoiceNumberInput" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                      <span>Invoice Number :</span>
+                      {editingSale ? (
+                        <span className="text-[10px] text-emerald-700 font-semibold">(Editing)</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-semibold">(Auto-generated)</span>
+                      )}
+                    </label>
+                    <input
+                      id="invoiceNumberInput"
+                      type="text"
+                      required
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 focus:border-[#0a382c]"
+                      value={invoiceNumber || (editingSale ? editingSale.invoiceNo : getNextInvoiceNumber())}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      placeholder="e.g. INV-2026-0001"
+                    />
+                  </div>
+
+                  {/* 2. Date: */}
+                  <div>
+                    <label htmlFor="invoiceDateInput" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Date:</span>
+                    </label>
+                    <input
+                      id="invoiceDateInput"
+                      type="date"
+                      required
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                    />
+                  </div>
+
+                  {/* 3. Select Customer: */}
+                  <div>
+                    <label htmlFor="customerId" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Select Customer:</span>
                     </label>
                     <select
                       id="customerId"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                       value={selectedCustomerId}
                       onChange={(e) => setSelectedCustomerId(e.target.value)}
                     >
@@ -1218,22 +1350,24 @@ export default function Sales() {
                       const selectedCust = customers.find(c => c.id === selectedCustomerId);
                       if (!selectedCust) return null;
                       return (
-                        <div className="mt-1.5 p-2 rounded-lg bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5">
-                          {selectedCust.mobile && <div>Phone: <span className="font-bold text-slate-800">{selectedCust.mobile}</span></div>}
+                        <div className="mt-2 p-2.5 rounded-xl bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
+                          <div className="font-bold text-slate-800">{selectedCust.name}</div>
+                          {selectedCust.mobile && <div>Phone: <span className="font-semibold text-slate-800">{selectedCust.mobile}</span></div>}
                           {selectedCust.address && <div className="truncate">Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
                         </div>
                       );
                     })()}
                   </div>
 
-                  {/* Select Payment Mode */}
-                  <div className="md:col-span-4">
-                    <label htmlFor="paymentModeSelect" className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Select Payment Mode
+                  {/* 4. Payment Mode: */}
+                  <div>
+                    <label htmlFor="paymentModeSelect" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Payment Mode:</span>
                     </label>
                     <select
                       id="paymentModeSelect"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                       value={paymentMode}
                       onChange={(e) => {
                         const mode = e.target.value as 'Cash' | 'Online';
@@ -1249,8 +1383,8 @@ export default function Sales() {
 
                     {/* Bank Account Selection if Online */}
                     {paymentMode === 'Online' && (
-                      <div className="mt-2 pt-2 border-t border-slate-200/80">
-                        <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600 mb-1">
+                      <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 space-y-1.5">
+                        <label htmlFor="bankAccountSelect" className="block text-[11px] font-bold text-slate-600">
                           Select Bank Account <span className="text-red-500">*</span>
                         </label>
                         {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
@@ -1258,7 +1392,7 @@ export default function Sales() {
                             <select
                               id="bankAccountSelect"
                               required={paymentMode === 'Online'}
-                              className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white"
+                              className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
                               value={selectedBankAccNumber}
                               onChange={(e) => setSelectedBankAccNumber(e.target.value)}
                             >
@@ -1274,7 +1408,7 @@ export default function Sales() {
                               if (!chosenAcc) return null;
                               const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
                               return (
-                                <div className="mt-1.5 p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
+                                <div className="mt-2 p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[11px]">
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-600 font-medium">Bank Balance:</span>
                                     <span className="font-mono font-black text-[#0a382c]">
@@ -1303,233 +1437,424 @@ export default function Sales() {
                     )}
                   </div>
 
-                  {/* Status */}
-                  <div className="md:col-span-3">
-                    <label htmlFor="statusSelect" className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Status:
+                  {/* 5. Status: */}
+                  <div>
+                    <label htmlFor="statusSelect" className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                      <span>Status :</span>
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        invoiceStatus === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {invoiceStatus}
+                      </span>
                     </label>
                     <select
                       id="statusSelect"
-                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                      className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                       value={invoiceStatus}
                       onChange={(e) => setInvoiceStatus(e.target.value as 'Paid' | 'Pending')}
                     >
                       <option value="Paid">Paid</option>
                       <option value="Pending">Pending</option>
                     </select>
+                  </div>
+                </div>
 
-                    <div className="mt-2 text-[11px] text-slate-500 space-y-0.5">
-                      <div className="flex justify-between items-center">
-                        <span>Date:</span>
-                        <span className="font-semibold text-slate-700">{new Date().toLocaleDateString()}</span>
-                      </div>
-                      {editingSale && (
-                        <div className="flex justify-between items-center">
-                          <span>Invoice #:</span>
-                          <span className="font-mono font-bold text-slate-800">{editingSale.invoiceNo}</span>
+                {/* RIGHT PANEL: Product Line Items (Vertically) */}
+                <div className="lg:col-span-8 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-[#0a382c]" />
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Product Line Items
+                      </h3>
+                    </div>
+                    <span className="text-xs text-slate-600 font-bold bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+                      {invoiceItems.length} {invoiceItems.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+
+                  {/* Vertical Stack of Item Rows */}
+                  <div className="space-y-3.5">
+                    {invoiceItems.map((item, index) => {
+                      const selectedProduct = products.find(p => p.id === item.productId);
+                      const productSerials = allSerials.filter(sn => 
+                        sn.productId === item.productId && 
+                        (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
+                      );
+
+                      return (
+                        <div key={index} className="p-3.5 sm:p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs hover:border-slate-350 transition-all">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            {/* Product Selection */}
+                            <div className="md:col-span-4">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                Product #{index + 1}
+                              </label>
+                              <select
+                                required
+                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                value={item.productId}
+                                onChange={(e) => handleItemProductChange(index, e.target.value)}
+                              >
+                                <option value="">-- Select Product --</option>
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                                    {p.name} ({p.brand} - {p.modelNumber}) [Stock: {p.stock}]
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Unit Price */}
+                            <div className="md:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
+                              <input
+                                type="number"
+                                required
+                                min="0"
+                                step="0.01"
+                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                value={item.salePrice || ''}
+                                onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+
+                            {/* Quantity */}
+                            <div className="md:col-span-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
+                              <input
+                                type="number"
+                                required
+                                min="1"
+                                max={(() => {
+                                  let previousQty = 0;
+                                  if (editingSale && editingSale.items) {
+                                    const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
+                                    if (prevItem) {
+                                      previousQty = prevItem.quantity;
+                                    }
+                                  }
+                                  return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
+                                })()}
+                                className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
+                                value={item.quantity || ''}
+                                onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
+                              />
+                            </div>
+
+                            {/* Discount */}
+                            <div className="md:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                value={item.discount || ''}
+                                onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+
+                            {/* Warranty */}
+                            <div className="md:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
+                              <select
+                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
+                                value={item.warranty || 'No Warranty'}
+                                onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
+                              >
+                                <option value="No Warranty">No Warranty</option>
+                                <option value="3 Months">3 Months</option>
+                                <option value="6 Months">6 Months</option>
+                                <option value="1 Year">1 Year</option>
+                                <option value="2 Years">2 Years</option>
+                                <option value="3 Years">3 Years</option>
+                              </select>
+                            </div>
+
+                            {/* Subtotal & Delete */}
+                            <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
+                              <div className="text-right">
+                                <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
+                                <span className="text-xs font-black text-slate-900">
+                                  PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(index)}
+                                className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                                title="Delete row"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Serial Number Selector for Electronics */}
+                          {selectedProduct && productSerials.length > 0 && (
+                            <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                  Select Sold Serial Numbers (Required: {item.quantity})
+                                </span>
+                                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                  {productSerials.length} Available
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
+                                {productSerials.map(sn => {
+                                  const isChecked = item.selectedSerials.includes(sn.id);
+                                  return (
+                                    <label key={sn.id} className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                      isChecked 
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' 
+                                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
+                                    }`}>
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-slate-300 text-[#0a382c] focus:ring-[#0a382c] h-3.5 w-3.5"
+                                        checked={isChecked}
+                                        disabled={!isChecked && item.selectedSerials.length >= item.quantity}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked;
+                                          let newSerials = [...item.selectedSerials];
+                                          if (checked) {
+                                            if (newSerials.length < item.quantity) {
+                                              newSerials.push(sn.id);
+                                            }
+                                          } else {
+                                            newSerials = newSerials.filter(id => id !== sn.id);
+                                          }
+                                          const updatedItems = [...invoiceItems];
+                                          updatedItems[index] = { ...item, selectedSerials: newSerials };
+                                          setInvoiceItems(updatedItems);
+                                        }}
+                                      />
+                                      <span className="font-mono truncate">{sn.serialNumber}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              {item.selectedSerials.length !== item.quantity && (
+                                <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                                  <Info className="w-3 h-3" /> Please check exactly {item.quantity} serial number(s) to verify item delivery. (Selected: {item.selectedSerials.length})
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Item Row Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-white hover:bg-emerald-50/70 border border-slate-200 hover:border-emerald-200 px-4 py-2.5 rounded-xl transition-all shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Add Item Row
+                  </button>
+                </div>
+              </div>
+
+              {/* BELOW BOTH PANELS: Invoice Printable View (Dynamic Live Preview) */}
+              <div className="pt-8 border-t border-slate-200 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Printer className="w-4 h-4 text-[#0a382c]" />
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Invoice Printable View (Live Dynamic Preview)
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      This printable receipt automatically updates in real time as you adjust invoice information or product items above.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => printInvoice(currentDraftSale)}
+                    disabled={draftTotal <= 0}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold shadow-2xs transition-colors disabled:opacity-40"
+                    title="Print this preview"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#0a382c]" />
+                    Print Preview
+                  </button>
+                </div>
+
+                {/* Printable Document Paper Card */}
+                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
+                  {/* Store details and Header */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-slate-200">
+                    <div className="flex items-center gap-3.5">
+                      {storeDetails.logoUrl ? (
+                        <img src={storeDetails.logoUrl} alt="Store Logo" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-[#f0b90b] text-slate-900 font-black text-lg flex items-center justify-center border border-slate-200 shadow-2xs">
+                          {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
+                      <div>
+                        <h2 className="text-xl font-extrabold text-slate-900 leading-tight">{storeDetails.name || 'ElectroManage'}</h2>
+                        <p className="text-[11px] font-black tracking-wider uppercase text-emerald-700">Sales Invoice & Receipt</p>
+                      </div>
+                    </div>
+                    <div className="sm:text-right">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                        invoiceStatus === 'Pending' 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}>
+                        {invoiceStatus}
+                      </span>
                     </div>
                   </div>
 
-                </div>
-              </div>
+                  {/* Meta Grid: Seller & Customer */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs">
+                    {/* Seller Info */}
+                    <div className="space-y-1 text-slate-600">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Seller Info</span>
+                      <div className="font-bold text-slate-900 text-sm">{storeDetails.name || 'ElectroManage'}</div>
+                      {storeDetails.address && <div>{storeDetails.address}</div>}
+                      {storeDetails.phone && <div>Tel: {storeDetails.phone}</div>}
+                      {storeDetails.email && <div>Email: {storeDetails.email}</div>}
+                    </div>
 
-              {/* Line Items Table */}
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
-                    Product Line Items
-                  </span>
-                  <span className="text-xs text-slate-500 font-medium">
-                    {invoiceItems.length} item{invoiceItems.length === 1 ? '' : 's'} added
-                  </span>
-                </div>
+                    {/* Billed To */}
+                    <div className="space-y-1.5 md:text-right text-slate-600">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Billed To (Customer)</span>
+                      <div className="font-bold text-slate-900 text-sm">{currentCustomer.name}</div>
+                      {currentCustomer.mobile && <div>Phone: <span className="font-semibold text-slate-800">{currentCustomer.mobile}</span></div>}
+                      {currentCustomer.address && <div>Address: <span>{currentCustomer.address}</span></div>}
 
-                <div className="space-y-3.5">
-                  {invoiceItems.map((item, index) => {
-                    const selectedProduct = products.find(p => p.id === item.productId);
-                    const productSerials = allSerials.filter(sn => 
-                      sn.productId === item.productId && 
-                      (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
-                    );
-                    
-                    return (
-                      <div key={index} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-xs hover:border-slate-350 transition-all">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                          {/* Product Selection */}
-                          <div className="md:col-span-4">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Product</label>
-                            <select
-                              required
-                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                              value={item.productId}
-                              onChange={(e) => handleItemProductChange(index, e.target.value)}
-                            >
-                              <option value="">-- Select Product --</option>
-                              {products.map(p => (
-                                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                                  {p.name} ({p.brand} - {p.modelNumber}) [In Stock: {p.stock}]
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Unit Price */}
-                          <div className="md:col-span-2">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
-                            <input
-                              type="number"
-                              required
-                              min="0"
-                              step="0.01"
-                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                              value={item.salePrice || ''}
-                              onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
-                            />
-                          </div>
-
-                          {/* Quantity */}
-                          <div className="md:col-span-1">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
-                            <input
-                              type="number"
-                              required
-                              min="1"
-                              max={(() => {
-                                let previousQty = 0;
-                                if (editingSale && editingSale.items) {
-                                  const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
-                                  if (prevItem) {
-                                    previousQty = prevItem.quantity;
-                                  }
-                                }
-                                return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
-                              })()}
-                              className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
-                              value={item.quantity || ''}
-                              onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
-                            />
-                          </div>
-
-                          {/* Discount */}
-                          <div className="md:col-span-2">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                              value={item.discount || ''}
-                              onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
-                            />
-                          </div>
-
-                          {/* Warranty */}
-                          <div className="md:col-span-2">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
-                            <select
-                              className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                              value={item.warranty || 'No Warranty'}
-                              onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
-                            >
-                              <option value="No Warranty">No Warranty</option>
-                              <option value="3 Months">3 Months</option>
-                              <option value="6 Months">6 Months</option>
-                              <option value="1 Year">1 Year</option>
-                              <option value="2 Years">2 Years</option>
-                              <option value="3 Years">3 Years</option>
-                            </select>
-                          </div>
-
-                          {/* Subtotal */}
-                          <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
-                            <div className="text-right">
-                              <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
-                              <span className="text-xs font-black text-slate-900">
-                                PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItemRow(index)}
-                              className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-2"
-                              title="Delete row"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                      <div className="pt-2 mt-2 border-t border-slate-100 space-y-1 text-slate-600">
+                        <div>Invoice No: <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span></div>
+                        <div>Date: <span className="font-semibold text-slate-800">{invoiceDate ? new Date(invoiceDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
+                        <div>
+                          Payment Mode: <strong className="text-slate-900">{paymentMode}</strong>
+                          {paymentMode === 'Online' && matchedBank && (
+                            <span className="text-[11px] text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
+                          )}
                         </div>
-
-                        {/* Serial Number Selector for Electronics */}
-                        {selectedProduct && productSerials.length > 0 && (
-                          <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                                Select Sold Serial Numbers (Required: {item.quantity})
-                              </span>
-                              <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                                {productSerials.length} Available
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
-                              {productSerials.map(sn => {
-                                const isChecked = item.selectedSerials.includes(sn.id);
-                                return (
-                                  <label key={sn.id} className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                                    isChecked 
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' 
-                                      : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                                  }`}>
-                                    <input
-                                      type="checkbox"
-                                      className="rounded border-slate-300 text-[#0a382c] focus:ring-[#0a382c] h-3.5 w-3.5"
-                                      checked={isChecked}
-                                      disabled={!isChecked && item.selectedSerials.length >= item.quantity}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked;
-                                        let newSerials = [...item.selectedSerials];
-                                        if (checked) {
-                                          if (newSerials.length < item.quantity) {
-                                            newSerials.push(sn.id);
-                                          }
-                                        } else {
-                                          newSerials = newSerials.filter(id => id !== sn.id);
-                                        }
-                                        const updatedItems = [...invoiceItems];
-                                        updatedItems[index] = { ...item, selectedSerials: newSerials };
-                                        setInvoiceItems(updatedItems);
-                                      }}
-                                    />
-                                    <span className="font-mono truncate">{sn.serialNumber}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            {item.selectedSerials.length !== item.quantity && (
-                              <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                                <Info className="w-3 h-3" /> Please check exactly {item.quantity} serial number(s) to verify item delivery. (Selected: {item.selectedSerials.length})
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddItemRow}
-                  className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 px-4 py-2.5 rounded-xl transition-all shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1.5" />
-                  Add Item Row
-                </button>
+                  {/* Line Items Table */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/70">
+                          <th className="py-2.5 px-3 text-left font-bold text-slate-500 uppercase text-[10px]">#</th>
+                          <th className="py-2.5 px-3 text-left font-bold text-slate-500 uppercase text-[10px]">Product</th>
+                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Price</th>
+                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Qty</th>
+                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Discount</th>
+                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Warranty</th>
+                          <th className="py-2.5 px-3 text-right font-bold text-slate-500 uppercase text-[10px]">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {draftItems.filter(item => item.productId).length > 0 ? (
+                          draftItems
+                            .filter(item => item.productId)
+                            .map((item, idx) => (
+                              <tr key={idx} className="align-top">
+                                <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                                <td className="py-3 px-3">
+                                  <div className="font-bold text-slate-900">{item.productName}</div>
+                                  {(item.brand || item.modelNumber) && (
+                                    <div className="text-[10px] text-slate-500 mt-0.5">{item.brand} • {item.modelNumber}</div>
+                                  )}
+                                  {item.selectedSerials && item.selectedSerials.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">S/N:</span>
+                                      {item.selectedSerials.map((sn, sIdx) => (
+                                        <span key={sIdx} className="font-mono text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                          {sn}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center text-slate-700 font-mono">PKR {item.salePrice.toFixed(2)}</td>
+                                <td className="py-3 px-3 text-center font-bold text-slate-900">{item.quantity}</td>
+                                <td className="py-3 px-3 text-center text-slate-600">
+                                  {item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}
+                                </td>
+                                <td className="py-3 px-3 text-center text-slate-600">{item.warranty || 'No Warranty'}</td>
+                                <td className="py-3 px-3 text-right font-bold font-mono text-slate-900">
+                                  PKR {item.subtotal.toFixed(2)}
+                                </td>
+                              </tr>
+                            ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-slate-400 italic text-xs">
+                              No products selected yet. Select products from the line items section above to preview them here.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Totals Summary */}
+                  <div className="flex justify-end pt-4 border-t border-slate-200">
+                    <div className="w-72 space-y-2 text-xs">
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal (Pre-discount):</span>
+                        <span className="font-semibold text-slate-800 font-mono">PKR {draftSubtotal.toFixed(2)}</span>
+                      </div>
+                      {draftTotalDiscount > 0 && (
+                        <div className="flex justify-between text-red-600">
+                          <span>Total Discount:</span>
+                          <span className="font-semibold font-mono">-PKR {draftTotalDiscount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-500">
+                        <span>Tax / VAT (0%):</span>
+                        <span className="font-mono">PKR 0.00</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2.5 border-t border-slate-300 text-sm">
+                        <span className="font-black text-slate-900">
+                          {invoiceStatus === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}
+                        </span>
+                        <span className="font-black font-mono text-base text-[#0a382c]">
+                          PKR {draftTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Online Bank Account Note */}
+                  {paymentMode === 'Online' && matchedBank && (
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
+                      <span className="font-bold text-slate-800 block mb-0.5">Online Payment Channel:</span>
+                      <div className="text-slate-600">
+                        Bank: <strong className="text-slate-800">{matchedBank.bankName}</strong> | Account #: <span className="font-mono font-bold text-slate-900">{matchedBank.accountNumber}</span> {matchedBank.accountTitle ? `(${matchedBank.accountTitle})` : ''}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="pt-6 border-t border-slate-200 text-center text-[11px] text-slate-400 font-medium space-y-1">
+                    <p>Thank you for your purchase!</p>
+                    <p>For any warranty claims, please present this original invoice.</p>
+                  </div>
+                </div>
               </div>
+
             </div>
 
+            {/* Bottom Form Actions Bar */}
             <div className="bg-[#f8faf9] px-6 py-4 sm:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-slate-200">
               <div className="text-center sm:text-left">
                 <span className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold block">Invoice Total Amount</span>
@@ -1542,8 +1867,10 @@ export default function Sales() {
                   onClick={() => { 
                     setShowModal(false); 
                     setEditingSale(null); 
+                    setInvoiceNumber('');
+                    setInvoiceDate(new Date().toISOString().split('T')[0]);
                     setSelectedCustomerId('walk-in'); 
-                    setPaymentMode('Cash');
+                    setPaymentMode('Cash'); 
                     setSelectedBankAccNumber('');
                     setInvoiceStatus('Paid');
                   }} 
@@ -1596,6 +1923,8 @@ export default function Sales() {
         <button 
           onClick={() => {
             setEditingSale(null);
+            setInvoiceNumber(getNextInvoiceNumber());
+            setInvoiceDate(new Date().toISOString().split('T')[0]);
             setSelectedCustomerId('walk-in');
             setPaymentMode('Cash');
             setSelectedBankAccNumber('');
