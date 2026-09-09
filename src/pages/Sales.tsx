@@ -944,30 +944,30 @@ export default function Sales() {
             margin-bottom: 8px;
           }
           .logo-cell {
-            width: 105px;
+            width: 115px;
             vertical-align: middle;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 85px;
-            height: 85px;
-            border-radius: 12px;
+            width: 95px;
+            height: 95px;
+            border-radius: 14px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
           }
           .logo-img {
-            width: 85px;
-            height: 85px;
-            border-radius: 12px;
+            width: 95px;
+            height: 95px;
+            border-radius: 14px;
             object-fit: contain;
             border: none;
             outline: none;
@@ -981,12 +981,12 @@ export default function Sales() {
             padding: 0 8px;
           }
           .right-spacer-cell {
-            width: 105px;
+            width: 115px;
             vertical-align: middle;
           }
           .company-name {
             font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
-            font-size: 38px;
+            font-size: 44px;
             font-weight: 900;
             color: #000000;
             margin: 0;
@@ -994,31 +994,31 @@ export default function Sales() {
             text-align: center;
             letter-spacing: 0.01em;
             text-decoration: underline;
-            text-underline-offset: 6px;
-            text-decoration-thickness: 2.5px;
+            text-underline-offset: 7px;
+            text-decoration-thickness: 3px;
             text-decoration-color: #000000;
           }
           .details-cell {
-            padding-top: 1px;
+            padding-top: 2px;
             padding-bottom: 0;
             vertical-align: top;
             text-align: left;
           }
           .company-left-details {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.35;
+            font-size: 16px;
+            line-height: 1.4;
             color: #1e293b;
             text-align: left;
           }
           .left-detail-row {
-            margin-bottom: 1px;
+            margin-bottom: 2px;
             word-break: break-word;
           }
           .left-detail-label {
             font-weight: 700;
             color: #000000;
-            margin-right: 4px;
+            margin-right: 5px;
           }
           .meta-grid {
             width: 100%;
@@ -1771,15 +1771,15 @@ export default function Sales() {
                     {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
                     <div className="flex items-center justify-between gap-4 pt-0 pb-0">
                       {/* Company Logo on Left */}
-                      <div className="w-20 sm:w-24 flex-shrink-0">
+                      <div className="w-24 sm:w-28 flex-shrink-0">
                         {storeDetails.logoUrl ? (
                           <img 
                             src={storeDetails.logoUrl} 
                             alt="Store Logo" 
-                            className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                            className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
                           />
                         ) : (
-                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-slate-950 font-black text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
                             {getInitials(storeDetails.name || 'ElectroManage')}
                           </div>
                         )}
@@ -1789,21 +1789,21 @@ export default function Sales() {
                       <div className="flex-1 text-center py-0 sm:px-4">
                         <h2 
                           style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                          className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-6 decoration-[2.5px] decoration-slate-950"
+                          className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
                         >
                           {storeDetails.name || 'ElectroManage'}
                         </h2>
                       </div>
 
                       {/* Right spacer for symmetry */}
-                      <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
+                      <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
                     </div>
 
-                    {/* Company Info under Logo on left side in Calibri font size 14 - MOVED UP */}
-                    <div className="mt-0.5 text-left max-w-sm">
+                    {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
+                    <div className="mt-1 text-left max-w-md">
                       <div 
                         style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                        className="text-[14px] text-slate-800 space-y-0.5 leading-tight"
+                        className="text-[16px] text-slate-800 space-y-0.5 leading-snug"
                       >
                         <p>
                           <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
@@ -2192,16 +2192,16 @@ export default function Sales() {
                   {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
                   <div className="flex items-center justify-between gap-4 pt-0 pb-0">
                     {/* Company Logo on Left */}
-                    <div className="w-20 sm:w-24 flex-shrink-0">
+                    <div className="w-24 sm:w-28 flex-shrink-0">
                       {storeDetails.logoUrl ? (
                         <img 
                           src={storeDetails.logoUrl} 
                           alt="Company Logo" 
-                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                          className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border-0 shadow-none ring-0 outline-none">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-3xl sm:text-4xl border-0 shadow-none ring-0 outline-none">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
@@ -2211,21 +2211,21 @@ export default function Sales() {
                     <div className="flex-1 text-center py-0 sm:px-4">
                       <h3 
                         style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                        className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-6 decoration-[2.5px] decoration-slate-950"
+                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
                       >
                         {storeDetails.name || 'ElectroManage'}
                       </h3>
                     </div>
 
                     {/* Right spacer for symmetry */}
-                    <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
+                    <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
                   </div>
 
-                  {/* Company Info under Logo on left side in Calibri font size 14 - MOVED UP */}
-                  <div className="mt-0.5 text-left max-w-sm">
+                  {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
+                  <div className="mt-1 text-left max-w-md">
                     <div 
                       style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                      className="text-[14px] text-slate-800 space-y-0.5 leading-tight"
+                      className="text-[16px] text-slate-800 space-y-0.5 leading-snug"
                     >
                       <p>
                         <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
