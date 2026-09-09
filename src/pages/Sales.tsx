@@ -880,7 +880,7 @@ export default function Sales() {
     const itemsRows = sale.items && sale.items.length > 0 
       ? sale.items.map(item => `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 5px 8px; text-align: left; vertical-align: top;">
+          <td style="padding: 6px 10px; text-align: left; vertical-align: top;">
             <div style="font-weight: bold; color: #1e293b; font-size: 11px;">${item.productName}</div>
             <div style="font-size: 9px; color: #64748b; margin-top: 1px;">
               ${item.brand} • ${item.modelNumber} • ${item.category}
@@ -892,16 +892,14 @@ export default function Sales() {
               </div>
             ` : ''}
           </td>
-          <td style="padding: 5px 8px; text-align: center; font-weight: 500; color: #334155; vertical-align: top; font-size: 11px;">PKR ${item.salePrice.toFixed(2)}</td>
-          <td style="padding: 5px 8px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">${item.quantity}</td>
-          <td style="padding: 5px 8px; text-align: center; color: #475569; vertical-align: top; font-size: 11px;">${item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}</td>
-          <td style="padding: 5px 8px; text-align: center; color: #475569; vertical-align: top; font-size: 11px;">${item.warranty || 'No Warranty'}</td>
-          <td style="padding: 5px 8px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">PKR ${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
+          <td style="padding: 6px 10px; text-align: center; font-weight: 500; color: #334155; vertical-align: top; font-size: 11px;">PKR ${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 6px 10px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">${item.quantity}</td>
+          <td style="padding: 6px 10px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
         <tr>
-          <td colspan="6" style="padding: 16px 0; text-align: center; color: #64748b; font-style: italic; font-size: 11px;">
+          <td colspan="4" style="padding: 16px 0; text-align: center; color: #64748b; font-style: italic; font-size: 11px;">
             No itemized details recorded.
           </td>
         </tr>
@@ -1025,32 +1023,43 @@ export default function Sales() {
           .meta-grid {
             width: 100%;
             border-collapse: collapse;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
+            border-bottom: none;
+            padding-bottom: 4px;
+            margin-bottom: 10px;
           }
           .meta-grid td {
             vertical-align: top;
             font-size: 11px;
-            padding-bottom: 6px;
+            padding-bottom: 4px;
           }
           .items-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 16px;
           }
+          .items-table thead {
+            background-color: #000000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .items-table thead tr {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+          }
           .items-table th {
-            background-color: #f8fafc;
-            color: #475569;
-            font-size: 10px;
+            background-color: #000000 !important;
+            color: #ffffff !important;
+            font-size: 11px;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 6px 8px;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 7px 10px;
+            border: 1px solid #000000;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .items-table td {
-            padding: 5px 8px;
+            padding: 6px 10px;
             font-size: 11px;
           }
           .totals-table {
@@ -1147,13 +1156,11 @@ export default function Sales() {
 
           <table class="items-table">
             <thead>
-              <tr>
-                <th style="text-align: left; width: 45%;">Product</th>
-                <th style="text-align: center; width: 12%;">Price</th>
-                <th style="text-align: center; width: 8%;">Qty</th>
-                <th style="text-align: center; width: 12%;">Discount</th>
-                <th style="text-align: center; width: 13%;">Warranty</th>
-                <th style="text-align: right; width: 10%;">Total</th>
+              <tr style="background-color: #000000; color: #ffffff;">
+                <th style="text-align: left; width: 55%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRODUCT</th>
+                <th style="text-align: center; width: 15%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRICE</th>
+                <th style="text-align: center; width: 12%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">QTY</th>
+                <th style="text-align: right; width: 18%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">TOTAL</th>
               </tr>
             </thead>
             <tbody>
@@ -1181,17 +1188,6 @@ export default function Sales() {
               <td style="text-align: right; padding-top: 10px;">PKR ${sale.total?.toFixed(2)}</td>
             </tr>
           </table>
-
-          ${storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? `
-            <div style="margin-top: 16px; font-size: 11px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-              <strong style="color: #0f172a; font-size: 11px; display: block; margin-bottom: 4px;">Bank Account Details for Payment:</strong>
-              ${storeDetails.bankAccounts.map(acc => `
-                <div style="color: #334155; margin-bottom: 2px;">
-                  <strong>${acc.bankName}:</strong> Acc #: <span style="font-family: monospace; font-weight: 700;">${acc.accountNumber}</span> ${acc.accountTitle ? `(${acc.accountTitle})` : ''}
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
 
           <div class="footer">
             Thank you for your purchase!<br>
@@ -1825,8 +1821,8 @@ export default function Sales() {
                     <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
                   </div>
 
-                  {/* Meta Grid: Customer & Invoice Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs sm:text-sm">
+                  {/* Meta Grid: Customer & Invoice Details (no line under payment mode) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm">
                     {/* Customer & Payment Mode */}
                     <div className="space-y-1 text-slate-700">
                       <div className="flex items-baseline gap-2">
@@ -1859,18 +1855,15 @@ export default function Sales() {
                     </div>
                   </div>
 
-                  {/* Line Items Table */}
+                  {/* Line Items Table with Black Rectangle header & White Text */}
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-xs border-collapse">
                       <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/70">
-                          <th className="py-2.5 px-3 text-left font-bold text-slate-500 uppercase text-[10px]">#</th>
-                          <th className="py-2.5 px-3 text-left font-bold text-slate-500 uppercase text-[10px]">Product</th>
-                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Price</th>
-                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Qty</th>
-                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Discount</th>
-                          <th className="py-2.5 px-3 text-center font-bold text-slate-500 uppercase text-[10px]">Warranty</th>
-                          <th className="py-2.5 px-3 text-right font-bold text-slate-500 uppercase text-[10px]">Total</th>
+                        <tr className="bg-black text-white">
+                          <th className="py-2 px-3 text-left font-extrabold uppercase text-[11px] tracking-wider text-white bg-black rounded-l">PRODUCT</th>
+                          <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRICE</th>
+                          <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">QTY</th>
+                          <th className="py-2 px-3 text-right font-extrabold uppercase text-[11px] tracking-wider text-white bg-black rounded-r">TOTAL</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1879,8 +1872,7 @@ export default function Sales() {
                             .filter(item => item.productId)
                             .map((item, idx) => (
                               <tr key={idx} className="align-top">
-                                <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                                <td className="py-3 px-3">
+                                <td className="py-2.5 px-3">
                                   <div className="font-bold text-slate-900">{item.productName}</div>
                                   {(item.brand || item.modelNumber) && (
                                     <div className="text-[10px] text-slate-500 mt-0.5">{item.brand} • {item.modelNumber}</div>
@@ -1896,20 +1888,16 @@ export default function Sales() {
                                     </div>
                                   )}
                                 </td>
-                                <td className="py-3 px-3 text-center text-slate-700 font-mono">PKR {item.salePrice.toFixed(2)}</td>
-                                <td className="py-3 px-3 text-center font-bold text-slate-900">{item.quantity}</td>
-                                <td className="py-3 px-3 text-center text-slate-600">
-                                  {item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}
-                                </td>
-                                <td className="py-3 px-3 text-center text-slate-600">{item.warranty || 'No Warranty'}</td>
-                                <td className="py-3 px-3 text-right font-bold font-mono text-slate-900">
+                                <td className="py-2.5 px-3 text-center text-slate-700 font-mono">PKR {item.salePrice.toFixed(2)}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-slate-900">{item.quantity}</td>
+                                <td className="py-2.5 px-3 text-right font-bold font-mono text-slate-900">
                                   PKR {item.subtotal.toFixed(2)}
                                 </td>
                               </tr>
                             ))
                         ) : (
                           <tr>
-                            <td colSpan={7} className="py-8 text-center text-slate-400 italic text-xs">
+                            <td colSpan={4} className="py-8 text-center text-slate-400 italic text-xs">
                               No products selected yet. Select products from the line items section above to preview them here.
                             </td>
                           </tr>
@@ -1945,16 +1933,6 @@ export default function Sales() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Online Bank Account Note */}
-                  {paymentMode === 'Online' && matchedBank && (
-                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
-                      <span className="font-bold text-slate-800 block mb-0.5">Online Payment Channel:</span>
-                      <div className="text-slate-600">
-                        Bank: <strong className="text-slate-800">{matchedBank.bankName}</strong> | Account #: <span className="font-mono font-bold text-slate-900">{matchedBank.accountNumber}</span> {matchedBank.accountTitle ? `(${matchedBank.accountTitle})` : ''}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Footer */}
                   <div className="pt-6 border-t border-slate-200 text-center text-[11px] text-slate-400 font-medium space-y-1">
@@ -2265,8 +2243,8 @@ export default function Sales() {
                   <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
                 </div>
 
-                {/* Meta & Customer/Invoice details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs sm:text-sm">
+                {/* Meta & Customer/Invoice details (no line under payment mode) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm">
                   {/* Customer & Payment Mode */}
                   <div className="space-y-1 text-slate-700">
                     <div className="flex items-baseline gap-2">
@@ -2305,14 +2283,12 @@ export default function Sales() {
                   {selectedSale.items && selectedSale.items.length > 0 ? (
                     <div className="border border-slate-100 rounded-xl overflow-hidden">
                       <table className="min-w-full divide-y divide-slate-100">
-                        <thead className="bg-[#f8faf9]">
+                        <thead className="bg-black text-white">
                           <tr>
-                            <th className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
-                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
-                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Qty</th>
-                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Discount</th>
-                            <th className="px-4 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Warranty</th>
-                            <th className="px-4 py-2.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total</th>
+                            <th className="px-4 py-2.5 text-left text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">PRODUCT</th>
+                            <th className="px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">PRICE</th>
+                            <th className="px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">QTY</th>
+                            <th className="px-4 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs">
@@ -2334,12 +2310,6 @@ export default function Sales() {
                               </td>
                               <td className="px-4 py-3 text-center font-semibold text-slate-700">PKR {item.salePrice.toFixed(2)}</td>
                               <td className="px-4 py-3 text-center font-bold text-slate-900">{item.quantity}</td>
-                              <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                                {item.discount && item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}
-                              </td>
-                              <td className="px-4 py-3 text-center text-slate-600 font-semibold">
-                                {item.warranty || 'No Warranty'}
-                              </td>
                               <td className="px-4 py-3 text-right font-bold text-slate-900">
                                 PKR {(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
                               </td>
@@ -2356,21 +2326,8 @@ export default function Sales() {
                   )}
                 </div>
 
-                {/* Totals & Bank panel */}
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-4 border-t border-slate-100">
-                  {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
-                    <div className="w-full sm:max-w-xs text-xs bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Store Bank Accounts</span>
-                      <div className="space-y-1">
-                        {storeDetails.bankAccounts.map((acc, idx) => (
-                          <div key={idx} className="text-[11px] text-slate-700">
-                            <span className="font-bold">{acc.bankName}:</span> <span className="font-mono font-bold text-slate-900">{acc.accountNumber}</span>
-                            {acc.accountTitle && <span className="text-slate-500 block text-[10px]">Title: {acc.accountTitle}</span>}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : <div />}
+                {/* Totals panel */}
+                <div className="flex flex-col sm:flex-row justify-end items-start gap-4 pt-4 border-t border-slate-100">
 
                   <div className="w-full sm:w-1/2 text-right space-y-1.5 text-xs">
                     <div className="flex justify-between font-semibold text-slate-500">
