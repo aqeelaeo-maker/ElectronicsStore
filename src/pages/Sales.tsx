@@ -901,7 +901,7 @@ export default function Sales() {
         <meta charset="utf-8">
         <title>Invoice - ${sale.invoiceNo}</title>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
@@ -923,30 +923,30 @@ export default function Sales() {
             border-bottom: 2px solid #e2e8f0;
           }
           .logo-cell {
-            width: 120px;
+            width: 250px;
             vertical-align: top;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 105px;
-            height: 105px;
+            width: 100px;
+            height: 100px;
             border-radius: 16px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
+            font-size: 38px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
-            margin-top: -12px;
+            margin-top: -10px;
           }
           .logo-img {
-            width: 105px;
-            height: 105px;
+            width: 100px;
+            height: 100px;
             border-radius: 16px;
             object-fit: contain;
             border: none;
@@ -954,15 +954,32 @@ export default function Sales() {
             box-shadow: none;
             background: transparent;
             display: block;
-            margin-top: -12px;
+            margin-top: -10px;
+          }
+          .company-left-details {
+            font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.45;
+            color: #334155;
+            margin-top: 10px;
+            text-align: left;
+          }
+          .left-detail-row {
+            margin-bottom: 3px;
+            word-break: break-word;
+          }
+          .left-detail-label {
+            font-weight: 700;
+            color: #0f172a;
+            margin-right: 4px;
           }
           .center-info-cell {
             text-align: center;
             vertical-align: top;
-            padding: 0 16px;
+            padding: 0 12px;
           }
           .right-spacer-cell {
-            width: 120px;
+            width: 250px;
             vertical-align: top;
           }
           .company-name {
@@ -979,30 +996,6 @@ export default function Sales() {
             text-decoration-thickness: 3px;
             text-decoration-color: #0f172a;
           }
-          .company-address {
-            font-size: 16px;
-            font-weight: 600;
-            color: #334155;
-            margin: 0 0 5px 0;
-            text-align: center;
-            line-height: 1.4;
-          }
-          .company-contact {
-            font-size: 16px;
-            font-weight: 700;
-            color: #1e293b;
-            margin: 0 0 5px 0;
-            text-align: center;
-            line-height: 1.4;
-          }
-          .company-email {
-            font-size: 15px;
-            font-weight: 600;
-            color: #0f766e;
-            margin: 0 0 8px 0;
-            text-align: center;
-            line-height: 1.4;
-          }
           .document-title {
             display: inline-block;
             font-size: 12px;
@@ -1014,7 +1007,7 @@ export default function Sales() {
             padding: 4px 16px;
             border-radius: 9999px;
             font-weight: 800;
-            margin-top: 4px;
+            margin-top: 6px;
           }
           .meta-grid {
             width: 100%;
@@ -1105,13 +1098,15 @@ export default function Sales() {
                   ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
                   : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
                 }
+                <div class="company-left-details">
+                  <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails.address || 'N/A'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails.phone || 'N/A'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails.email || 'N/A'}</div>
+                </div>
               </td>
               <td class="center-info-cell">
                 <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
-                ${storeDetails.address ? `<div class="company-address">${storeDetails.address}</div>` : ''}
-                <div class="company-contact">Contact: <strong>${storeDetails.phone || 'N/A'}</strong></div>
-                ${storeDetails.email ? `<div class="company-email">Email: <strong>${storeDetails.email}</strong></div>` : ''}
-                <div style="margin-top: 6px;">
+                <div style="margin-top: 8px;">
                   <span class="document-title">Sales Invoice & Receipt</span>
                 </div>
               </td>
@@ -1767,10 +1762,10 @@ export default function Sales() {
 
                 {/* Printable Document Paper Card */}
                 <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
-                  {/* Store details and Header (Logo on Top Left Corner) */}
-                  <div className="relative pb-6 border-b-2 border-slate-200">
-                    {/* Company Logo on Top Left Corner (Moved slightly up, no border rectangle) */}
-                    <div className="sm:absolute sm:left-0 sm:-top-3 lg:-top-4 mb-4 sm:mb-0 flex justify-center sm:justify-start">
+                  {/* Store details and Header (Logo on Top Left Corner and Contact Details under Logo in Calibri) */}
+                  <div className="relative pb-6 border-b-2 border-slate-200 min-h-[140px]">
+                    {/* Company Logo on Top Left Corner and Details under Logo */}
+                    <div className="sm:absolute sm:left-0 sm:-top-3 lg:-top-4 mb-4 sm:mb-0 flex flex-col items-center sm:items-start text-left max-w-xs">
                       {storeDetails.logoUrl ? (
                         <img 
                           src={storeDetails.logoUrl} 
@@ -1782,10 +1777,26 @@ export default function Sales() {
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
+
+                      {/* Company Info under Logo in Calibri font */}
+                      <div 
+                        style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                        className="mt-2.5 text-xs sm:text-sm text-slate-700 space-y-1 text-left w-full"
+                      >
+                        <p className="leading-snug">
+                          <strong className="text-slate-900 font-bold">Address:</strong> {storeDetails.address || 'N/A'}
+                        </p>
+                        <p className="leading-snug">
+                          <strong className="text-slate-900 font-bold">Phone:</strong> {storeDetails.phone || 'N/A'}
+                        </p>
+                        <p className="leading-snug">
+                          <strong className="text-slate-900 font-bold">Email:</strong> {storeDetails.email || 'N/A'}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
-                    <div className="text-center sm:px-28 space-y-2">
+                    <div className="text-center sm:px-36 lg:px-44 space-y-3 pt-1">
                       {/* Company Name (Enlarged, Professional Font, Underlined) */}
                       <h2 
                         style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
@@ -1793,25 +1804,6 @@ export default function Sales() {
                       >
                         {storeDetails.name || 'ElectroManage'}
                       </h2>
-
-                      {/* Address (Under Company Name, enlarged) */}
-                      {storeDetails.address && (
-                        <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-xl mx-auto leading-relaxed pt-1">
-                          {storeDetails.address}
-                        </p>
-                      )}
-
-                      {/* Contact / Mobile Number (Under Address, enlarged) */}
-                      <p className="text-sm sm:text-base font-bold text-slate-800">
-                        Contact: <span className="font-mono">{storeDetails.phone || 'N/A'}</span>
-                      </p>
-
-                      {/* Email Address (Enlarged) */}
-                      {storeDetails.email && (
-                        <p className="text-sm sm:text-base font-semibold text-teal-800">
-                          Email: <span>{storeDetails.email}</span>
-                        </p>
-                      )}
 
                       {/* Document Title & Status Pill */}
                       <div className="flex items-center justify-center gap-2.5 pt-2">
@@ -2205,8 +2197,8 @@ export default function Sales() {
               <div className="bg-white p-6 sm:p-8 space-y-6">
                 {/* Store details and Header (Logo on Top Left Corner) */}
                 <div className="relative pb-6 border-b-2 border-slate-200">
-                  {/* Company Logo on Top Left Corner (Moved slightly up, no border rectangle) */}
-                  <div className="sm:absolute sm:left-0 sm:-top-3 mb-4 sm:mb-0 flex justify-center sm:justify-start">
+                  {/* Company Logo on Top Left Corner and Details under Logo */}
+                  <div className="sm:absolute sm:left-0 sm:-top-3 mb-4 sm:mb-0 flex flex-col items-center sm:items-start text-left max-w-[200px]">
                     {storeDetails.logoUrl ? (
                       <img 
                         src={storeDetails.logoUrl} 
@@ -2219,10 +2211,26 @@ export default function Sales() {
                         {getInitials(storeDetails.name || 'ElectroManage')}
                       </div>
                     )}
+
+                    {/* Company Info under Logo in Calibri font */}
+                    <div 
+                      style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                      className="mt-2 text-xs text-slate-700 space-y-1 text-left w-full"
+                    >
+                      <p className="leading-snug">
+                        <strong className="text-slate-900 font-bold">Address:</strong> {storeDetails.address || 'N/A'}
+                      </p>
+                      <p className="leading-snug">
+                        <strong className="text-slate-900 font-bold">Phone:</strong> {storeDetails.phone || 'N/A'}
+                      </p>
+                      <p className="leading-snug">
+                        <strong className="text-slate-900 font-bold">Email:</strong> {storeDetails.email || 'N/A'}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
-                  <div className="text-center sm:px-24 space-y-2">
+                  <div className="text-center sm:px-28 space-y-2 pt-1">
                     {/* Company Name (Enlarged, Professional Font, Underlined) */}
                     <h3 
                       style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
@@ -2231,26 +2239,7 @@ export default function Sales() {
                       {storeDetails.name || 'ElectroManage'}
                     </h3>
 
-                    {/* Address (Under Company Name, enlarged) */}
-                    {storeDetails.address && (
-                      <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-lg mx-auto leading-relaxed pt-1">
-                        {storeDetails.address}
-                      </p>
-                    )}
-
-                    {/* Contact Number (Under Address, enlarged) */}
-                    <p className="text-sm sm:text-base font-bold text-slate-800">
-                      Contact: <span className="font-mono">{storeDetails.phone || 'N/A'}</span>
-                    </p>
-
-                    {/* Email Address (Enlarged) */}
-                    {storeDetails.email && (
-                      <p className="text-xs sm:text-sm font-semibold text-teal-800">
-                        Email: <span>{storeDetails.email}</span>
-                      </p>
-                    )}
-
-                    <div className="pt-1.5">
+                    <div className="pt-2">
                       <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
                         Sales Invoice & Receipt
                       </span>
