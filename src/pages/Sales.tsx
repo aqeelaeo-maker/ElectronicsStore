@@ -892,6 +892,7 @@ export default function Sales() {
 
     const subtotal = sale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0) || sale.total;
     const totalDiscount = sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0;
+    const matchedCust = customers.find(c => c.id === sale.customerId || c.name.toLowerCase() === sale.customerName.toLowerCase());
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -914,45 +915,74 @@ export default function Sales() {
             max-width: 800px;
             margin: 0 auto;
           }
-          .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
+          .invoice-header-center {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
           }
           .logo-container {
-            width: 50px;
-            height: 50px;
-            border-radius: 8px;
+            width: 96px;
+            height: 96px;
+            border-radius: 16px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 36px;
             font-weight: 900;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #cbd5e1;
+            margin: 0 auto 12px auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
           }
           .logo-img {
-            width: 50px;
-            height: 50px;
-            border-radius: 8px;
+            width: 96px;
+            height: 96px;
+            border-radius: 16px;
             object-fit: cover;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #cbd5e1;
+            display: block;
+            margin: 0 auto 12px auto;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
           }
           .company-name {
-            font-size: 22px;
-            font-weight: 800;
+            font-size: 32px;
+            font-weight: 900;
             color: #0f172a;
-            margin: 0;
+            margin: 0 0 6px 0;
             line-height: 1.2;
+            text-align: center;
+            letter-spacing: -0.02em;
+          }
+          .company-address {
+            font-size: 14px;
+            font-weight: 500;
+            color: #475569;
+            margin: 0 0 4px 0;
+            text-align: center;
+            line-height: 1.4;
+          }
+          .company-mobile {
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+            margin: 0 0 8px 0;
+            text-align: center;
+            line-height: 1.4;
           }
           .document-title {
+            display: inline-block;
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: #059669;
-            font-weight: 900;
-            margin: 4px 0 0 0;
+            letter-spacing: 0.12em;
+            color: #047857;
+            background-color: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            padding: 3px 14px;
+            border-radius: 9999px;
+            font-weight: 800;
+            margin-top: 4px;
           }
           .meta-grid {
             width: 100%;
@@ -1036,44 +1066,33 @@ export default function Sales() {
       </head>
       <body>
         <div class="receipt-container">
-          <table class="header-table">
-            <tr>
-              <td>
-                <table style="border-collapse: collapse;">
-                  <tr>
-                    <td style="padding-right: 12px; vertical-align: middle;">
-                      ${storeDetails.logoUrl 
-                        ? `<img src="${storeDetails.logoUrl}" class="logo-img" />`
-                        : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
-                      }
-                    </td>
-                    <td style="vertical-align: middle;">
-                      <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
-                      <p class="document-title">Sales Invoice & Receipt</p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
+          <div class="invoice-header-center">
+            ${storeDetails.logoUrl 
+              ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
+              : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
+            }
+            <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
+            <div class="company-address">${storeDetails.address || ''}</div>
+            <div class="company-mobile">Mobile: ${storeDetails.phone || 'N/A'}${storeDetails.email ? ` &nbsp;|&nbsp; Email: ${storeDetails.email}` : ''}</div>
+            <div style="margin-top: 6px;">
+              <span class="document-title">Sales Invoice & Receipt</span>
+            </div>
+          </div>
 
           <table class="meta-grid">
             <tr>
-              <td style="width: 50%; padding-right: 20px;">
-                <span class="section-title">Seller Info</span>
-                <div class="info-block">
-                  <strong>${storeDetails.name || 'ElectroManage'}</strong><br>
-                  ${storeDetails.address ? `${storeDetails.address}<br>` : ''}
-                  ${storeDetails.phone ? `Tel: ${storeDetails.phone}<br>` : ''}
-                  ${storeDetails.email ? `Email: ${storeDetails.email}` : ''}
-                </div>
-              </td>
-              <td style="width: 50%; text-align: right;">
+              <td style="width: 55%; padding-right: 20px;">
                 <span class="section-title">Billed To (Customer)</span>
                 <div class="info-block">
-                  <strong>${sale.customerName}</strong>
+                  <strong style="font-size: 14px; color: #0f172a;">${sale.customerName}</strong>
+                  ${matchedCust?.mobile ? `<div style="margin-top: 3px; color: #475569;">Mobile: <strong style="color: #0f172a;">${matchedCust.mobile}</strong></div>` : ''}
+                  ${matchedCust?.city ? `<div style="color: #475569;">City: ${matchedCust.city}</div>` : ''}
+                  ${matchedCust?.email ? `<div style="color: #475569;">Email: ${matchedCust.email}</div>` : ''}
                 </div>
-                <div style="margin-top: 12px; line-height: 1.5; color: #475569;">
+              </td>
+              <td style="width: 45%; text-align: right;">
+                <span class="section-title">Invoice Details</span>
+                <div style="line-height: 1.6; color: #475569;">
                   <div>Invoice No: <span style="font-family: monospace; font-weight: bold; color: #0f172a;">${sale.invoiceNo}</span></div>
                   <div>Date: <span style="font-weight: 600; color: #0f172a;">${sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}</span></div>
                   <div>Status: <span style="font-weight: 800; color: ${sale.status === 'Pending' ? '#b45309' : '#059669'}; background-color: ${sale.status === 'Pending' ? '#fef3c7' : '#ecfdf5'}; border: 1px solid ${sale.status === 'Pending' ? '#fde68a' : '#a7f3d0'}; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">${sale.status || 'Paid'}</span></div>
@@ -1708,22 +1727,48 @@ export default function Sales() {
 
                 {/* Printable Document Paper Card */}
                 <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
-                  {/* Store details and Header */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-slate-200">
-                    <div className="flex items-center gap-3.5">
+                  {/* Store details and Header (Centered) */}
+                  <div className="text-center pb-6 border-b-2 border-slate-200 space-y-2">
+                    {/* Company Logo (Increased Size) */}
+                    <div className="flex justify-center">
                       {storeDetails.logoUrl ? (
-                        <img src={storeDetails.logoUrl} alt="Store Logo" className="w-12 h-12 rounded-lg object-cover border border-slate-200" />
+                        <img 
+                          src={storeDetails.logoUrl} 
+                          alt="Store Logo" 
+                          className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-slate-250 shadow-sm" 
+                        />
                       ) : (
-                        <div className="w-12 h-12 rounded-lg bg-[#f0b90b] text-slate-900 font-black text-lg flex items-center justify-center border border-slate-200 shadow-2xs">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-3xl sm:text-4xl flex items-center justify-center border border-slate-250 shadow-sm">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
-                      <div>
-                        <h2 className="text-xl font-extrabold text-slate-900 leading-tight">{storeDetails.name || 'ElectroManage'}</h2>
-                        <p className="text-[11px] font-black tracking-wider uppercase text-emerald-700">Sales Invoice & Receipt</p>
-                      </div>
                     </div>
-                    <div className="sm:text-right">
+
+                    {/* Company Name (Centered, Increased Font Size) */}
+                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-snug">
+                      {storeDetails.name || 'ElectroManage'}
+                    </h2>
+
+                    {/* Address (Under Company Name) */}
+                    {storeDetails.address && (
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl mx-auto leading-relaxed">
+                        {storeDetails.address}
+                      </p>
+                    )}
+
+                    {/* Mobile Number (Under Address) */}
+                    <p className="text-xs sm:text-sm text-slate-700 font-semibold">
+                      <span>Mobile: <span className="font-mono">{storeDetails.phone || 'N/A'}</span></span>
+                      {storeDetails.email && (
+                        <span className="text-slate-500 font-normal"> &nbsp;|&nbsp; Email: {storeDetails.email}</span>
+                      )}
+                    </p>
+
+                    {/* Document Title & Status Pill */}
+                    <div className="flex items-center justify-center gap-2.5 pt-2">
+                      <span className="text-[11px] font-black tracking-widest uppercase text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                        Sales Invoice & Receipt
+                      </span>
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
                         invoiceStatus === 'Pending' 
                           ? 'bg-amber-100 text-amber-800 border border-amber-300' 
@@ -1734,33 +1779,26 @@ export default function Sales() {
                     </div>
                   </div>
 
-                  {/* Meta Grid: Seller & Customer */}
+                  {/* Meta Grid: Customer & Invoice Details */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs">
-                    {/* Seller Info */}
-                    <div className="space-y-1 text-slate-600">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Seller Info</span>
-                      <div className="font-bold text-slate-900 text-sm">{storeDetails.name || 'ElectroManage'}</div>
-                      {storeDetails.address && <div>{storeDetails.address}</div>}
-                      {storeDetails.phone && <div>Tel: {storeDetails.phone}</div>}
-                      {storeDetails.email && <div>Email: {storeDetails.email}</div>}
-                    </div>
-
                     {/* Billed To */}
-                    <div className="space-y-1.5 md:text-right text-slate-600">
+                    <div className="space-y-1.5 text-slate-600">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Billed To (Customer)</span>
                       <div className="font-bold text-slate-900 text-sm">{currentCustomer.name}</div>
                       {currentCustomer.mobile && <div>Phone: <span className="font-semibold text-slate-800">{currentCustomer.mobile}</span></div>}
                       {currentCustomer.address && <div>Address: <span>{currentCustomer.address}</span></div>}
+                    </div>
 
-                      <div className="pt-2 mt-2 border-t border-slate-100 space-y-1 text-slate-600">
-                        <div>Invoice No: <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span></div>
-                        <div>Date: <span className="font-semibold text-slate-800">{invoiceDate ? new Date(invoiceDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
-                        <div>
-                          Payment Mode: <strong className="text-slate-900">{paymentMode}</strong>
-                          {paymentMode === 'Online' && matchedBank && (
-                            <span className="text-[11px] text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
-                          )}
-                        </div>
+                    {/* Invoice Details */}
+                    <div className="space-y-1 md:text-right text-slate-600">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Invoice Details</span>
+                      <div>Invoice No: <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span></div>
+                      <div>Date: <span className="font-semibold text-slate-800">{invoiceDate ? new Date(invoiceDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
+                      <div>
+                        Payment Mode: <strong className="text-slate-900">{paymentMode}</strong>
+                        {paymentMode === 'Online' && matchedBank && (
+                          <span className="text-[11px] text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2093,25 +2131,18 @@ export default function Sales() {
       </div>
 
       {/* 2. Styled Printable Receipt Detail Modal */}
-      {showDetailModal && selectedSale && (
+      {showDetailModal && selectedSale && (() => {
+        const detailCustomer = customers.find(c => c.id === selectedSale.customerId || c.name.toLowerCase() === selectedSale.customerName.toLowerCase());
+        return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowDetailModal(false)} />
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
             <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-slate-200">
-              <div className="bg-[#0a382c] p-6 text-white flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  {storeDetails.logoUrl ? (
-                    <img src={storeDetails.logoUrl} alt="Logo" className="h-10 w-10 rounded-lg object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="h-10 w-10 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-sm">
-                      {getInitials(storeDetails.name || 'ElectroManage')}
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-extrabold text-lg leading-tight">{storeDetails.name || 'ElectroManage'}</h3>
-                    <p className="text-[10px] text-emerald-300 uppercase tracking-widest font-black">Sales Receipt</p>
-                  </div>
+              <div className="bg-[#0a382c] px-6 py-4 text-white flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Printer className="w-4 h-4 text-emerald-300" />
+                  <span className="font-extrabold text-sm tracking-wide uppercase">Sales Invoice & Receipt</span>
                 </div>
                 <button 
                   onClick={() => setShowDetailModal(false)} 
@@ -2121,40 +2152,71 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="bg-white p-6 space-y-6">
-                {/* Meta & Company details */}
-                <div className="grid grid-cols-2 gap-6 border-b border-slate-100 pb-5 text-xs">
-                  <div>
-                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Seller (Company Profile)</span>
-                    <span className="font-extrabold text-slate-900 text-sm block">{storeDetails.name || 'ElectroManage'}</span>
-                    {storeDetails.address && (
-                      <span className="text-slate-500 block mt-0.5">{storeDetails.address}</span>
-                    )}
-                    {storeDetails.phone && (
-                      <span className="text-slate-500 block mt-0.5">Tel: {storeDetails.phone}</span>
-                    )}
-                    {storeDetails.email && (
-                      <span className="text-slate-500 block mt-0.5">Email: {storeDetails.email}</span>
-                    )}
-
-                    {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 && (
-                      <div className="mt-3 pt-2 border-t border-slate-100">
-                        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">Store Bank Accounts</span>
-                        <div className="space-y-1">
-                          {storeDetails.bankAccounts.map((acc, idx) => (
-                            <div key={idx} className="text-[11px] text-slate-700 bg-slate-50 p-1.5 rounded-md border border-slate-200/60">
-                              <span className="font-bold">{acc.bankName}:</span> <span className="font-mono font-bold text-slate-900">{acc.accountNumber}</span>
-                              {acc.accountTitle && <span className="text-slate-500 block text-[10px]">Title: {acc.accountTitle}</span>}
-                            </div>
-                          ))}
-                        </div>
+              <div className="bg-white p-6 sm:p-8 space-y-6">
+                {/* Store details and Header (Centered) */}
+                <div className="text-center pb-6 border-b-2 border-slate-200 space-y-2">
+                  {/* Company Logo (Increased Size) */}
+                  <div className="flex justify-center">
+                    {storeDetails.logoUrl ? (
+                      <img 
+                        src={storeDetails.logoUrl} 
+                        alt="Company Logo" 
+                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-slate-200 shadow-sm" 
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border border-slate-200 shadow-sm">
+                        {getInitials(storeDetails.name || 'ElectroManage')}
                       </div>
                     )}
                   </div>
-                  <div className="text-right">
+
+                  {/* Company Name (Centered, Increased Font Size) */}
+                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-snug">
+                    {storeDetails.name || 'ElectroManage'}
+                  </h3>
+
+                  {/* Address (Under Company Name) */}
+                  {storeDetails.address && (
+                    <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto leading-relaxed">
+                      {storeDetails.address}
+                    </p>
+                  )}
+
+                  {/* Mobile Number (Under Address) */}
+                  <p className="text-xs sm:text-sm text-slate-700 font-semibold">
+                    <span>Mobile: <span className="font-mono">{storeDetails.phone || 'N/A'}</span></span>
+                    {storeDetails.email && (
+                      <span className="text-slate-500 font-normal"> &nbsp;|&nbsp; Email: {storeDetails.email}</span>
+                    )}
+                  </p>
+
+                  <div className="pt-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                      Sales Invoice & Receipt
+                    </span>
+                  </div>
+                </div>
+
+                {/* Meta & Company details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 border-b border-slate-200 pb-5 text-xs">
+                  <div>
                     <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Billed To (Customer)</span>
                     <span className="font-extrabold text-slate-900 text-sm block">{selectedSale.customerName}</span>
-                    <div className="text-slate-500 mt-2 space-y-1">
+                    {detailCustomer?.mobile && (
+                      <span className="text-slate-600 block mt-1">Mobile: <strong className="text-slate-800">{detailCustomer.mobile}</strong></span>
+                    )}
+                    {detailCustomer?.city && (
+                      <span className="text-slate-500 block mt-0.5">City: {detailCustomer.city}</span>
+                    )}
+                    {detailCustomer?.email && (
+                      <span className="text-slate-500 block mt-0.5">Email: {detailCustomer.email}</span>
+                    )}
+                  </div>
+
+                  <div className="sm:text-right">
+                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Invoice Details</span>
+                    <div className="text-slate-600 space-y-1">
                       <div>Invoice No: <span className="font-mono font-bold text-slate-800">{selectedSale.invoiceNo}</span></div>
                       <div>Date: <span className="font-semibold">{selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}</span></div>
                       <div>Status: <span className={`font-bold px-2 py-0.5 border rounded text-[10px] uppercase ${
@@ -2162,7 +2224,7 @@ export default function Sales() {
                           ? 'text-amber-700 bg-amber-50 border-amber-200'
                           : 'text-emerald-700 bg-emerald-50 border-emerald-100'
                       }`}>{selectedSale.status || 'Paid'}</span></div>
-                      <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                      <div className="flex items-center sm:justify-end gap-1.5 pt-0.5">
                         <span className="text-[11px] text-slate-500 font-medium">Payment Mode:</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold inline-flex items-center gap-1 ${
                           selectedSale.paymentMode === 'Online'
@@ -2239,9 +2301,23 @@ export default function Sales() {
                   )}
                 </div>
 
-                {/* Totals panel */}
-                <div className="flex justify-end pt-2 border-t border-slate-100">
-                  <div className="w-1/2 text-right space-y-1.5 text-xs">
+                {/* Totals & Bank panel */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-4 border-t border-slate-100">
+                  {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
+                    <div className="w-full sm:max-w-xs text-xs bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                      <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Store Bank Accounts</span>
+                      <div className="space-y-1">
+                        {storeDetails.bankAccounts.map((acc, idx) => (
+                          <div key={idx} className="text-[11px] text-slate-700">
+                            <span className="font-bold">{acc.bankName}:</span> <span className="font-mono font-bold text-slate-900">{acc.accountNumber}</span>
+                            {acc.accountTitle && <span className="text-slate-500 block text-[10px]">Title: {acc.accountTitle}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : <div />}
+
+                  <div className="w-full sm:w-1/2 text-right space-y-1.5 text-xs">
                     <div className="flex justify-between font-semibold text-slate-500">
                       <span>Subtotal (Pre-discount):</span>
                       <span>
@@ -2291,7 +2367,8 @@ export default function Sales() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
