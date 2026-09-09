@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 
 interface Product {
   id: string;
@@ -1239,7 +1240,7 @@ export default function Sales() {
                 {editingSale ? 'Edit Sales Invoice' : 'Create Sales Invoice'}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                {editingSale ? 'Update this customer sale, product line items, and adjust serialized stock' : 'Record a customer sale, select product line items, and deduct serialized stock'}
+                {editingSale ? 'Update this customer sale, items, and adjust serialized stock' : 'Record a customer sale, select items, and deduct serialized stock'}
               </p>
             </div>
           </div>
@@ -1469,18 +1470,29 @@ export default function Sales() {
                   </div>
                 </div>
 
-                {/* RIGHT PANEL: Product Line Items (Vertically) */}
+                {/* RIGHT PANEL: Items (Vertically) */}
                 <div className="lg:col-span-8 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
                   <div className="flex justify-between items-center pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-[#0a382c]" />
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                        Product Line Items
+                        Items
                       </h3>
                     </div>
-                    <span className="text-xs text-slate-600 font-bold bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
-                      {invoiceItems.length} {invoiceItems.length === 1 ? 'item' : 'items'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600 font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-full">
+                        {invoiceItems.length} {invoiceItems.length === 1 ? 'item' : 'items'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddItemRow}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+                        title="Add Product to invoice"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Product
+                      </button>
+                    </div>
                   </div>
 
                   {/* Vertical Stack of Item Rows */}
@@ -1494,25 +1506,18 @@ export default function Sales() {
 
                       return (
                         <div key={index} className="p-3.5 sm:p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs hover:border-slate-350 transition-all">
-                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                             {/* Product Selection */}
                             <div className="md:col-span-4">
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                                 Product #{index + 1}
                               </label>
-                              <select
+                              <SearchableProductSelect
+                                products={products}
+                                selectedProductId={item.productId}
+                                onSelectProduct={(pId) => handleItemProductChange(index, pId)}
                                 required
-                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                value={item.productId}
-                                onChange={(e) => handleItemProductChange(index, e.target.value)}
-                              >
-                                <option value="">-- Select Product --</option>
-                                {products.map(p => (
-                                  <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                                    {p.name} ({p.brand} - {p.modelNumber}) [Stock: {p.stock}]
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </div>
 
                             {/* Unit Price */}
@@ -1584,21 +1589,24 @@ export default function Sales() {
                             </div>
 
                             {/* Subtotal & Delete */}
-                            <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-1.5 w-full pb-1 md:pb-0">
-                              <div className="text-right">
-                                <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
-                                <span className="text-xs font-black text-slate-900">
-                                  PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
-                                </span>
+                            <div className="md:col-span-1 flex flex-col justify-start">
+                              <span className="hidden md:block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-right">Total</span>
+                              <div className="flex items-center justify-between md:justify-end gap-1.5 w-full pt-1 md:pt-1">
+                                <div className="text-right">
+                                  <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
+                                  <span className="text-xs font-black text-slate-900 font-mono whitespace-nowrap">
+                                    PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItemRow(index)}
+                                  className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer shrink-0"
+                                  title="Delete row"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItemRow(index)}
-                                className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-2"
-                                title="Delete row"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
                             </div>
                           </div>
 
@@ -1659,14 +1667,14 @@ export default function Sales() {
                     })}
                   </div>
 
-                  {/* Add Item Row Button */}
+                  {/* Add Product Button */}
                   <button
                     type="button"
                     onClick={handleAddItemRow}
-                    className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-white hover:bg-emerald-50/70 border border-slate-200 hover:border-emerald-200 px-4 py-2.5 rounded-xl transition-all shadow-2xs"
+                    className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-white hover:bg-emerald-50/70 border border-slate-200 hover:border-emerald-200 px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Add Item Row
+                    Add Product
                   </button>
                 </div>
               </div>
