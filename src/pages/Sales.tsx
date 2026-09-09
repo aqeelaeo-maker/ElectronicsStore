@@ -915,71 +915,92 @@ export default function Sales() {
             max-width: 800px;
             margin: 0 auto;
           }
-          .invoice-header-center {
-            text-align: center;
+          .invoice-header-table {
+            width: 100%;
+            border-collapse: collapse;
             margin-bottom: 24px;
             padding-bottom: 20px;
             border-bottom: 2px solid #e2e8f0;
           }
+          .logo-cell {
+            width: 110px;
+            vertical-align: top;
+            text-align: left;
+          }
           .logo-container {
-            width: 96px;
-            height: 96px;
+            width: 100px;
+            height: 100px;
             border-radius: 16px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 36px;
+            font-size: 38px;
             font-weight: 900;
             border: 1px solid #cbd5e1;
-            margin: 0 auto 12px auto;
             box-shadow: 0 1px 3px rgba(0,0,0,0.06);
           }
           .logo-img {
-            width: 96px;
-            height: 96px;
+            width: 100px;
+            height: 100px;
             border-radius: 16px;
             object-fit: cover;
             border: 1px solid #cbd5e1;
             display: block;
-            margin: 0 auto 12px auto;
             box-shadow: 0 1px 3px rgba(0,0,0,0.06);
           }
+          .center-info-cell {
+            text-align: center;
+            vertical-align: top;
+            padding: 0 16px;
+          }
+          .right-spacer-cell {
+            width: 110px;
+            vertical-align: top;
+          }
           .company-name {
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 900;
             color: #0f172a;
             margin: 0 0 6px 0;
-            line-height: 1.2;
+            line-height: 1.15;
             text-align: center;
             letter-spacing: -0.02em;
           }
           .company-address {
-            font-size: 14px;
-            font-weight: 500;
-            color: #475569;
-            margin: 0 0 4px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #334155;
+            margin: 0 0 5px 0;
             text-align: center;
             line-height: 1.4;
           }
-          .company-mobile {
-            font-size: 14px;
+          .company-contact {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0 0 5px 0;
+            text-align: center;
+            line-height: 1.4;
+          }
+          .company-email {
+            font-size: 15px;
             font-weight: 600;
-            color: #334155;
+            color: #0f766e;
             margin: 0 0 8px 0;
             text-align: center;
             line-height: 1.4;
           }
           .document-title {
             display: inline-block;
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.12em;
             color: #047857;
             background-color: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            padding: 3px 14px;
+            border: 1.5px solid #a7f3d0;
+            padding: 4px 16px;
             border-radius: 9999px;
             font-weight: 800;
             margin-top: 4px;
@@ -1066,18 +1087,26 @@ export default function Sales() {
       </head>
       <body>
         <div class="receipt-container">
-          <div class="invoice-header-center">
-            ${storeDetails.logoUrl 
-              ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
-              : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
-            }
-            <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
-            <div class="company-address">${storeDetails.address || ''}</div>
-            <div class="company-mobile">Mobile: ${storeDetails.phone || 'N/A'}${storeDetails.email ? ` &nbsp;|&nbsp; Email: ${storeDetails.email}` : ''}</div>
-            <div style="margin-top: 6px;">
-              <span class="document-title">Sales Invoice & Receipt</span>
-            </div>
-          </div>
+          <table class="invoice-header-table">
+            <tr>
+              <td class="logo-cell">
+                ${storeDetails.logoUrl 
+                  ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
+                  : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
+                }
+              </td>
+              <td class="center-info-cell">
+                <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
+                ${storeDetails.address ? `<div class="company-address">${storeDetails.address}</div>` : ''}
+                <div class="company-contact">Contact: <strong>${storeDetails.phone || 'N/A'}</strong></div>
+                ${storeDetails.email ? `<div class="company-email">Email: <strong>${storeDetails.email}</strong></div>` : ''}
+                <div style="margin-top: 6px;">
+                  <span class="document-title">Sales Invoice & Receipt</span>
+                </div>
+              </td>
+              <td class="right-spacer-cell"></td>
+            </tr>
+          </table>
 
           <table class="meta-grid">
             <tr>
@@ -1727,55 +1756,62 @@ export default function Sales() {
 
                 {/* Printable Document Paper Card */}
                 <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
-                  {/* Store details and Header (Centered) */}
-                  <div className="text-center pb-6 border-b-2 border-slate-200 space-y-2">
-                    {/* Company Logo (Increased Size) */}
-                    <div className="flex justify-center">
+                  {/* Store details and Header (Logo on Top Left Corner) */}
+                  <div className="relative pb-6 border-b-2 border-slate-200">
+                    {/* Company Logo on Top Left Corner */}
+                    <div className="sm:absolute sm:left-0 sm:top-0 mb-4 sm:mb-0 flex justify-center sm:justify-start">
                       {storeDetails.logoUrl ? (
                         <img 
                           src={storeDetails.logoUrl} 
                           alt="Store Logo" 
-                          className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border border-slate-250 shadow-sm" 
+                          className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl object-cover border border-slate-250 shadow-sm" 
                         />
                       ) : (
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-3xl sm:text-4xl flex items-center justify-center border border-slate-250 shadow-sm">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl lg:text-4xl flex items-center justify-center border border-slate-250 shadow-sm">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
                     </div>
 
-                    {/* Company Name (Centered, Increased Font Size) */}
-                    <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-snug">
-                      {storeDetails.name || 'ElectroManage'}
-                    </h2>
+                    {/* Company Details (Centered with increased font sizes) */}
+                    <div className="text-center sm:px-28 space-y-1.5">
+                      {/* Company Name (Enlarged) */}
+                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+                        {storeDetails.name || 'ElectroManage'}
+                      </h2>
 
-                    {/* Address (Under Company Name) */}
-                    {storeDetails.address && (
-                      <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl mx-auto leading-relaxed">
-                        {storeDetails.address}
-                      </p>
-                    )}
-
-                    {/* Mobile Number (Under Address) */}
-                    <p className="text-xs sm:text-sm text-slate-700 font-semibold">
-                      <span>Mobile: <span className="font-mono">{storeDetails.phone || 'N/A'}</span></span>
-                      {storeDetails.email && (
-                        <span className="text-slate-500 font-normal"> &nbsp;|&nbsp; Email: {storeDetails.email}</span>
+                      {/* Address (Under Company Name, enlarged) */}
+                      {storeDetails.address && (
+                        <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-xl mx-auto leading-relaxed">
+                          {storeDetails.address}
+                        </p>
                       )}
-                    </p>
 
-                    {/* Document Title & Status Pill */}
-                    <div className="flex items-center justify-center gap-2.5 pt-2">
-                      <span className="text-[11px] font-black tracking-widest uppercase text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-                        Sales Invoice & Receipt
-                      </span>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
-                        invoiceStatus === 'Pending' 
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      }`}>
-                        {invoiceStatus}
-                      </span>
+                      {/* Contact / Mobile Number (Under Address, enlarged) */}
+                      <p className="text-sm sm:text-base font-bold text-slate-800">
+                        Contact: <span className="font-mono">{storeDetails.phone || 'N/A'}</span>
+                      </p>
+
+                      {/* Email Address (Enlarged) */}
+                      {storeDetails.email && (
+                        <p className="text-sm sm:text-base font-semibold text-teal-800">
+                          Email: <span>{storeDetails.email}</span>
+                        </p>
+                      )}
+
+                      {/* Document Title & Status Pill */}
+                      <div className="flex items-center justify-center gap-2.5 pt-2">
+                        <span className="text-xs font-black tracking-widest uppercase text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1 rounded-full">
+                          Sales Invoice & Receipt
+                        </span>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                          invoiceStatus === 'Pending' 
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300' 
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}>
+                          {invoiceStatus}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -2153,48 +2189,55 @@ export default function Sales() {
               </div>
 
               <div className="bg-white p-6 sm:p-8 space-y-6">
-                {/* Store details and Header (Centered) */}
-                <div className="text-center pb-6 border-b-2 border-slate-200 space-y-2">
-                  {/* Company Logo (Increased Size) */}
-                  <div className="flex justify-center">
+                {/* Store details and Header (Logo on Top Left Corner) */}
+                <div className="relative pb-6 border-b-2 border-slate-200">
+                  {/* Company Logo on Top Left Corner */}
+                  <div className="sm:absolute sm:left-0 sm:top-0 mb-4 sm:mb-0 flex justify-center sm:justify-start">
                     {storeDetails.logoUrl ? (
                       <img 
                         src={storeDetails.logoUrl} 
                         alt="Company Logo" 
-                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border border-slate-200 shadow-sm" 
+                        className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl object-cover border border-slate-200 shadow-sm" 
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border border-slate-200 shadow-sm">
+                      <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border border-slate-200 shadow-sm">
                         {getInitials(storeDetails.name || 'ElectroManage')}
                       </div>
                     )}
                   </div>
 
-                  {/* Company Name (Centered, Increased Font Size) */}
-                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-snug">
-                    {storeDetails.name || 'ElectroManage'}
-                  </h3>
+                  {/* Company Details (Centered with increased font sizes) */}
+                  <div className="text-center sm:px-24 space-y-1.5">
+                    {/* Company Name (Enlarged) */}
+                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-snug">
+                      {storeDetails.name || 'ElectroManage'}
+                    </h3>
 
-                  {/* Address (Under Company Name) */}
-                  {storeDetails.address && (
-                    <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-lg mx-auto leading-relaxed">
-                      {storeDetails.address}
-                    </p>
-                  )}
-
-                  {/* Mobile Number (Under Address) */}
-                  <p className="text-xs sm:text-sm text-slate-700 font-semibold">
-                    <span>Mobile: <span className="font-mono">{storeDetails.phone || 'N/A'}</span></span>
-                    {storeDetails.email && (
-                      <span className="text-slate-500 font-normal"> &nbsp;|&nbsp; Email: {storeDetails.email}</span>
+                    {/* Address (Under Company Name, enlarged) */}
+                    {storeDetails.address && (
+                      <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-lg mx-auto leading-relaxed">
+                        {storeDetails.address}
+                      </p>
                     )}
-                  </p>
 
-                  <div className="pt-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-                      Sales Invoice & Receipt
-                    </span>
+                    {/* Contact Number (Under Address, enlarged) */}
+                    <p className="text-sm sm:text-base font-bold text-slate-800">
+                      Contact: <span className="font-mono">{storeDetails.phone || 'N/A'}</span>
+                    </p>
+
+                    {/* Email Address (Enlarged) */}
+                    {storeDetails.email && (
+                      <p className="text-xs sm:text-sm font-semibold text-teal-800">
+                        Email: <span>{storeDetails.email}</span>
+                      </p>
+                    )}
+
+                    <div className="pt-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                        Sales Invoice & Receipt
+                      </span>
+                    </div>
                   </div>
                 </div>
 
