@@ -879,27 +879,27 @@ export default function Sales() {
 
     const itemsRows = sale.items && sale.items.length > 0 
       ? sale.items.map(item => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 6px 10px; text-align: left; vertical-align: top;">
-            <div style="font-weight: bold; color: #1e293b; font-size: 11px;">${item.productName}</div>
-            <div style="font-size: 9px; color: #64748b; margin-top: 1px;">
-              ${item.brand} • ${item.modelNumber} • ${item.category}
+        <tr style="border-bottom: 1.5px solid #000000;">
+          <td style="padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
+            <div style="font-weight: bold; color: #000000; font-size: 11px;">${item.productName}</div>
+            <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
+              ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
             </div>
             ${item.selectedSerials && item.selectedSerials.length > 0 ? `
               <div style="margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px;">
-                <span style="font-size: 8px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Serials:</span>
-                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 8px; background-color: #f1f5f9; color: #334155; padding: 0.5px 3px; border-radius: 2px; border: 1px solid #e2e8f0; margin-right: 3px; display: inline-block;">${sn}</span>`).join('')}
+                <span style="font-size: 9px; color: #000000; font-weight: bold; text-transform: uppercase;">Serials:</span>
+                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 9px; background-color: #f8fafc; color: #000000; padding: 0.5px 3px; border-radius: 2px; border: 1px solid #000000; margin-right: 3px; display: inline-block;">${sn}</span>`).join('')}
               </div>
             ` : ''}
           </td>
-          <td style="padding: 6px 10px; text-align: center; font-weight: 500; color: #334155; vertical-align: top; font-size: 11px;">PKR ${item.salePrice.toFixed(2)}</td>
-          <td style="padding: 6px 10px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">${item.quantity}</td>
-          <td style="padding: 6px 10px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
+          <td style="padding: 7px 10px; text-align: center; font-weight: 700; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 7px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
+          <td style="padding: 7px 10px; text-align: right; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
-        <tr>
-          <td colspan="4" style="padding: 16px 0; text-align: center; color: #64748b; font-style: italic; font-size: 11px;">
+        <tr style="border-bottom: 1.5px solid #000000;">
+          <td colspan="4" style="padding: 16px 0; text-align: center; color: #000000; font-style: italic; font-size: 11px; border-bottom: 1.5px solid #000000;">
             No itemized details recorded.
           </td>
         </tr>
@@ -917,18 +917,37 @@ export default function Sales() {
         <title>Invoice - ${sale.invoiceNo}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-          body {
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 10px 22px;
-            color: #1e293b;
-            background-color: #fff;
+          @page {
+            size: auto;
+            margin: 8mm 12mm;
+          }
+          html, body {
+            height: 100%;
+            margin: 0 !important;
+            padding: 0 !important;
+            color: #000000;
+            background-color: #ffffff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+          body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 8mm 12mm;
+            box-sizing: border-box;
+            color: #000000;
+          }
           .receipt-container {
+            width: 100%;
             max-width: 800px;
             margin: 0 auto;
+            min-height: 255mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+          }
+          .invoice-main-content {
+            width: 100%;
           }
           .invoice-header-table {
             width: 100%;
@@ -954,7 +973,7 @@ export default function Sales() {
             height: 95px;
             border-radius: 14px;
             background-color: #f0b90b;
-            color: #0f172a;
+            color: #000000;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1008,12 +1027,13 @@ export default function Sales() {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
             font-size: 16px;
             line-height: 1.4;
-            color: #1e293b;
+            color: #000000;
             text-align: left;
           }
           .left-detail-row {
             margin-bottom: 2px;
             word-break: break-word;
+            color: #000000;
           }
           .left-detail-label {
             font-weight: 700;
@@ -1031,6 +1051,7 @@ export default function Sales() {
             vertical-align: top;
             font-size: 11px;
             padding-bottom: 4px;
+            color: #000000;
           }
           .items-table {
             width: 100%;
@@ -1058,140 +1079,164 @@ export default function Sales() {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+          .items-table tbody tr {
+            border-bottom: 1.5px solid #000000 !important;
+          }
           .items-table td {
             padding: 6px 10px;
             font-size: 11px;
+            color: #000000;
+            border-bottom: 1.5px solid #000000 !important;
+          }
+          .invoice-bottom-section {
+            width: 100%;
+            margin-top: auto;
+            padding-top: 20px;
+            page-break-inside: avoid;
           }
           .totals-table {
-            width: 280px;
+            width: 320px;
             margin-left: auto;
             border-collapse: collapse;
-            font-size: 11px;
+            font-size: 13px;
+            color: #000000;
           }
           .totals-table td {
-            padding: 3px 0;
+            padding: 4px 0;
+            color: #000000;
           }
           .totals-table .total-row {
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 900;
-            color: #0a382c;
-            border-top: 1.5px solid #000000;
-            padding-top: 6px;
+            color: #000000;
+            border-top: 2px solid #000000;
+            padding-top: 8px;
           }
           .footer {
-            margin-top: 24px;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 10px;
+            margin-top: 14px;
+            border-top: 1.5px solid #000000;
+            padding-top: 8px;
             text-align: center;
-            font-size: 10px;
-            color: #94a3b8;
-            font-weight: 600;
+            font-size: 11px;
+            color: #000000;
+            font-weight: 700;
             line-height: 1.4;
           }
           @media print {
             body {
-              padding: 0;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            .receipt-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              min-height: 255mm !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+            }
+            .invoice-bottom-section {
+              margin-top: auto !important;
+              page-break-inside: avoid !important;
             }
           }
         </style>
       </head>
       <body>
         <div class="receipt-container">
-          <table class="invoice-header-table">
-            <tr>
-              <td class="logo-cell">
-                ${storeDetails.logoUrl 
-                  ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
-                  : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
-                }
-              </td>
-              <td class="center-info-cell">
-                <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
-              </td>
-              <td class="right-spacer-cell"></td>
-            </tr>
-            <tr>
-              <td colspan="3" class="details-cell">
-                <div class="company-left-details">
-                  <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails.address || 'Madni Chowk Pindi Gheb'}</div>
-                  <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails.phone || '0312-5653636'}</div>
-                  <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails.email || 'smarttech5535@gmail.com'}</div>
-                </div>
-              </td>
-            </tr>
-          </table>
+          <div class="invoice-main-content">
+            <table class="invoice-header-table">
+              <tr>
+                <td class="logo-cell">
+                  ${storeDetails.logoUrl 
+                    ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
+                    : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
+                  }
+                </td>
+                <td class="center-info-cell">
+                  <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
+                </td>
+                <td class="right-spacer-cell"></td>
+              </tr>
+              <tr>
+                <td colspan="3" class="details-cell">
+                  <div class="company-left-details">
+                    <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails.address || 'Madni Chowk Pindi Gheb'}</div>
+                    <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails.phone || '0312-5653636'}</div>
+                    <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails.email || 'smarttech5535@gmail.com'}</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
 
-          <div class="header-divider-line"></div>
+            <div class="header-divider-line"></div>
 
-          <table class="meta-grid">
-            <tr>
-              <td style="width: 50%; vertical-align: top; text-align: left;">
-                <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.6;">
-                  <tr>
-                    <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Customer:</td>
-                    <td style="padding: 1px 0; font-weight: 700; color: #000; vertical-align: top;">${sale.customerName}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
-                    <td style="padding: 1px 0; font-weight: 500; color: #334155; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 11px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
-                  </tr>
-                </table>
-              </td>
-              <td style="width: 50%; vertical-align: top; text-align: right;">
-                <div style="display: inline-block; text-align: left;">
-                  <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.6;">
+            <table class="meta-grid">
+              <tr>
+                <td style="width: 50%; vertical-align: top; text-align: left;">
+                  <table style="border-collapse: collapse; font-size: 13px; color: #000000; line-height: 1.6;">
                     <tr>
-                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Invoice No:</td>
-                      <td style="padding: 1px 0; font-family: monospace; font-weight: bold; color: #000; vertical-align: top;">${sale.invoiceNo}</td>
+                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Customer:</td>
+                      <td style="padding: 1px 0; font-weight: 700; color: #000000; vertical-align: top;">${sale.customerName}</td>
                     </tr>
                     <tr>
-                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Date:</td>
-                      <td style="padding: 1px 0; font-weight: 600; color: #000; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
+                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
+                      <td style="padding: 1px 0; font-weight: 600; color: #000000; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 11px; color: #000000; font-weight: bold;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
                     </tr>
                   </table>
-                </div>
-              </td>
-            </tr>
-          </table>
-
-          <table class="items-table">
-            <thead>
-              <tr style="background-color: #000000; color: #ffffff;">
-                <th style="text-align: left; width: 55%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRODUCT</th>
-                <th style="text-align: center; width: 15%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRICE</th>
-                <th style="text-align: center; width: 12%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">QTY</th>
-                <th style="text-align: right; width: 18%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">TOTAL</th>
+                </td>
+                <td style="width: 50%; vertical-align: top; text-align: right;">
+                  <div style="display: inline-block; text-align: left;">
+                    <table style="border-collapse: collapse; font-size: 13px; color: #000000; line-height: 1.6;">
+                      <tr>
+                        <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Invoice No:</td>
+                        <td style="padding: 1px 0; font-family: monospace; font-weight: bold; color: #000000; vertical-align: top;">${sale.invoiceNo}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Date:</td>
+                        <td style="padding: 1px 0; font-weight: 700; color: #000000; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
+                      </tr>
+                    </table>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              ${itemsRows}
-            </tbody>
-          </table>
+            </table>
 
-          <table class="totals-table">
-            <tr>
-              <td style="color: #64748b; font-weight: 500;">Subtotal (Pre-discount):</td>
-              <td style="text-align: right; font-weight: 600; color: #334155;">PKR ${subtotal.toFixed(2)}</td>
-            </tr>
-            ${totalDiscount > 0 ? `
+            <table class="items-table">
+              <thead>
+                <tr style="background-color: #000000; color: #ffffff;">
+                  <th style="text-align: left; width: 55%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRODUCT</th>
+                  <th style="text-align: center; width: 15%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRICE</th>
+                  <th style="text-align: center; width: 12%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">QTY</th>
+                  <th style="text-align: right; width: 18%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRows}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="invoice-bottom-section">
+            <table class="totals-table">
               <tr>
-                <td style="color: #e11d48; font-weight: 500;">Total Discount:</td>
-                <td style="text-align: right; font-weight: 600; color: #e11d48;">-PKR ${totalDiscount.toFixed(2)}</td>
+                <td style="color: #000000; font-weight: bold; font-size: 13px;">Subtotal (Pre-discount):</td>
+                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 13px;">PKR ${subtotal.toFixed(2)}</td>
               </tr>
-            ` : ''}
-            <tr>
-              <td style="color: #64748b; font-weight: 500;">Tax / VAT (0%):</td>
-              <td style="text-align: right; font-weight: 600; color: #334155;">PKR 0.00</td>
-            </tr>
-            <tr class="total-row">
-              <td style="padding-top: 10px;">${sale.status === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}</td>
-              <td style="text-align: right; padding-top: 10px;">PKR ${sale.total?.toFixed(2)}</td>
-            </tr>
-          </table>
+              <tr>
+                <td style="color: #000000; font-weight: bold; font-size: 13px;">Discount:</td>
+                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 13px;">PKR ${totalDiscount.toFixed(2)}</td>
+              </tr>
+              <tr class="total-row">
+                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 14px;">Total Amount Paid:</td>
+                <td style="text-align: right; padding-top: 8px; color: #000000; font-weight: 900; font-size: 14px;">PKR ${sale.total?.toFixed(2)}</td>
+              </tr>
+            </table>
 
-          <div class="footer">
-            Thank you for your purchase!<br>
-            For any warranty claims, please present this invoice.
+            <div class="footer">
+              Thank you for your purchase!<br>
+              For any warranty claims, please present this invoice.
+            </div>
           </div>
         </div>
       </body>
@@ -1765,179 +1810,179 @@ export default function Sales() {
                 </div>
 
                 {/* Printable Document Paper Card */}
-                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-slate-700 space-y-3">
-                  {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
-                  <div>
-                    {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
-                    <div className="flex items-center justify-between gap-4 pt-0 pb-0">
-                      {/* Company Logo on Left */}
-                      <div className="w-24 sm:w-28 flex-shrink-0">
-                        {storeDetails.logoUrl ? (
-                          <img 
-                            src={storeDetails.logoUrl} 
-                            alt="Store Logo" 
-                            className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
-                          />
-                        ) : (
-                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-slate-950 font-black text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
-                            {getInitials(storeDetails.name || 'ElectroManage')}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Company Name (Enlarged, Prestigious Font, Underlined, Vertically Aligned with Logo) */}
-                      <div className="flex-1 text-center py-0 sm:px-4">
-                        <h2 
-                          style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                          className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
-                        >
-                          {storeDetails.name || 'ElectroManage'}
-                        </h2>
-                      </div>
-
-                      {/* Right spacer for symmetry */}
-                      <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
-                    </div>
-
-                    {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
-                    <div className="mt-1 text-left max-w-md">
-                      <div 
-                        style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                        className="text-[16px] text-slate-800 space-y-0.5 leading-snug"
-                      >
-                        <p>
-                          <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
-                        </p>
-                        <p>
-                          <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
-                        </p>
-                        <p>
-                          <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Black line drawn under Email Address - MOVED UP */}
-                    <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
-                  </div>
-
-                  {/* Meta Grid: Customer & Invoice Details (no line under payment mode) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm">
-                    {/* Customer & Payment Mode */}
-                    <div className="space-y-1 text-slate-700">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-950 min-w-[90px]">Customer:</span>
-                        <span className="font-bold text-slate-950">{currentCustomer.name}</span>
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-950 min-w-[90px]">Payment Mode:</span>
-                        <span className="text-slate-800">
-                          {paymentMode}
-                          {paymentMode === 'Online' && matchedBank && (
-                            <span className="text-xs text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
+                <div className="bg-white rounded-2xl border border-black shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-black min-h-[720px] flex flex-col justify-between">
+                  {/* Top Section */}
+                  <div className="space-y-3">
+                    {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
+                    <div>
+                      {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
+                      <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                        {/* Company Logo on Left */}
+                        <div className="w-24 sm:w-28 flex-shrink-0">
+                          {storeDetails.logoUrl ? (
+                            <img 
+                              src={storeDetails.logoUrl} 
+                              alt="Store Logo" 
+                              className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                            />
+                          ) : (
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-black font-black text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                              {getInitials(storeDetails.name || 'ElectroManage')}
+                            </div>
                           )}
-                        </span>
+                        </div>
+
+                        {/* Company Name (Enlarged, Prestigious Font, Underlined, Vertically Aligned with Logo) */}
+                        <div className="flex-1 text-center py-0 sm:px-4">
+                          <h2 
+                            style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                            className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-black"
+                          >
+                            {storeDetails.name || 'ElectroManage'}
+                          </h2>
+                        </div>
+
+                        {/* Right spacer for symmetry */}
+                        <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
+                      </div>
+
+                      {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
+                      <div className="mt-1 text-left max-w-md">
+                        <div 
+                          style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                          className="text-[16px] text-black space-y-0.5 leading-snug"
+                        >
+                          <p>
+                            <strong className="text-black font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
+                          </p>
+                          <p>
+                            <strong className="text-black font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
+                          </p>
+                          <p>
+                            <strong className="text-black font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Black line drawn under Email Address - MOVED UP */}
+                      <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
+                    </div>
+
+                    {/* Meta Grid: Customer & Invoice Details (no line under payment mode) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm text-black">
+                      {/* Customer & Payment Mode */}
+                      <div className="space-y-1 text-black">
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-black min-w-[90px]">Customer:</span>
+                          <span className="font-bold text-black">{currentCustomer.name}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-black min-w-[90px]">Payment Mode:</span>
+                          <span className="font-semibold text-black">
+                            {paymentMode}
+                            {paymentMode === 'Online' && matchedBank && (
+                              <span className="text-xs text-black font-bold"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Invoice Details (in right corner of page, aligned vertically from left side, without 'Invoice Details' title) */}
+                      <div className="flex justify-start md:justify-end text-xs sm:text-sm text-black">
+                        <div className="text-left space-y-1 min-w-[170px]">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-bold text-black min-w-[80px]">Invoice No:</span>
+                            <span className="font-mono font-bold text-black">{currentInvoiceNo}</span>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-bold text-black min-w-[80px]">Date:</span>
+                            <span className="font-bold text-black">{formatInvoiceDate(invoiceDate || new Date())}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Invoice Details (in right corner of page, aligned vertically from left side, without 'Invoice Details' title) */}
-                    <div className="flex justify-start md:justify-end text-xs sm:text-sm text-slate-800">
-                      <div className="text-left space-y-1 min-w-[170px]">
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-bold text-slate-950 min-w-[80px]">Invoice No:</span>
-                          <span className="font-mono font-bold text-slate-950">{currentInvoiceNo}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-bold text-slate-950 min-w-[80px]">Date:</span>
-                          <span className="font-semibold text-slate-900">{formatInvoiceDate(invoiceDate || new Date())}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Line Items Table with Black Rectangle header & White Text */}
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-black text-white">
-                          <th className="py-2 px-3 text-left font-extrabold uppercase text-[11px] tracking-wider text-white bg-black rounded-l">PRODUCT</th>
-                          <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRICE</th>
-                          <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">QTY</th>
-                          <th className="py-2 px-3 text-right font-extrabold uppercase text-[11px] tracking-wider text-white bg-black rounded-r">TOTAL</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {draftItems.filter(item => item.productId).length > 0 ? (
-                          draftItems
-                            .filter(item => item.productId)
-                            .map((item, idx) => (
-                              <tr key={idx} className="align-top">
-                                <td className="py-2.5 px-3">
-                                  <div className="font-bold text-slate-900">{item.productName}</div>
-                                  {(item.brand || item.modelNumber) && (
-                                    <div className="text-[10px] text-slate-500 mt-0.5">{item.brand} • {item.modelNumber}</div>
-                                  )}
-                                  {item.selectedSerials && item.selectedSerials.length > 0 && (
-                                    <div className="mt-1 flex flex-wrap gap-1">
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase">S/N:</span>
-                                      {item.selectedSerials.map((sn, sIdx) => (
-                                        <span key={sIdx} className="font-mono text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                                          {sn}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 text-center text-slate-700 font-mono">PKR {item.salePrice.toFixed(2)}</td>
-                                <td className="py-2.5 px-3 text-center font-bold text-slate-900">{item.quantity}</td>
-                                <td className="py-2.5 px-3 text-right font-bold font-mono text-slate-900">
-                                  PKR {item.subtotal.toFixed(2)}
-                                </td>
-                              </tr>
-                            ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} className="py-8 text-center text-slate-400 italic text-xs">
-                              No products selected yet. Select products from the line items section above to preview them here.
-                            </td>
+                    {/* Line Items Table with Black Rectangle header & White Text */}
+                    <div className="overflow-x-auto border border-black rounded">
+                      <table className="min-w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-black text-white">
+                            <th className="py-2 px-3 text-left font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRODUCT</th>
+                            <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRICE</th>
+                            <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">QTY</th>
+                            <th className="py-2 px-3 text-right font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Totals Summary */}
-                  <div className="flex justify-end pt-4 border-t border-slate-200">
-                    <div className="w-72 space-y-2 text-xs">
-                      <div className="flex justify-between text-slate-600">
-                        <span>Subtotal (Pre-discount):</span>
-                        <span className="font-semibold text-slate-800 font-mono">PKR {draftSubtotal.toFixed(2)}</span>
-                      </div>
-                      {draftTotalDiscount > 0 && (
-                        <div className="flex justify-between text-red-600">
-                          <span>Total Discount:</span>
-                          <span className="font-semibold font-mono">-PKR {draftTotalDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-slate-500">
-                        <span>Tax / VAT (0%):</span>
-                        <span className="font-mono">PKR 0.00</span>
-                      </div>
-                      <div className="flex justify-between items-center pt-2.5 border-t border-slate-300 text-sm">
-                        <span className="font-black text-slate-900">
-                          {invoiceStatus === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}
-                        </span>
-                        <span className="font-black font-mono text-base text-[#0a382c]">
-                          PKR {draftTotal.toFixed(2)}
-                        </span>
-                      </div>
+                        </thead>
+                        <tbody className="divide-y divide-black text-black">
+                          {draftItems.filter(item => item.productId).length > 0 ? (
+                            draftItems
+                              .filter(item => item.productId)
+                              .map((item, idx) => (
+                                <tr key={idx} className="align-top border-b border-black">
+                                  <td className="py-2.5 px-3">
+                                    <div className="font-bold text-black">{item.productName}</div>
+                                    {(item.brand || item.modelNumber) && (
+                                      <div className="text-[10px] text-black font-medium mt-0.5">{item.brand} • {item.modelNumber}</div>
+                                    )}
+                                    {item.selectedSerials && item.selectedSerials.length > 0 && (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        <span className="text-[9px] font-bold text-black uppercase">S/N:</span>
+                                        {item.selectedSerials.map((sn, sIdx) => (
+                                          <span key={sIdx} className="font-mono text-[9px] bg-slate-50 text-black px-1.5 py-0.5 rounded border border-black">
+                                            {sn}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center text-black font-semibold font-mono">PKR {item.salePrice.toFixed(2)}</td>
+                                  <td className="py-2.5 px-3 text-center font-bold text-black">{item.quantity}</td>
+                                  <td className="py-2.5 px-3 text-right font-bold font-mono text-black">
+                                    PKR {item.subtotal.toFixed(2)}
+                                  </td>
+                                </tr>
+                              ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="py-8 text-center text-black italic text-xs">
+                                No products selected yet. Select products from the line items section above to preview them here.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="pt-6 border-t border-slate-200 text-center text-[11px] text-slate-400 font-medium space-y-1">
-                    <p>Thank you for your purchase!</p>
-                    <p>For any warranty claims, please present this original invoice.</p>
+                  {/* Bottom Section: Totals & Footer placed at the end of the page */}
+                  <div className="mt-auto pt-6 space-y-3">
+                    {/* Totals Summary */}
+                    <div className="flex justify-end pt-3">
+                      <div className="w-72 space-y-1.5 text-xs text-black">
+                        <div className="flex justify-between font-bold text-black">
+                          <span>Subtotal (Pre-discount):</span>
+                          <span className="font-mono">PKR {draftSubtotal.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-black">
+                          <span>Discount:</span>
+                          <span className="font-mono">PKR {draftTotalDiscount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t-2 border-black text-sm">
+                          <span className="font-black text-black">
+                            {invoiceStatus === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}
+                          </span>
+                          <span className="font-black font-mono text-base text-black">
+                            PKR {draftTotal.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-3 border-t-2 border-black text-center text-[11px] text-black font-semibold space-y-0.5">
+                      <p>Thank you for your purchase!</p>
+                      <p>For any warranty claims, please present this original invoice.</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2244,34 +2289,34 @@ export default function Sales() {
                 </div>
 
                 {/* Meta & Customer/Invoice details (no line under payment mode) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm text-black">
                   {/* Customer & Payment Mode */}
-                  <div className="space-y-1 text-slate-700">
+                  <div className="space-y-1 text-black">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-950 min-w-[90px]">Customer:</span>
-                      <span className="font-bold text-slate-950">{selectedSale.customerName}</span>
+                      <span className="font-bold text-black min-w-[90px]">Customer:</span>
+                      <span className="font-bold text-black">{selectedSale.customerName}</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-950 min-w-[90px]">Payment Mode:</span>
-                      <span className="text-slate-800">
+                      <span className="font-bold text-black min-w-[90px]">Payment Mode:</span>
+                      <span className="font-semibold text-black">
                         {selectedSale.paymentMode || 'Cash'}
                         {selectedSale.paymentMode === 'Online' && selectedSale.bankName && (
-                          <span className="text-xs text-slate-500"> ({selectedSale.bankName} - {selectedSale.bankAccountNumber})</span>
+                          <span className="text-xs text-black font-bold"> ({selectedSale.bankName} - {selectedSale.bankAccountNumber})</span>
                         )}
                       </span>
                     </div>
                   </div>
 
                   {/* Invoice Details (in right corner of page, aligned vertically from left side, without 'Invoice Details' title) */}
-                  <div className="flex justify-start sm:justify-end text-xs sm:text-sm text-slate-800">
+                  <div className="flex justify-start sm:justify-end text-xs sm:text-sm text-black">
                     <div className="text-left space-y-1 min-w-[170px]">
                       <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-950 min-w-[80px]">Invoice No:</span>
-                        <span className="font-mono font-bold text-slate-950">{selectedSale.invoiceNo}</span>
+                        <span className="font-bold text-black min-w-[80px]">Invoice No:</span>
+                        <span className="font-mono font-bold text-black">{selectedSale.invoiceNo}</span>
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-950 min-w-[80px]">Date:</span>
-                        <span className="font-semibold text-slate-900">{formatInvoiceDate(selectedSale.date)}</span>
+                        <span className="font-bold text-black min-w-[80px]">Date:</span>
+                        <span className="font-bold text-black">{formatInvoiceDate(selectedSale.date)}</span>
                       </div>
                     </div>
                   </div>
@@ -2279,10 +2324,10 @@ export default function Sales() {
 
                 {/* Items details table */}
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Itemized Bill</h4>
+                  <h4 className="text-[10px] font-black text-black uppercase tracking-wider mb-2">Itemized Bill</h4>
                   {selectedSale.items && selectedSale.items.length > 0 ? (
-                    <div className="border border-slate-100 rounded-xl overflow-hidden">
-                      <table className="min-w-full divide-y divide-slate-100">
+                    <div className="border border-black rounded-lg overflow-hidden">
+                      <table className="min-w-full divide-y divide-black text-black">
                         <thead className="bg-black text-white">
                           <tr>
                             <th className="px-4 py-2.5 text-left text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">PRODUCT</th>
@@ -2291,26 +2336,26 @@ export default function Sales() {
                             <th className="px-4 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 text-xs">
+                        <tbody className="divide-y divide-black text-xs text-black">
                           {selectedSale.items.map((item, i) => (
-                            <tr key={i} className="align-top">
+                            <tr key={i} className="align-top border-b border-black">
                               <td className="px-4 py-3">
-                                <div className="font-bold text-slate-900">{item.productName}</div>
-                                <div className="text-[10px] text-slate-500 mt-0.5">{item.brand} • {item.modelNumber}</div>
+                                <div className="font-bold text-black">{item.productName}</div>
+                                <div className="text-[10px] text-black font-medium mt-0.5">{item.brand} • {item.modelNumber}</div>
                                 {item.selectedSerials && item.selectedSerials.length > 0 && (
-                                  <div className="mt-2.5 flex flex-wrap gap-1">
-                                    <span className="text-[9px] text-slate-400 uppercase font-black block w-full">Serials:</span>
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    <span className="text-[9px] text-black uppercase font-bold block w-full">Serials:</span>
                                     {item.selectedSerials.map((sn, snIdx) => (
-                                      <span key={snIdx} className="font-mono text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-150">
+                                      <span key={snIdx} className="font-mono text-[9px] bg-slate-50 text-black px-1.5 py-0.5 rounded border border-black">
                                         {sn}
                                       </span>
                                     ))}
                                   </div>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-center font-semibold text-slate-700">PKR {item.salePrice.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-center font-bold text-slate-900">{item.quantity}</td>
-                              <td className="px-4 py-3 text-right font-bold text-slate-900">
+                              <td className="px-4 py-3 text-center font-semibold font-mono text-black">PKR {item.salePrice.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-center font-bold text-black">{item.quantity}</td>
+                              <td className="px-4 py-3 text-right font-bold font-mono text-black">
                                 PKR {(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
                               </td>
                             </tr>
@@ -2319,38 +2364,31 @@ export default function Sales() {
                       </table>
                     </div>
                   ) : (
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-center">
-                      <p className="text-xs text-slate-500 italic">No direct line item details recorded. This was entered as a quick-sum invoice.</p>
-                      <div className="mt-3 text-sm font-bold text-slate-800">Total Invoice Amount: PKR {selectedSale.total?.toFixed(2)}</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-black text-center">
+                      <p className="text-xs text-black italic">No direct line item details recorded. This was entered as a quick-sum invoice.</p>
+                      <div className="mt-3 text-sm font-bold text-black">Total Invoice Amount: PKR {selectedSale.total?.toFixed(2)}</div>
                     </div>
                   )}
                 </div>
 
                 {/* Totals panel */}
-                <div className="flex flex-col sm:flex-row justify-end items-start gap-4 pt-4 border-t border-slate-100">
-
-                  <div className="w-full sm:w-1/2 text-right space-y-1.5 text-xs">
-                    <div className="flex justify-between font-semibold text-slate-500">
+                <div className="flex flex-col sm:flex-row justify-end items-start gap-4 pt-4 border-t-2 border-black">
+                  <div className="w-full sm:w-1/2 text-right space-y-1.5 text-xs text-black">
+                    <div className="flex justify-between font-bold text-black">
                       <span>Subtotal (Pre-discount):</span>
-                      <span>
+                      <span className="font-mono">
                         PKR {selectedSale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0).toFixed(2) || selectedSale.total?.toFixed(2)}
                       </span>
                     </div>
-                    {selectedSale.items?.some(item => item.discount > 0) && (
-                      <div className="flex justify-between font-semibold text-rose-600">
-                        <span>Total Discount:</span>
-                        <span>
-                          -PKR {selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-semibold text-slate-500">
-                      <span>Tax / VAT (0%):</span>
-                      <span>PKR 0.00</span>
+                    <div className="flex justify-between font-bold text-black">
+                      <span>Discount:</span>
+                      <span className="font-mono">
+                        PKR {(selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0).toFixed(2)}
+                      </span>
                     </div>
-                    <div className="flex justify-between text-base font-black text-[#0a382c] border-t border-slate-100 pt-2.5">
+                    <div className="flex justify-between text-base font-black text-black border-t-2 border-black pt-2">
                       <span>Total Amount Paid:</span>
-                      <span>PKR {selectedSale.total?.toFixed(2)}</span>
+                      <span className="font-mono">PKR {selectedSale.total?.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
