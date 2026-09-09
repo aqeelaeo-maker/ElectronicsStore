@@ -901,9 +901,9 @@ export default function Sales() {
         <meta charset="utf-8">
         <title>Invoice - ${sale.invoiceNo}</title>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
           body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 40px;
             color: #334155;
@@ -923,32 +923,38 @@ export default function Sales() {
             border-bottom: 2px solid #e2e8f0;
           }
           .logo-cell {
-            width: 110px;
+            width: 120px;
             vertical-align: top;
             text-align: left;
+            padding: 0;
           }
           .logo-container {
-            width: 100px;
-            height: 100px;
+            width: 105px;
+            height: 105px;
             border-radius: 16px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 38px;
+            font-size: 40px;
             font-weight: 900;
-            border: 1px solid #cbd5e1;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: none;
+            outline: none;
+            box-shadow: none;
+            margin-top: -12px;
           }
           .logo-img {
-            width: 100px;
-            height: 100px;
+            width: 105px;
+            height: 105px;
             border-radius: 16px;
-            object-fit: cover;
-            border: 1px solid #cbd5e1;
+            object-fit: contain;
+            border: none;
+            outline: none;
+            box-shadow: none;
+            background: transparent;
             display: block;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            margin-top: -12px;
           }
           .center-info-cell {
             text-align: center;
@@ -956,17 +962,22 @@ export default function Sales() {
             padding: 0 16px;
           }
           .right-spacer-cell {
-            width: 110px;
+            width: 120px;
             vertical-align: top;
           }
           .company-name {
-            font-size: 36px;
+            font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
+            font-size: 42px;
             font-weight: 900;
             color: #0f172a;
-            margin: 0 0 6px 0;
+            margin: 0 0 10px 0;
             line-height: 1.15;
             text-align: center;
-            letter-spacing: -0.02em;
+            letter-spacing: 0.01em;
+            text-decoration: underline;
+            text-underline-offset: 8px;
+            text-decoration-thickness: 3px;
+            text-decoration-color: #0f172a;
           }
           .company-address {
             font-size: 16px;
@@ -1758,31 +1769,34 @@ export default function Sales() {
                 <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
                   {/* Store details and Header (Logo on Top Left Corner) */}
                   <div className="relative pb-6 border-b-2 border-slate-200">
-                    {/* Company Logo on Top Left Corner */}
-                    <div className="sm:absolute sm:left-0 sm:top-0 mb-4 sm:mb-0 flex justify-center sm:justify-start">
+                    {/* Company Logo on Top Left Corner (Moved slightly up, no border rectangle) */}
+                    <div className="sm:absolute sm:left-0 sm:-top-3 lg:-top-4 mb-4 sm:mb-0 flex justify-center sm:justify-start">
                       {storeDetails.logoUrl ? (
                         <img 
                           src={storeDetails.logoUrl} 
                           alt="Store Logo" 
-                          className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl object-cover border border-slate-250 shadow-sm" 
+                          className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
                         />
                       ) : (
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl lg:text-4xl flex items-center justify-center border border-slate-250 shadow-sm">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl lg:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
                     </div>
 
-                    {/* Company Details (Centered with increased font sizes) */}
-                    <div className="text-center sm:px-28 space-y-1.5">
-                      {/* Company Name (Enlarged) */}
-                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+                    {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
+                    <div className="text-center sm:px-28 space-y-2">
+                      {/* Company Name (Enlarged, Professional Font, Underlined) */}
+                      <h2 
+                        style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-900"
+                      >
                         {storeDetails.name || 'ElectroManage'}
                       </h2>
 
                       {/* Address (Under Company Name, enlarged) */}
                       {storeDetails.address && (
-                        <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-xl mx-auto leading-relaxed">
+                        <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-xl mx-auto leading-relaxed pt-1">
                           {storeDetails.address}
                         </p>
                       )}
@@ -2191,32 +2205,35 @@ export default function Sales() {
               <div className="bg-white p-6 sm:p-8 space-y-6">
                 {/* Store details and Header (Logo on Top Left Corner) */}
                 <div className="relative pb-6 border-b-2 border-slate-200">
-                  {/* Company Logo on Top Left Corner */}
-                  <div className="sm:absolute sm:left-0 sm:top-0 mb-4 sm:mb-0 flex justify-center sm:justify-start">
+                  {/* Company Logo on Top Left Corner (Moved slightly up, no border rectangle) */}
+                  <div className="sm:absolute sm:left-0 sm:-top-3 mb-4 sm:mb-0 flex justify-center sm:justify-start">
                     {storeDetails.logoUrl ? (
                       <img 
                         src={storeDetails.logoUrl} 
                         alt="Company Logo" 
-                        className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl object-cover border border-slate-200 shadow-sm" 
+                        className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border border-slate-200 shadow-sm">
+                      <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border-0 shadow-none ring-0 outline-none">
                         {getInitials(storeDetails.name || 'ElectroManage')}
                       </div>
                     )}
                   </div>
 
-                  {/* Company Details (Centered with increased font sizes) */}
-                  <div className="text-center sm:px-24 space-y-1.5">
-                    {/* Company Name (Enlarged) */}
-                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-snug">
+                  {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
+                  <div className="text-center sm:px-24 space-y-2">
+                    {/* Company Name (Enlarged, Professional Font, Underlined) */}
+                    <h3 
+                      style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                      className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-snug underline underline-offset-8 decoration-[3px] decoration-slate-900"
+                    >
                       {storeDetails.name || 'ElectroManage'}
                     </h3>
 
                     {/* Address (Under Company Name, enlarged) */}
                     {storeDetails.address && (
-                      <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-lg mx-auto leading-relaxed">
+                      <p className="text-sm sm:text-base font-semibold text-slate-700 max-w-lg mx-auto leading-relaxed pt-1">
                         {storeDetails.address}
                       </p>
                     )}
