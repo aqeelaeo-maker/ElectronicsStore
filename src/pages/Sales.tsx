@@ -922,7 +922,7 @@ export default function Sales() {
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
-            padding: 15px 25px;
+            padding: 10px 22px;
             color: #1e293b;
             background-color: #fff;
             -webkit-print-color-adjust: exact;
@@ -942,34 +942,34 @@ export default function Sales() {
           .header-divider-line {
             width: 100%;
             border-bottom: 2px solid #000000;
-            margin-top: 8px;
-            margin-bottom: 12px;
+            margin-top: 4px;
+            margin-bottom: 8px;
           }
           .logo-cell {
-            width: 120px;
+            width: 105px;
             vertical-align: middle;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 100px;
-            height: 100px;
-            border-radius: 16px;
+            width: 85px;
+            height: 85px;
+            border-radius: 12px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 38px;
+            font-size: 32px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
           }
           .logo-img {
-            width: 100px;
-            height: 100px;
-            border-radius: 16px;
+            width: 85px;
+            height: 85px;
+            border-radius: 12px;
             object-fit: contain;
             border: none;
             outline: none;
@@ -980,15 +980,15 @@ export default function Sales() {
           .center-info-cell {
             text-align: center;
             vertical-align: middle;
-            padding: 0 10px;
+            padding: 0 8px;
           }
           .right-spacer-cell {
-            width: 120px;
+            width: 105px;
             vertical-align: middle;
           }
           .company-name {
             font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
-            font-size: 42px;
+            font-size: 38px;
             font-weight: 900;
             color: #000000;
             margin: 0;
@@ -996,12 +996,12 @@ export default function Sales() {
             text-align: center;
             letter-spacing: 0.01em;
             text-decoration: underline;
-            text-underline-offset: 8px;
-            text-decoration-thickness: 3px;
+            text-underline-offset: 6px;
+            text-decoration-thickness: 2.5px;
             text-decoration-color: #000000;
           }
           .details-cell {
-            padding-top: 6px;
+            padding-top: 1px;
             padding-bottom: 0;
             vertical-align: top;
             text-align: left;
@@ -1009,12 +1009,12 @@ export default function Sales() {
           .company-left-details {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
             font-size: 14px;
-            line-height: 1.45;
+            line-height: 1.35;
             color: #1e293b;
             text-align: left;
           }
           .left-detail-row {
-            margin-bottom: 2px;
+            margin-bottom: 1px;
             word-break: break-word;
           }
           .left-detail-label {
@@ -1769,58 +1769,61 @@ export default function Sales() {
                 </div>
 
                 {/* Printable Document Paper Card */}
-                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-slate-700 space-y-4">
-                  {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
-                  <div className="flex items-center justify-between gap-4 pt-0 pb-1">
-                    {/* Company Logo on Left */}
-                    <div className="w-24 sm:w-28 flex-shrink-0">
-                      {storeDetails.logoUrl ? (
-                        <img 
-                          src={storeDetails.logoUrl} 
-                          alt="Store Logo" 
-                          className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
-                        />
-                      ) : (
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
-                          {getInitials(storeDetails.name || 'ElectroManage')}
-                        </div>
-                      )}
+                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-slate-700 space-y-3">
+                  {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
+                  <div>
+                    {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
+                    <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                      {/* Company Logo on Left */}
+                      <div className="w-20 sm:w-24 flex-shrink-0">
+                        {storeDetails.logoUrl ? (
+                          <img 
+                            src={storeDetails.logoUrl} 
+                            alt="Store Logo" 
+                            className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                          />
+                        ) : (
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                            {getInitials(storeDetails.name || 'ElectroManage')}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Company Name (Enlarged, Prestigious Font, Underlined, Vertically Aligned with Logo) */}
+                      <div className="flex-1 text-center py-0 sm:px-4">
+                        <h2 
+                          style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                          className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-6 decoration-[2.5px] decoration-slate-950"
+                        >
+                          {storeDetails.name || 'ElectroManage'}
+                        </h2>
+                      </div>
+
+                      {/* Right spacer for symmetry */}
+                      <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
                     </div>
 
-                    {/* Company Name (Enlarged, Prestigious Font, Underlined, Vertically Aligned with Logo) */}
-                    <div className="flex-1 text-center py-1 sm:px-4">
-                      <h2 
-                        style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
+                    {/* Company Info under Logo on left side in Calibri font size 14 - MOVED UP */}
+                    <div className="mt-0.5 text-left max-w-sm">
+                      <div 
+                        style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                        className="text-[14px] text-slate-800 space-y-0.5 leading-tight"
                       >
-                        {storeDetails.name || 'ElectroManage'}
-                      </h2>
+                        <p>
+                          <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
+                        </p>
+                        <p>
+                          <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
+                        </p>
+                        <p>
+                          <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Right spacer for symmetry */}
-                    <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
+                    {/* Black line drawn under Email Address - MOVED UP */}
+                    <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
                   </div>
-
-                  {/* Company Info under Logo on left side in Calibri font size 14 */}
-                  <div className="pt-1 text-left max-w-sm">
-                    <div 
-                      style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                      className="text-[14px] text-slate-800 space-y-1 leading-snug"
-                    >
-                      <p>
-                        <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
-                      </p>
-                      <p>
-                        <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
-                      </p>
-                      <p>
-                        <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Black line drawn under Email Address */}
-                  <div className="w-full border-b-2 border-black mt-2 mb-3"></div>
 
                   {/* Meta Grid: Customer & Invoice Details */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs sm:text-sm">
@@ -2205,59 +2208,62 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="bg-white p-5 sm:p-6 space-y-4">
-                {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
-                <div className="flex items-center justify-between gap-4 pt-0 pb-1">
-                  {/* Company Logo on Left */}
-                  <div className="w-24 sm:w-28 flex-shrink-0">
-                    {storeDetails.logoUrl ? (
-                      <img 
-                        src={storeDetails.logoUrl} 
-                        alt="Company Logo" 
-                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-3xl sm:text-4xl border-0 shadow-none ring-0 outline-none">
-                        {getInitials(storeDetails.name || 'ElectroManage')}
-                      </div>
-                    )}
+              <div className="bg-white p-5 sm:p-6 space-y-3">
+                {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
+                <div>
+                  {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
+                  <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                    {/* Company Logo on Left */}
+                    <div className="w-20 sm:w-24 flex-shrink-0">
+                      {storeDetails.logoUrl ? (
+                        <img 
+                          src={storeDetails.logoUrl} 
+                          alt="Company Logo" 
+                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border-0 shadow-none ring-0 outline-none">
+                          {getInitials(storeDetails.name || 'ElectroManage')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Company Details (Centered with professional fonts, underlined, previous perfect size) */}
+                    <div className="flex-1 text-center py-0 sm:px-4">
+                      <h3 
+                        style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                        className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-6 decoration-[2.5px] decoration-slate-950"
+                      >
+                        {storeDetails.name || 'ElectroManage'}
+                      </h3>
+                    </div>
+
+                    {/* Right spacer for symmetry */}
+                    <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
                   </div>
 
-                  {/* Company Details (Centered with professional fonts, underlined, previous perfect size) */}
-                  <div className="flex-1 text-center py-1 sm:px-4">
-                    <h3 
-                      style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                      className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
+                  {/* Company Info under Logo on left side in Calibri font size 14 - MOVED UP */}
+                  <div className="mt-0.5 text-left max-w-sm">
+                    <div 
+                      style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                      className="text-[14px] text-slate-800 space-y-0.5 leading-tight"
                     >
-                      {storeDetails.name || 'ElectroManage'}
-                    </h3>
+                      <p>
+                        <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
+                      </p>
+                      <p>
+                        <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
+                      </p>
+                      <p>
+                        <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Right spacer for symmetry */}
-                  <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
+                  {/* Black line drawn under Email Address - MOVED UP */}
+                  <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
                 </div>
-
-                {/* Company Info under Logo on left side in Calibri font size 14 */}
-                <div className="pt-1 text-left max-w-sm">
-                  <div 
-                    style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                    className="text-[14px] text-slate-800 space-y-1 leading-snug"
-                  >
-                    <p>
-                      <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
-                    </p>
-                    <p>
-                      <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
-                    </p>
-                    <p>
-                      <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Black line drawn under Email Address */}
-                <div className="w-full border-b-2 border-black mt-2 mb-3"></div>
 
                 {/* Meta & Customer/Invoice details */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs sm:text-sm">
