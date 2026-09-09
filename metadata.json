@@ -1,6 +1,6 @@
 {
   "name": "Inventory & POS System",
   "description": "Offline-first Progressive Web Application (PWA) for Inventory, Sales POS, and Customer Management with automatic cloud synchronization.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

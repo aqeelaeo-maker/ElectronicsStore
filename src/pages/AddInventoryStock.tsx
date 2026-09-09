@@ -17,6 +17,7 @@ import {
   Search, 
   X, 
   Barcode, 
+  Camera,
   Plus, 
   Trash2, 
   CheckCircle2, 
@@ -30,6 +31,7 @@ import {
   Layers,
   Info
 } from 'lucide-react';
+import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
 export interface Product {
   id: string;
@@ -86,6 +88,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
   // Single scan mode
   const [singleSerial, setSingleSerial] = useState('');
   const [singleSerialWarning, setSingleSerialWarning] = useState<string | null>(null);
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
   const singleInputRef = useRef<HTMLInputElement>(null);
 
   // Bulk mode
@@ -232,30 +235,57 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     }
   };
 
-  // Add single serial
+  // Add single serial via hardware barcode scanner or input
   const handleAddSingleSerial = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = singleSerial.trim();
     if (!trimmed) return;
 
     if (!selectedProduct) {
+      playScanBeep('error');
       toast.warning('Please select a product first');
       return;
     }
 
     const check = checkDuplicateSerial(trimmed);
     if (check.isDup) {
+      playScanBeep('error');
       toast.error(`Cannot add: ${check.reason}`);
       return;
     }
 
+    playScanBeep('success');
     setSerialNumbersList(prev => [trimmed, ...prev]);
     setSingleSerial('');
     setSingleSerialWarning(null);
     toast.success(`Serial ${trimmed} added`);
 
-    // Keep input focused for continuous scanning
+    // Keep input focused for continuous scanning with USB/Bluetooth barcode guns
     singleInputRef.current?.focus();
+  };
+
+  // Handle serial scanned via device camera
+  const handleCameraScan = (scannedText: string): boolean => {
+    if (!selectedProduct) {
+      playScanBeep('error');
+      toast.warning('Please select a product first');
+      return false;
+    }
+
+    const trimmed = scannedText.trim();
+    if (!trimmed) return false;
+
+    const check = checkDuplicateSerial(trimmed);
+    if (check.isDup) {
+      playScanBeep('error');
+      toast.error(`Cannot add "${trimmed}": ${check.reason}`);
+      return false;
+    }
+
+    playScanBeep('success');
+    setSerialNumbersList(prev => [trimmed, ...prev]);
+    toast.success(`Scanned serial "${trimmed}" added!`);
+    return true;
   };
 
   // Add bulk serials from paste
@@ -892,27 +922,45 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 {/* Mode 1: Barcode / Single Scan */}
                 {inputMode === 'single' && (
                   <form onSubmit={handleAddSingleSerial} className="space-y-3">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <div className="relative flex-1">
                         <input
                           ref={singleInputRef}
                           type="text"
                           autoFocus
-                          placeholder="Scan barcode or type serial number (Press Enter)..."
+                          placeholder="Scan with USB barcode scanner or type serial (Press Enter)..."
                           className="glass-input block w-full pl-9 pr-3 py-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 placeholder:font-sans"
                           value={singleSerial}
                           onChange={(e) => handleSingleSerialChange(e.target.value)}
                         />
                         <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                       </div>
-                      <button
-                        type="submit"
-                        disabled={!singleSerial.trim()}
-                        className="px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Serial
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!selectedProduct) {
+                              toast.warning('Please select a product first');
+                              return;
+                            }
+                            setShowCameraScanner(true);
+                          }}
+                          className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          title="Open device camera to scan serial barcodes"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Scan with Camera</span>
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={!singleSerial.trim()}
+                          className="px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Add</span>
+                        </button>
+                      </div>
                     </div>
 
                     {singleSerialWarning && (
@@ -921,10 +969,15 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                         <span className="font-semibold">Notice: {singleSerialWarning}</span>
                       </div>
                     )}
-                    <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Info className="w-3.5 h-3.5 text-slate-400" />
-                      Tip: Barcode scanners automatically submit and prepare for the next scan.
-                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <Info className="w-3.5 h-3.5 text-slate-400" />
+                        Hardware barcode scanners submit automatically on scan.
+                      </span>
+                      <span className="text-emerald-700 font-bold">
+                        Continuous Camera scanning supported
+                      </span>
+                    </div>
                   </form>
                 )}
 
@@ -1158,6 +1211,16 @@ SN-4029103"
           )}
         </div>
       </div>
+
+      {/* Camera Barcode / Serial Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={showCameraScanner}
+        onClose={() => setShowCameraScanner(false)}
+        onScan={handleCameraScan}
+        title={`Scan Serial Numbers — ${selectedProduct?.brand || ''} ${selectedProduct?.modelNumber || selectedProduct?.name || ''}`}
+        subtitle="Point device camera at barcodes or QR labels to automatically add units to batch."
+        continuous={true}
+      />
     </div>
   );
 }

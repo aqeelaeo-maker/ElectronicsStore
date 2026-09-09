@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, CreditCard, Plus, Save, ShieldAlert, Store, Trash2 } from 'lucide-react';
+import { Building2, CreditCard, FileText, Plus, Save, ShieldAlert, Store, Trash2 } from 'lucide-react';
 
 export interface BankAccount {
   bankName: string;
@@ -20,6 +20,7 @@ interface StoreSettings {
   address: string;
   email: string;
   bankAccounts: BankAccount[];
+  termsAndConditions?: string;
 }
 
 const compressImage = (base64Str: string, maxWidth = 250, maxHeight = 250): Promise<string> => {
@@ -75,7 +76,8 @@ export default function Settings() {
     phone: '',
     address: '',
     email: '',
-    bankAccounts: []
+    bankAccounts: [],
+    termsAndConditions: ''
   });
 
   const [loading, setLoading] = useState(true);
@@ -124,7 +126,8 @@ export default function Settings() {
               phone: data.phone || '',
               address: data.address || '',
               email: data.email || '',
-              bankAccounts: loadedAccounts
+              bankAccounts: loadedAccounts,
+              termsAndConditions: data.termsAndConditions || ''
             });
           }
         }
@@ -330,6 +333,48 @@ export default function Settings() {
               className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
               value={storeSettings.address}
               onChange={(e) => setStoreSettings({...storeSettings, address: e.target.value})}
+            />
+          </div>
+
+          {/* Invoice Terms & Conditions Field Section */}
+          <div className="pt-4 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <label htmlFor="storeTermsAndConditions" className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#0a382c]" />
+                Invoice Terms and Conditions
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStoreSettings(prev => ({
+                    ...prev,
+                    termsAndConditions: "1. Goods once sold will not be returned or refunded. Exchange is allowed within 3 days with original receipt.\n2. Warranty claims are subject to company/manufacturer terms. Physical, liquid, or electrical burn damage voids all warranty.\n3. Original invoice must be presented for any warranty claims or customer support."
+                  }))}
+                  className="text-[11px] font-bold text-[#0a382c] hover:text-[#0d4a3b] hover:underline"
+                >
+                  Insert Sample Terms
+                </button>
+                {storeSettings.termsAndConditions && (
+                  <button
+                    type="button"
+                    onClick={() => setStoreSettings(prev => ({ ...prev, termsAndConditions: '' }))}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mb-2.5">
+              These terms, warranty policies, return rules, or disclaimers will be displayed at the end of every printed sales invoice and receipt.
+            </p>
+            <textarea
+              id="storeTermsAndConditions"
+              rows={4}
+              placeholder="e.g.&#10;1. Goods once sold will not be refunded. Exchange allowed within 3 days with original receipt.&#10;2. Warranty claims are subject to company policy. Physical or burn damage is not claimable.&#10;3. Please present this invoice for any warranty claims."
+              className="glass-input block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 leading-relaxed font-sans"
+              value={storeSettings.termsAndConditions || ''}
+              onChange={(e) => setStoreSettings({...storeSettings, termsAndConditions: e.target.value})}
             />
           </div>
 

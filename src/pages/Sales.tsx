@@ -31,11 +31,14 @@ import {
   ArrowLeft,
   CreditCard,
   Banknote,
-  Globe
+  Globe,
+  Camera,
+  Barcode
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
 interface Product {
   id: string;
@@ -106,13 +109,15 @@ export default function Sales() {
     address: string;
     email: string;
     bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number; balance?: number }[];
+    termsAndConditions?: string;
   }>({
     name: '',
     logoUrl: '',
     phone: '',
     address: '',
     email: '',
-    bankAccounts: []
+    bankAccounts: [],
+    termsAndConditions: ''
   });
   
   const [loading, setLoading] = useState(true);
@@ -139,6 +144,11 @@ export default function Sales() {
   }>>([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
   const [saving, setSaving] = useState(false);
   const [printOnCreate, setPrintOnCreate] = useState(false);
+
+  // Barcode & Camera Scanner States
+  const [showSalesCameraScanner, setShowSalesCameraScanner] = useState(false);
+  const [barcodeScanInput, setBarcodeScanInput] = useState('');
+  const [activeScanningItemIndex, setActiveScanningItemIndex] = useState<number | null>(null);
 
   const getNextInvoiceNumber = () => {
     const currentYear = new Date().getFullYear();
@@ -279,7 +289,8 @@ export default function Sales() {
           phone: data.phone || '',
           address: data.address || '',
           email: data.email || '',
-          bankAccounts: loadedAccounts
+          bankAccounts: loadedAccounts,
+          termsAndConditions: data.termsAndConditions || ''
         });
       }
     }, (error) => {
@@ -360,6 +371,186 @@ export default function Sales() {
 
   const calculateInvoiceTotal = () => {
     return invoiceItems.reduce((sum, item) => sum + Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)), 0);
+  };
+
+  // Add items and attach serial numbers via barcode or camera scan
+  const handleScanSerialNumber = (scannedText: string): boolean => {
+    const trimmed = scannedText.trim();
+    if (!trimmed) return false;
+
+    // Check if matching serial in allSerials
+    const matchedSerial = allSerials.find(
+      s => s.serialNumber.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (matchedSerial) {
+      // 1. Verify availability
+      let isAllowed = matchedSerial.status === 'Available';
+      if (!isAllowed && editingSale && editingSale.items) {
+        isAllowed = editingSale.items.some(
+          item => item.selectedSerials?.includes(matchedSerial.id) || item.selectedSerials?.includes(matchedSerial.serialNumber)
+        );
+      }
+
+      if (!isAllowed) {
+        playScanBeep('error');
+        toast.warning(`Serial "${matchedSerial.serialNumber}" is already marked as ${matchedSerial.status}.`);
+        return false;
+      }
+
+      // 2. Check if already added in current invoice
+      const isAlreadyAdded = invoiceItems.some(
+        item => item.selectedSerials && (item.selectedSerials.includes(matchedSerial.id) || item.selectedSerials.includes(matchedSerial.serialNumber))
+      );
+
+      if (isAlreadyAdded) {
+        playScanBeep('warning');
+        toast.info(`Serial "${matchedSerial.serialNumber}" is already added to this invoice.`);
+        return false;
+      }
+
+      // 3. Find the product
+      const product = products.find(p => p.id === matchedSerial.productId);
+      if (!product) {
+        playScanBeep('error');
+        toast.error(`Product linked to serial "${matchedSerial.serialNumber}" not found.`);
+        return false;
+      }
+
+      let newItems = [...invoiceItems];
+
+      // If user triggered scanning from a specific row and the serial matches that row's product
+      if (activeScanningItemIndex !== null && newItems[activeScanningItemIndex] && newItems[activeScanningItemIndex].productId === product.id) {
+        const row = newItems[activeScanningItemIndex];
+        const currentSerials = row.selectedSerials || [];
+        if (currentSerials.length < row.quantity) {
+          newItems[activeScanningItemIndex] = {
+            ...row,
+            selectedSerials: [...currentSerials, matchedSerial.id]
+          };
+        } else {
+          const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
+          const maxAllowed = product.stock + previousQty;
+          if (row.quantity + 1 > maxAllowed) {
+            playScanBeep('warning');
+            toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
+            return false;
+          }
+          newItems[activeScanningItemIndex] = {
+            ...row,
+            quantity: row.quantity + 1,
+            selectedSerials: [...currentSerials, matchedSerial.id]
+          };
+        }
+      } else {
+        // Global scan: check if row for this product already exists
+        const existingRowIndex = newItems.findIndex(item => item.productId === product.id);
+
+        if (existingRowIndex >= 0) {
+          const row = newItems[existingRowIndex];
+          const currentSerials = row.selectedSerials || [];
+          if (currentSerials.length < row.quantity) {
+            newItems[existingRowIndex] = {
+              ...row,
+              selectedSerials: [...currentSerials, matchedSerial.id]
+            };
+          } else {
+            const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
+            const maxAllowed = product.stock + previousQty;
+            if (row.quantity + 1 > maxAllowed) {
+              playScanBeep('warning');
+              toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
+              return false;
+            }
+            newItems[existingRowIndex] = {
+              ...row,
+              quantity: row.quantity + 1,
+              selectedSerials: [...currentSerials, matchedSerial.id]
+            };
+          }
+        } else {
+          // Check if first row is empty
+          const firstRowIsEmpty = newItems.length === 1 && (!newItems[0].productId || newItems[0].productId === '');
+          const newRow = {
+            productId: product.id,
+            quantity: 1,
+            salePrice: product.salePrice || 0,
+            discount: 0,
+            warranty: 'No Warranty',
+            selectedSerials: [matchedSerial.id]
+          };
+
+          if (firstRowIsEmpty) {
+            newItems = [newRow];
+          } else {
+            newItems.push(newRow);
+          }
+        }
+      }
+
+      setInvoiceItems(newItems);
+      playScanBeep('success');
+      toast.success(`Added ${product.name} (SN: ${matchedSerial.serialNumber})`);
+      return true;
+    }
+
+    // If not a serial number, check if user scanned a product model number or barcode
+    const matchedProduct = products.find(
+      p => (p.modelNumber && p.modelNumber.trim().toLowerCase() === trimmed.toLowerCase()) ||
+           (p.name && p.name.trim().toLowerCase() === trimmed.toLowerCase())
+    );
+
+    if (matchedProduct) {
+      let newItems = [...invoiceItems];
+      const existingRowIndex = newItems.findIndex(item => item.productId === matchedProduct.id);
+      const previousQty = editingSale?.items?.find(pi => pi.productId === matchedProduct.id)?.quantity || 0;
+      const maxAllowed = matchedProduct.stock + previousQty;
+
+      if (existingRowIndex >= 0) {
+        const row = newItems[existingRowIndex];
+        if (row.quantity + 1 > maxAllowed) {
+          playScanBeep('warning');
+          toast.warning(`Maximum available stock (${maxAllowed}) reached for ${matchedProduct.name}.`);
+          return false;
+        }
+        newItems[existingRowIndex] = {
+          ...row,
+          quantity: row.quantity + 1
+        };
+      } else {
+        const firstRowIsEmpty = newItems.length === 1 && (!newItems[0].productId || newItems[0].productId === '');
+        const newRow = {
+          productId: matchedProduct.id,
+          quantity: 1,
+          salePrice: matchedProduct.salePrice || 0,
+          discount: 0,
+          warranty: 'No Warranty',
+          selectedSerials: []
+        };
+        if (firstRowIsEmpty) {
+          newItems = [newRow];
+        } else {
+          newItems.push(newRow);
+        }
+      }
+
+      setInvoiceItems(newItems);
+      playScanBeep('success');
+      toast.success(`Added product: ${matchedProduct.name}`);
+      return true;
+    }
+
+    playScanBeep('error');
+    toast.error(`Serial or barcode "${trimmed}" not found in inventory.`);
+    return false;
+  };
+
+  const handleHardwareBarcodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = barcodeScanInput.trim();
+    if (!trimmed) return;
+    setBarcodeScanInput('');
+    handleScanSerialNumber(trimmed);
   };
 
   // Handle setting up edit mode
@@ -1112,8 +1303,30 @@ export default function Sales() {
             border-top: 2px solid #000000;
             padding-top: 8px;
           }
-          .footer {
+          .terms-section {
             margin-top: 14px;
+            border-top: 1.5px solid #000000;
+            padding-top: 6px;
+            text-align: left;
+            page-break-inside: avoid;
+          }
+          .terms-header {
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #000000;
+            margin-bottom: 3px;
+          }
+          .terms-text {
+            font-size: 9.5px;
+            color: #000000;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            font-weight: 600;
+          }
+          .footer {
+            margin-top: 12px;
             border-top: 1.5px solid #000000;
             padding-top: 8px;
             text-align: center;
@@ -1233,9 +1446,16 @@ export default function Sales() {
               </tr>
             </table>
 
+            ${storeDetails.termsAndConditions ? `
+              <div class="terms-section">
+                <div class="terms-header">Terms & Conditions:</div>
+                <div class="terms-text">${storeDetails.termsAndConditions.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+              </div>
+            ` : ''}
+
             <div class="footer">
-              Thank you for your purchase!<br>
-              For any warranty claims, please present this invoice.
+              Thank you for your purchase!
+              ${!storeDetails.termsAndConditions ? '<br>For any warranty claims, please present this invoice.' : ''}
             </div>
           </div>
         </div>
@@ -1598,6 +1818,58 @@ export default function Sales() {
                     </div>
                   </div>
 
+                  {/* Quick Scan Barcode / Serial Number Bar */}
+                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
+                          <Barcode className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 tracking-tight">
+                            Add Items by Scanning Serial Numbers
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Scan with USB/Bluetooth barcode gun or use device camera
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveScanningItemIndex(null);
+                          setShowSalesCameraScanner(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer"
+                        title="Open device camera to scan serial barcodes"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Scan with Camera</span>
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleHardwareBarcodeSubmit} className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Scan serial barcode with barcode gun (or type & press Enter)..."
+                          value={barcodeScanInput}
+                          onChange={(e) => setBarcodeScanInput(e.target.value)}
+                          className="glass-input block w-full pl-9 pr-3 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={!barcodeScanInput.trim()}
+                        className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
+                    </form>
+                  </div>
+
                   {/* Vertical Stack of Item Rows */}
                   <div className="space-y-3.5">
                     {invoiceItems.map((item, index) => {
@@ -1716,13 +1988,27 @@ export default function Sales() {
                           {/* Serial Number Selector for Electronics */}
                           {selectedProduct && productSerials.length > 0 && (
                             <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
                                   Select Sold Serial Numbers (Required: {item.quantity})
                                 </span>
-                                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                                  {productSerials.length} Available
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveScanningItemIndex(index);
+                                      setShowSalesCameraScanner(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-200 transition-colors cursor-pointer"
+                                    title="Scan serial barcodes specifically for this item"
+                                  >
+                                    <Camera className="w-3 h-3" />
+                                    <span>Scan for this item</span>
+                                  </button>
+                                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                                    {productSerials.length} Available
+                                  </span>
+                                </div>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
                                 {productSerials.map(sn => {
@@ -1978,10 +2264,24 @@ export default function Sales() {
                       </div>
                     </div>
 
+                    {/* Terms & Conditions (Configured in Settings) */}
+                    {storeDetails.termsAndConditions && (
+                      <div className="pt-2.5 border-t border-black text-left">
+                        <div className="text-[10px] font-black uppercase tracking-wider text-black mb-1">
+                          Terms & Conditions:
+                        </div>
+                        <div className="text-[9.5px] text-black font-semibold leading-relaxed whitespace-pre-wrap">
+                          {storeDetails.termsAndConditions}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Footer */}
                     <div className="pt-3 border-t-2 border-black text-center text-[11px] text-black font-semibold space-y-0.5">
                       <p>Thank you for your purchase!</p>
-                      <p>For any warranty claims, please present this original invoice.</p>
+                      {!storeDetails.termsAndConditions && (
+                        <p>For any warranty claims, please present this original invoice.</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2392,6 +2692,26 @@ export default function Sales() {
                     </div>
                   </div>
                 </div>
+
+                {/* Terms & Conditions (Configured in Settings) */}
+                {storeDetails.termsAndConditions && (
+                  <div className="pt-3 border-t border-black text-left">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-black mb-1">
+                      Terms & Conditions:
+                    </div>
+                    <div className="text-[9.5px] text-black font-semibold leading-relaxed whitespace-pre-wrap">
+                      {storeDetails.termsAndConditions}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="pt-3 border-t-2 border-black text-center text-[11px] text-black font-semibold space-y-0.5">
+                  <p>Thank you for your purchase!</p>
+                  {!storeDetails.termsAndConditions && (
+                    <p>For any warranty claims, please present this original invoice.</p>
+                  )}
+                </div>
               </div>
 
               <div className="bg-[#f8faf9] px-6 py-4 flex justify-between items-center border-t border-slate-150">
@@ -2419,6 +2739,23 @@ export default function Sales() {
         </div>
         );
       })()}
+
+      {/* Sales Camera Barcode / Serial Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={showSalesCameraScanner}
+        onClose={() => {
+          setShowSalesCameraScanner(false);
+          setActiveScanningItemIndex(null);
+        }}
+        onScan={handleScanSerialNumber}
+        title={
+          activeScanningItemIndex !== null && invoiceItems[activeScanningItemIndex]
+            ? `Scan Serials for ${products.find(p => p.id === invoiceItems[activeScanningItemIndex].productId)?.name || 'Item'}`
+            : 'Scan Barcode or Serial Number'
+        }
+        subtitle="Point camera at product serial number or barcode label to add to invoice automatically"
+        continuous={true}
+      />
     </div>
   );
 }
