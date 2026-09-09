@@ -880,28 +880,28 @@ export default function Sales() {
     const itemsRows = sale.items && sale.items.length > 0 
       ? sale.items.map(item => `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px 14px; text-align: left; vertical-align: top;">
-            <div style="font-weight: bold; color: #1e293b; font-size: 13px;">${item.productName}</div>
-            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
+          <td style="padding: 5px 8px; text-align: left; vertical-align: top;">
+            <div style="font-weight: bold; color: #1e293b; font-size: 11px;">${item.productName}</div>
+            <div style="font-size: 9px; color: #64748b; margin-top: 1px;">
               ${item.brand} • ${item.modelNumber} • ${item.category}
             </div>
             ${item.selectedSerials && item.selectedSerials.length > 0 ? `
-              <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px;">
-                <span style="font-size: 9px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Serials:</span>
-                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 9px; background-color: #f1f5f9; color: #334155; padding: 1px 4px; border-radius: 3px; border: 1px solid #e2e8f0; margin-right: 4px; display: inline-block;">${sn}</span>`).join('')}
+              <div style="margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px;">
+                <span style="font-size: 8px; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Serials:</span>
+                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 8px; background-color: #f1f5f9; color: #334155; padding: 0.5px 3px; border-radius: 2px; border: 1px solid #e2e8f0; margin-right: 3px; display: inline-block;">${sn}</span>`).join('')}
               </div>
             ` : ''}
           </td>
-          <td style="padding: 10px 14px; text-align: center; font-weight: 500; color: #334155; vertical-align: top;">PKR ${item.salePrice.toFixed(2)}</td>
-          <td style="padding: 10px 14px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top;">${item.quantity}</td>
-          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}</td>
-          <td style="padding: 10px 14px; text-align: center; color: #475569; vertical-align: top;">${item.warranty || 'No Warranty'}</td>
-          <td style="padding: 10px 14px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top;">PKR ${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
+          <td style="padding: 5px 8px; text-align: center; font-weight: 500; color: #334155; vertical-align: top; font-size: 11px;">PKR ${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 5px 8px; text-align: center; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">${item.quantity}</td>
+          <td style="padding: 5px 8px; text-align: center; color: #475569; vertical-align: top; font-size: 11px;">${item.discount > 0 ? `PKR ${item.discount.toFixed(2)}` : '-'}</td>
+          <td style="padding: 5px 8px; text-align: center; color: #475569; vertical-align: top; font-size: 11px;">${item.warranty || 'No Warranty'}</td>
+          <td style="padding: 5px 8px; text-align: right; font-weight: bold; color: #0f172a; vertical-align: top; font-size: 11px;">PKR ${(item.subtotal || (item.quantity * item.salePrice - item.discount)).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
         <tr>
-          <td colspan="6" style="padding: 20px 0; text-align: center; color: #64748b; font-style: italic;">
+          <td colspan="6" style="padding: 16px 0; text-align: center; color: #64748b; font-style: italic; font-size: 11px;">
             No itemized details recorded.
           </td>
         </tr>
@@ -922,8 +922,8 @@ export default function Sales() {
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
-            padding: 40px;
-            color: #334155;
+            padding: 20px 25px;
+            color: #1e293b;
             background-color: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
@@ -940,169 +940,138 @@ export default function Sales() {
           }
           .header-divider-line {
             width: 100%;
-            border-bottom: 2px solid #0f172a;
-            margin-top: 16px;
-            margin-bottom: 24px;
+            border-bottom: 2px solid #000000;
+            margin-top: 6px;
+            margin-bottom: 10px;
           }
           .logo-cell {
-            width: 250px;
+            width: 210px;
             vertical-align: top;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 100px;
-            height: 100px;
-            border-radius: 16px;
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
             background-color: #f0b90b;
             color: #0f172a;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 38px;
+            font-size: 24px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
-            margin-top: -10px;
           }
           .logo-img {
-            width: 100px;
-            height: 100px;
-            border-radius: 16px;
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
             object-fit: contain;
             border: none;
             outline: none;
             box-shadow: none;
             background: transparent;
             display: block;
-            margin-top: -10px;
           }
           .company-left-details {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
-            font-size: 13px;
-            line-height: 1.45;
-            color: #334155;
-            margin-top: 10px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #1e293b;
+            margin-top: 5px;
             text-align: left;
           }
           .left-detail-row {
-            margin-bottom: 3px;
+            margin-bottom: 1px;
             word-break: break-word;
           }
           .left-detail-label {
             font-weight: 700;
-            color: #0f172a;
-            margin-right: 4px;
+            color: #000000;
+            margin-right: 3px;
           }
           .center-info-cell {
             text-align: center;
-            vertical-align: top;
-            padding: 0 12px;
+            vertical-align: middle;
+            padding: 0 10px;
           }
           .right-spacer-cell {
-            width: 250px;
+            width: 210px;
             vertical-align: top;
           }
           .company-name {
             font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
-            font-size: 42px;
+            font-size: 26px;
             font-weight: 900;
-            color: #0f172a;
-            margin: 0 0 10px 0;
-            line-height: 1.15;
+            color: #000000;
+            margin: 0;
+            line-height: 1.2;
             text-align: center;
             letter-spacing: 0.01em;
             text-decoration: underline;
-            text-underline-offset: 8px;
-            text-decoration-thickness: 3px;
-            text-decoration-color: #0f172a;
-          }
-          .document-title {
-            display: inline-block;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #047857;
-            background-color: #ecfdf5;
-            border: 1.5px solid #a7f3d0;
-            padding: 4px 16px;
-            border-radius: 9999px;
-            font-weight: 800;
-            margin-top: 6px;
+            text-underline-offset: 5px;
+            text-decoration-thickness: 2.5px;
+            text-decoration-color: #000000;
           }
           .meta-grid {
             width: 100%;
             border-collapse: collapse;
             border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
           }
           .meta-grid td {
             vertical-align: top;
-            font-size: 12px;
-            padding-bottom: 15px;
-          }
-          .section-title {
-            font-size: 10px;
-            font-weight: 900;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 8px;
-            display: block;
-          }
-          .info-block {
-            line-height: 1.5;
-          }
-          .info-block strong {
-            color: #0f172a;
-            font-size: 13px;
+            font-size: 11px;
+            padding-bottom: 6px;
           }
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
+            margin-bottom: 16px;
           }
           .items-table th {
             background-color: #f8fafc;
-            color: #64748b;
+            color: #475569;
             font-size: 10px;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 10px 14px;
+            padding: 6px 8px;
             border-bottom: 1px solid #e2e8f0;
           }
           .items-table td {
-            padding: 12px 14px;
-            font-size: 12px;
+            padding: 5px 8px;
+            font-size: 11px;
           }
           .totals-table {
-            width: 320px;
+            width: 280px;
             margin-left: auto;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 11px;
           }
           .totals-table td {
-            padding: 5px 0;
+            padding: 3px 0;
           }
           .totals-table .total-row {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 900;
             color: #0a382c;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 10px;
+            border-top: 1.5px solid #000000;
+            padding-top: 6px;
           }
           .footer {
-            margin-top: 50px;
+            margin-top: 24px;
             border-top: 1px solid #e2e8f0;
-            padding-top: 20px;
+            padding-top: 10px;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             color: #94a3b8;
             font-weight: 600;
-            line-height: 1.5;
+            line-height: 1.4;
           }
           @media print {
             body {
@@ -1137,30 +1106,32 @@ export default function Sales() {
 
           <table class="meta-grid">
             <tr>
-              <td style="width: 50%; vertical-align: top; text-align: left; padding-right: 20px;">
-                <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.8;">
+              <td style="width: 50%; vertical-align: top; text-align: left;">
+                <table style="border-collapse: collapse; font-size: 12px; color: #1e293b; line-height: 1.5;">
                   <tr>
-                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Customer:</td>
-                    <td style="padding: 2px 0; font-weight: 700; color: #0f172a; vertical-align: top;">${sale.customerName}</td>
+                    <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Customer:</td>
+                    <td style="padding: 1px 0; font-weight: 700; color: #000; vertical-align: top;">${sale.customerName}</td>
                   </tr>
                   <tr>
-                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
-                    <td style="padding: 2px 0; font-weight: 500; color: #334155; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 11px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
+                    <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
+                    <td style="padding: 1px 0; font-weight: 500; color: #334155; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 10px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
                   </tr>
                 </table>
               </td>
-              <td style="width: 50%; vertical-align: top; text-align: left; padding-left: 20px;">
-                <div style="font-weight: 800; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Invoice Details</div>
-                <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.8;">
-                  <tr>
-                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Invoice No:</td>
-                    <td style="padding: 2px 0; font-family: monospace; font-weight: bold; color: #0f172a; vertical-align: top;">${sale.invoiceNo}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Date:</td>
-                    <td style="padding: 2px 0; font-weight: 600; color: #0f172a; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
-                  </tr>
-                </table>
+              <td style="width: 50%; vertical-align: top; text-align: right;">
+                <div style="display: inline-block; text-align: left;">
+                  <div style="font-weight: 800; font-size: 11px; color: #000; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;">Invoice Details</div>
+                  <table style="border-collapse: collapse; font-size: 12px; color: #1e293b; line-height: 1.5;">
+                    <tr>
+                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Invoice No:</td>
+                      <td style="padding: 1px 0; font-family: monospace; font-weight: bold; color: #000; vertical-align: top;">${sale.invoiceNo}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000; white-space: nowrap; vertical-align: top;">Date:</td>
+                      <td style="padding: 1px 0; font-weight: 600; color: #000; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
+                    </tr>
+                  </table>
+                </div>
               </td>
             </tr>
           </table>
@@ -1789,19 +1760,19 @@ export default function Sales() {
                 </div>
 
                 {/* Printable Document Paper Card */}
-                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-6 sm:p-8 max-w-4xl mx-auto font-sans text-slate-700 space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-250 shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-slate-700 space-y-4">
                   {/* Store details and Header (Logo on Top Left Corner and Contact Details under Logo in Calibri) */}
-                  <div className="relative pb-6 border-b-2 border-slate-200 min-h-[140px]">
+                  <div className="flex flex-col sm:flex-row items-start justify-between gap-4 pb-1">
                     {/* Company Logo on Top Left Corner and Details under Logo */}
-                    <div className="sm:absolute sm:left-0 sm:-top-3 lg:-top-4 mb-4 sm:mb-0 flex flex-col items-center sm:items-start text-left max-w-xs">
+                    <div className="flex flex-col items-start text-left max-w-[220px]">
                       {storeDetails.logoUrl ? (
                         <img 
                           src={storeDetails.logoUrl} 
                           alt="Store Logo" 
-                          className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                          className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent mb-1.5" 
                         />
                       ) : (
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 lg:w-28 lg:h-28 rounded-2xl bg-[#f0b90b] text-slate-950 font-black text-2xl sm:text-3xl lg:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#f0b90b] text-slate-950 font-black text-xl sm:text-2xl flex items-center justify-center border-0 shadow-none ring-0 outline-none mb-1.5">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
@@ -1809,45 +1780,48 @@ export default function Sales() {
                       {/* Company Info under Logo in Calibri font */}
                       <div 
                         style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                        className="mt-2.5 text-xs sm:text-sm text-slate-700 space-y-1 text-left w-full"
+                        className="text-xs text-slate-700 space-y-0.5 text-left w-full leading-tight"
                       >
-                        <p className="leading-snug">
+                        <p>
                           <strong className="text-slate-900 font-bold">Address:</strong> {storeDetails.address || 'N/A'}
                         </p>
-                        <p className="leading-snug">
+                        <p>
                           <strong className="text-slate-900 font-bold">Phone:</strong> {storeDetails.phone || 'N/A'}
                         </p>
-                        <p className="leading-snug">
+                        <p>
                           <strong className="text-slate-900 font-bold">Email:</strong> {storeDetails.email || 'N/A'}
                         </p>
                       </div>
                     </div>
 
-                    {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
-                    <div className="text-center sm:px-36 lg:px-44 space-y-3 pt-1">
-                      {/* Company Name (Enlarged, Professional Font, Underlined) */}
+                    {/* Company Details (Centered with professional fonts, underlined, squeezed) */}
+                    <div className="flex-1 text-center self-center py-1 sm:px-4">
+                      {/* Company Name (Prestigious Font, Underlined) */}
                       <h2 
                         style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-900"
+                        className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-4 decoration-[2.5px] decoration-slate-950"
                       >
                         {storeDetails.name || 'ElectroManage'}
                       </h2>
                     </div>
+
+                    {/* Right spacer for symmetry */}
+                    <div className="hidden sm:block w-36 lg:w-48"></div>
                   </div>
 
-                  {/* Divider line after Email Address / Header */}
-                  <div className="w-full border-b-2 border-slate-900 -mt-2"></div>
+                  {/* Black line drawn under Email Address */}
+                  <div className="w-full border-b-2 border-black my-2"></div>
 
                   {/* Meta Grid: Customer & Invoice Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs sm:text-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs">
                     {/* Customer & Payment Mode */}
-                    <div className="space-y-1.5 text-slate-700">
+                    <div className="space-y-1 text-slate-700">
                       <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-900 min-w-[100px]">Customer:</span>
-                        <span className="font-semibold text-slate-900">{currentCustomer.name}</span>
+                        <span className="font-bold text-slate-950 min-w-[90px]">Customer:</span>
+                        <span className="font-bold text-slate-950">{currentCustomer.name}</span>
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-900 min-w-[100px]">Payment Mode:</span>
+                        <span className="font-bold text-slate-950 min-w-[90px]">Payment Mode:</span>
                         <span className="text-slate-800">
                           {paymentMode}
                           {paymentMode === 'Online' && matchedBank && (
@@ -1857,16 +1831,18 @@ export default function Sales() {
                       </div>
                     </div>
 
-                    {/* Invoice Details (vertically aligned from left side) */}
-                    <div className="space-y-1.5 text-slate-700 text-left">
-                      <div className="font-extrabold text-slate-900 text-xs uppercase tracking-wider mb-1">Invoice Details</div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-900 min-w-[85px]">Invoice No:</span>
-                        <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span>
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-bold text-slate-900 min-w-[85px]">Date:</span>
-                        <span className="font-semibold text-slate-800">{formatInvoiceDate(invoiceDate || new Date())}</span>
+                    {/* Invoice Details (in right corner of page, aligned vertically from left side) */}
+                    <div className="flex justify-start md:justify-end text-xs text-slate-800">
+                      <div className="text-left space-y-1 min-w-[170px]">
+                        <div className="font-black text-slate-950 text-xs uppercase tracking-wider mb-0.5">Invoice Details</div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-slate-950 min-w-[80px]">Invoice No:</span>
+                          <span className="font-mono font-bold text-slate-950">{currentInvoiceNo}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-slate-950 min-w-[80px]">Date:</span>
+                          <span className="font-semibold text-slate-900">{formatInvoiceDate(invoiceDate || new Date())}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2220,20 +2196,20 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="bg-white p-6 sm:p-8 space-y-6">
-                {/* Store details and Header (Logo on Top Left Corner) */}
-                <div className="relative pb-6 border-b-2 border-slate-200">
+              <div className="bg-white p-5 sm:p-6 space-y-4">
+                {/* Store details and Header (Logo on Top Left Corner and Contact Details under Logo in Calibri) */}
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-4 pb-1">
                   {/* Company Logo on Top Left Corner and Details under Logo */}
-                  <div className="sm:absolute sm:left-0 sm:-top-3 mb-4 sm:mb-0 flex flex-col items-center sm:items-start text-left max-w-[200px]">
+                  <div className="flex flex-col items-start text-left max-w-[220px]">
                     {storeDetails.logoUrl ? (
                       <img 
                         src={storeDetails.logoUrl} 
                         alt="Company Logo" 
-                        className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent mb-1.5" 
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-2xl sm:text-3xl border-0 shadow-none ring-0 outline-none">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-xl sm:text-2xl border-0 shadow-none ring-0 outline-none mb-1.5">
                         {getInitials(storeDetails.name || 'ElectroManage')}
                       </div>
                     )}
@@ -2241,45 +2217,48 @@ export default function Sales() {
                     {/* Company Info under Logo in Calibri font */}
                     <div 
                       style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                      className="mt-2 text-xs text-slate-700 space-y-1 text-left w-full"
+                      className="text-xs text-slate-700 space-y-0.5 text-left w-full leading-tight"
                     >
-                      <p className="leading-snug">
+                      <p>
                         <strong className="text-slate-900 font-bold">Address:</strong> {storeDetails.address || 'N/A'}
                       </p>
-                      <p className="leading-snug">
+                      <p>
                         <strong className="text-slate-900 font-bold">Phone:</strong> {storeDetails.phone || 'N/A'}
                       </p>
-                      <p className="leading-snug">
+                      <p>
                         <strong className="text-slate-900 font-bold">Email:</strong> {storeDetails.email || 'N/A'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Company Details (Centered with professional fonts, underlined, increased font sizes) */}
-                  <div className="text-center sm:px-28 space-y-2 pt-1">
-                    {/* Company Name (Enlarged, Professional Font, Underlined) */}
+                  {/* Company Details (Centered with professional fonts, underlined, squeezed) */}
+                  <div className="flex-1 text-center self-center py-1 sm:px-4">
+                    {/* Company Name (Prestigious Font, Underlined) */}
                     <h3 
                       style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                      className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-snug underline underline-offset-8 decoration-[3px] decoration-slate-900"
+                      className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-4 decoration-[2.5px] decoration-slate-950"
                     >
                       {storeDetails.name || 'ElectroManage'}
                     </h3>
                   </div>
+
+                  {/* Right spacer for symmetry */}
+                  <div className="hidden sm:block w-36 lg:w-48"></div>
                 </div>
 
-                {/* Divider line after Email Address / Header */}
-                <div className="w-full border-b-2 border-slate-900 -mt-2"></div>
+                {/* Black line drawn under Email Address */}
+                <div className="w-full border-b-2 border-black my-2"></div>
 
                 {/* Meta & Customer/Invoice details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 border-b border-slate-200 pb-5 text-xs sm:text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 border-b border-slate-200 text-xs">
                   {/* Customer & Payment Mode */}
-                  <div className="space-y-1.5 text-slate-700">
+                  <div className="space-y-1 text-slate-700">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-900 min-w-[100px]">Customer:</span>
-                      <span className="font-semibold text-slate-900">{selectedSale.customerName}</span>
+                      <span className="font-bold text-slate-950 min-w-[90px]">Customer:</span>
+                      <span className="font-bold text-slate-950">{selectedSale.customerName}</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-900 min-w-[100px]">Payment Mode:</span>
+                      <span className="font-bold text-slate-950 min-w-[90px]">Payment Mode:</span>
                       <span className="text-slate-800">
                         {selectedSale.paymentMode || 'Cash'}
                         {selectedSale.paymentMode === 'Online' && selectedSale.bankName && (
@@ -2289,16 +2268,18 @@ export default function Sales() {
                     </div>
                   </div>
 
-                  {/* Invoice Details (vertically aligned from left side) */}
-                  <div className="space-y-1.5 text-slate-700 text-left">
-                    <div className="font-extrabold text-slate-900 text-xs uppercase tracking-wider mb-1">Invoice Details</div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-900 min-w-[85px]">Invoice No:</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedSale.invoiceNo}</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-bold text-slate-900 min-w-[85px]">Date:</span>
-                      <span className="font-semibold text-slate-800">{formatInvoiceDate(selectedSale.date)}</span>
+                  {/* Invoice Details (in right corner of page, aligned vertically from left side) */}
+                  <div className="flex justify-start sm:justify-end text-xs text-slate-800">
+                    <div className="text-left space-y-1 min-w-[170px]">
+                      <div className="font-black text-slate-950 text-xs uppercase tracking-wider mb-0.5">Invoice Details</div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-950 min-w-[80px]">Invoice No:</span>
+                        <span className="font-mono font-bold text-slate-950">{selectedSale.invoiceNo}</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-950 min-w-[80px]">Date:</span>
+                        <span className="font-semibold text-slate-900">{formatInvoiceDate(selectedSale.date)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
