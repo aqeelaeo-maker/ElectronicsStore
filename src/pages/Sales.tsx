@@ -843,6 +843,23 @@ export default function Sales() {
     }
   };
 
+  const formatInvoiceDate = (dateVal: string | Date | undefined | null): string => {
+    if (!dateVal) return 'N/A';
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+      const [year, monthNum, dayNum] = dateVal.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const mIndex = parseInt(monthNum, 10) - 1;
+      return `${dayNum.padStart(2, '0')}-${months[mIndex] || monthNum}-${year}`;
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return 'N/A';
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
   const printInvoice = (sale: Sale) => {
     // Create a temporary hidden iframe for printing
     const iframe = document.createElement('iframe');
@@ -918,9 +935,14 @@ export default function Sales() {
           .invoice-header-table {
             width: 100%;
             border-collapse: collapse;
+            margin-bottom: 0;
+            padding-bottom: 0;
+          }
+          .header-divider-line {
+            width: 100%;
+            border-bottom: 2px solid #0f172a;
+            margin-top: 16px;
             margin-bottom: 24px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e2e8f0;
           }
           .logo-cell {
             width: 250px;
@@ -1106,33 +1128,39 @@ export default function Sales() {
               </td>
               <td class="center-info-cell">
                 <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
-                <div style="margin-top: 8px;">
-                  <span class="document-title">Sales Invoice & Receipt</span>
-                </div>
               </td>
               <td class="right-spacer-cell"></td>
             </tr>
           </table>
 
+          <div class="header-divider-line"></div>
+
           <table class="meta-grid">
             <tr>
-              <td style="width: 55%; padding-right: 20px;">
-                <span class="section-title">Billed To (Customer)</span>
-                <div class="info-block">
-                  <strong style="font-size: 14px; color: #0f172a;">${sale.customerName}</strong>
-                  ${matchedCust?.mobile ? `<div style="margin-top: 3px; color: #475569;">Mobile: <strong style="color: #0f172a;">${matchedCust.mobile}</strong></div>` : ''}
-                  ${matchedCust?.city ? `<div style="color: #475569;">City: ${matchedCust.city}</div>` : ''}
-                  ${matchedCust?.email ? `<div style="color: #475569;">Email: ${matchedCust.email}</div>` : ''}
-                </div>
+              <td style="width: 50%; vertical-align: top; text-align: left; padding-right: 20px;">
+                <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.8;">
+                  <tr>
+                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Customer:</td>
+                    <td style="padding: 2px 0; font-weight: 700; color: #0f172a; vertical-align: top;">${sale.customerName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
+                    <td style="padding: 2px 0; font-weight: 500; color: #334155; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 11px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
+                  </tr>
+                </table>
               </td>
-              <td style="width: 45%; text-align: right;">
-                <span class="section-title">Invoice Details</span>
-                <div style="line-height: 1.6; color: #475569;">
-                  <div>Invoice No: <span style="font-family: monospace; font-weight: bold; color: #0f172a;">${sale.invoiceNo}</span></div>
-                  <div>Date: <span style="font-weight: 600; color: #0f172a;">${sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}</span></div>
-                  <div>Status: <span style="font-weight: 800; color: ${sale.status === 'Pending' ? '#b45309' : '#059669'}; background-color: ${sale.status === 'Pending' ? '#fef3c7' : '#ecfdf5'}; border: 1px solid ${sale.status === 'Pending' ? '#fde68a' : '#a7f3d0'}; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase;">${sale.status || 'Paid'}</span></div>
-                  <div>Payment Mode: <strong style="color: #0f172a;">${sale.paymentMode || 'Cash'}</strong>${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 10px; color: #64748b;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</div>
-                </div>
+              <td style="width: 50%; vertical-align: top; text-align: left; padding-left: 20px;">
+                <div style="font-weight: 800; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Invoice Details</div>
+                <table style="border-collapse: collapse; font-size: 13px; color: #1e293b; line-height: 1.8;">
+                  <tr>
+                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Invoice No:</td>
+                    <td style="padding: 2px 0; font-family: monospace; font-weight: bold; color: #0f172a; vertical-align: top;">${sale.invoiceNo}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 2px 10px 2px 0; font-weight: bold; color: #0f172a; white-space: nowrap; vertical-align: top;">Date:</td>
+                    <td style="padding: 2px 0; font-weight: 600; color: #0f172a; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
@@ -1804,43 +1832,41 @@ export default function Sales() {
                       >
                         {storeDetails.name || 'ElectroManage'}
                       </h2>
-
-                      {/* Document Title & Status Pill */}
-                      <div className="flex items-center justify-center gap-2.5 pt-2">
-                        <span className="text-xs font-black tracking-widest uppercase text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1 rounded-full">
-                          Sales Invoice & Receipt
-                        </span>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
-                          invoiceStatus === 'Pending' 
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        }`}>
-                          {invoiceStatus}
-                        </span>
-                      </div>
                     </div>
                   </div>
 
+                  {/* Divider line after Email Address / Header */}
+                  <div className="w-full border-b-2 border-slate-900 -mt-2"></div>
+
                   {/* Meta Grid: Customer & Invoice Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs">
-                    {/* Billed To */}
-                    <div className="space-y-1.5 text-slate-600">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Billed To (Customer)</span>
-                      <div className="font-bold text-slate-900 text-sm">{currentCustomer.name}</div>
-                      {currentCustomer.mobile && <div>Phone: <span className="font-semibold text-slate-800">{currentCustomer.mobile}</span></div>}
-                      {currentCustomer.address && <div>Address: <span>{currentCustomer.address}</span></div>}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs sm:text-sm">
+                    {/* Customer & Payment Mode */}
+                    <div className="space-y-1.5 text-slate-700">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-900 min-w-[100px]">Customer:</span>
+                        <span className="font-semibold text-slate-900">{currentCustomer.name}</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-900 min-w-[100px]">Payment Mode:</span>
+                        <span className="text-slate-800">
+                          {paymentMode}
+                          {paymentMode === 'Online' && matchedBank && (
+                            <span className="text-xs text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
+                          )}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Invoice Details */}
-                    <div className="space-y-1 md:text-right text-slate-600">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Invoice Details</span>
-                      <div>Invoice No: <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span></div>
-                      <div>Date: <span className="font-semibold text-slate-800">{invoiceDate ? new Date(invoiceDate).toLocaleDateString() : new Date().toLocaleDateString()}</span></div>
-                      <div>
-                        Payment Mode: <strong className="text-slate-900">{paymentMode}</strong>
-                        {paymentMode === 'Online' && matchedBank && (
-                          <span className="text-[11px] text-slate-500"> ({matchedBank.bankName} - {matchedBank.accountNumber})</span>
-                        )}
+                    {/* Invoice Details (vertically aligned from left side) */}
+                    <div className="space-y-1.5 text-slate-700 text-left">
+                      <div className="font-extrabold text-slate-900 text-xs uppercase tracking-wider mb-1">Invoice Details</div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-900 min-w-[85px]">Invoice No:</span>
+                        <span className="font-mono font-bold text-slate-900">{currentInvoiceNo}</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-bold text-slate-900 min-w-[85px]">Date:</span>
+                        <span className="font-semibold text-slate-800">{formatInvoiceDate(invoiceDate || new Date())}</span>
                       </div>
                     </div>
                   </div>
@@ -2238,57 +2264,41 @@ export default function Sales() {
                     >
                       {storeDetails.name || 'ElectroManage'}
                     </h3>
-
-                    <div className="pt-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-                        Sales Invoice & Receipt
-                      </span>
-                    </div>
                   </div>
                 </div>
 
-                {/* Meta & Company details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 border-b border-slate-200 pb-5 text-xs">
-                  <div>
-                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Billed To (Customer)</span>
-                    <span className="font-extrabold text-slate-900 text-sm block">{selectedSale.customerName}</span>
-                    {detailCustomer?.mobile && (
-                      <span className="text-slate-600 block mt-1">Mobile: <strong className="text-slate-800">{detailCustomer.mobile}</strong></span>
-                    )}
-                    {detailCustomer?.city && (
-                      <span className="text-slate-500 block mt-0.5">City: {detailCustomer.city}</span>
-                    )}
-                    {detailCustomer?.email && (
-                      <span className="text-slate-500 block mt-0.5">Email: {detailCustomer.email}</span>
-                    )}
+                {/* Divider line after Email Address / Header */}
+                <div className="w-full border-b-2 border-slate-900 -mt-2"></div>
+
+                {/* Meta & Customer/Invoice details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 border-b border-slate-200 pb-5 text-xs sm:text-sm">
+                  {/* Customer & Payment Mode */}
+                  <div className="space-y-1.5 text-slate-700">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-slate-900 min-w-[100px]">Customer:</span>
+                      <span className="font-semibold text-slate-900">{selectedSale.customerName}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-slate-900 min-w-[100px]">Payment Mode:</span>
+                      <span className="text-slate-800">
+                        {selectedSale.paymentMode || 'Cash'}
+                        {selectedSale.paymentMode === 'Online' && selectedSale.bankName && (
+                          <span className="text-xs text-slate-500"> ({selectedSale.bankName} - {selectedSale.bankAccountNumber})</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="sm:text-right">
-                    <span className="text-slate-400 uppercase tracking-wider font-extrabold block mb-1.5">Invoice Details</span>
-                    <div className="text-slate-600 space-y-1">
-                      <div>Invoice No: <span className="font-mono font-bold text-slate-800">{selectedSale.invoiceNo}</span></div>
-                      <div>Date: <span className="font-semibold">{selectedSale.date ? new Date(selectedSale.date).toLocaleDateString() : 'N/A'}</span></div>
-                      <div>Status: <span className={`font-bold px-2 py-0.5 border rounded text-[10px] uppercase ${
-                        selectedSale.status === 'Pending'
-                          ? 'text-amber-700 bg-amber-50 border-amber-200'
-                          : 'text-emerald-700 bg-emerald-50 border-emerald-100'
-                      }`}>{selectedSale.status || 'Paid'}</span></div>
-                      <div className="flex items-center sm:justify-end gap-1.5 pt-0.5">
-                        <span className="text-[11px] text-slate-500 font-medium">Payment Mode:</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold inline-flex items-center gap-1 ${
-                          selectedSale.paymentMode === 'Online'
-                            ? 'bg-blue-50 text-blue-800 border border-blue-100'
-                            : 'bg-amber-50 text-amber-800 border border-amber-100'
-                        }`}>
-                          {selectedSale.paymentMode === 'Online' ? <Globe className="w-3 h-3 text-blue-600" /> : <Banknote className="w-3 h-3 text-amber-600" />}
-                          {selectedSale.paymentMode || 'Cash'}
-                        </span>
-                      </div>
-                      {selectedSale.paymentMode === 'Online' && selectedSale.bankName && (
-                        <div className="text-[11px] text-slate-600 font-semibold">
-                          Bank: {selectedSale.bankName} ({selectedSale.bankAccountNumber})
-                        </div>
-                      )}
+                  {/* Invoice Details (vertically aligned from left side) */}
+                  <div className="space-y-1.5 text-slate-700 text-left">
+                    <div className="font-extrabold text-slate-900 text-xs uppercase tracking-wider mb-1">Invoice Details</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-slate-900 min-w-[85px]">Invoice No:</span>
+                      <span className="font-mono font-bold text-slate-900">{selectedSale.invoiceNo}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-slate-900 min-w-[85px]">Date:</span>
+                      <span className="font-semibold text-slate-800">{formatInvoiceDate(selectedSale.date)}</span>
                     </div>
                   </div>
                 </div>
