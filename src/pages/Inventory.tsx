@@ -23,7 +23,10 @@ import {
   X, 
   Hash,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Barcode,
+  Copy,
+  Check
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -88,6 +91,13 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const [editProdPurchasePrice, setEditProdPurchasePrice] = useState<number>(0);
   const [editProdSalePrice, setEditProdSalePrice] = useState<number>(0);
   const [savingProductEdit, setSavingProductEdit] = useState(false);
+
+  // Serial Numbers for Product being edited
+  const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold'; createdAt?: any }>>([]);
+  const [loadingEditProductSerials, setLoadingEditProductSerials] = useState(false);
+  const [serialSearchTerm, setSerialSearchTerm] = useState('');
+  const [showSoldSerials, setShowSoldSerials] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   // Fetch Firestore Collections
   useEffect(() => {
@@ -252,6 +262,80 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     setEditProdStock(product.stock || 0);
     setEditProdPurchasePrice(product.purchasePrice || 0);
     setEditProdSalePrice(product.salePrice || 0);
+  };
+
+  // Fetch Serial Numbers for Product being edited
+  useEffect(() => {
+    if (!editingProduct || !storeId) {
+      setEditProductSerials([]);
+      setSerialSearchTerm('');
+      setShowSoldSerials(false);
+      setCopiedAll(false);
+      return;
+    }
+
+    setLoadingEditProductSerials(true);
+    const q = query(
+      collection(db, 'serialNumbers'),
+      where('storeId', '==', storeId),
+      where('productId', '==', editingProduct.id)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data: Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold'; createdAt?: any }> = [];
+      snapshot.forEach((docSnap) => {
+        data.push({ id: docSnap.id, ...docSnap.data() } as any);
+      });
+
+      // Natural alphanumeric sort by serialNumber
+      data.sort((a, b) => a.serialNumber.localeCompare(b.serialNumber, undefined, { numeric: true, sensitivity: 'base' }));
+
+      setEditProductSerials(data);
+      setLoadingEditProductSerials(false);
+    }, (error) => {
+      console.error('Error fetching serial numbers for product:', error);
+      setLoadingEditProductSerials(false);
+    });
+
+    return () => unsubscribe();
+  }, [editingProduct?.id, storeId]);
+
+  const handleCopySerial = (sn: string) => {
+    navigator.clipboard.writeText(sn);
+    toast.success(`Copied serial: ${sn}`);
+  };
+
+  const handleCopyAllAvailableSerials = () => {
+    const available = editProductSerials.filter(s => s.status === 'Available');
+    if (available.length === 0) return;
+    const text = available.map(s => s.serialNumber).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+    toast.success(`Copied ${available.length} available serial numbers to clipboard`);
+  };
+
+  const handleDeleteSerialFromModal = async (serialId: string, serialNum: string) => {
+    if (!window.confirm(`Are you sure you want to remove serial number "${serialNum}" from inventory stock?`)) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'serialNumbers', serialId));
+      if (editProdStock > 0) {
+        const newStock = Math.max(0, editProdStock - 1);
+        setEditProdStock(newStock);
+        if (editingProduct) {
+          await updateDoc(doc(db, 'products', editingProduct.id), {
+            stock: newStock,
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+      toast.success(`Serial ${serialNum} removed`);
+    } catch (err: any) {
+      console.error('Error removing serial number:', err);
+      toast.error('Failed to delete serial number');
+    }
   };
 
   // Save Product Edit
@@ -769,147 +853,331 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
         </div>
       )}
 
-      {/* Edit Product Modal */}
-      {editingProduct && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-5 bg-slate-50 border-b border-slate-150 flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-black text-slate-900">Edit Product Details</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Modify general parameters, stock count, and pricing</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingProduct(null)}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 hover:bg-slate-150 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Edit Product Modal with Available Stock Serial Numbers */}
+      {editingProduct && (() => {
+        const availableSerials = editProductSerials.filter(s => s.status === 'Available');
+        const soldSerials = editProductSerials.filter(s => s.status === 'Sold');
+        const filteredAvailableSerials = availableSerials.filter(s =>
+          s.serialNumber.toLowerCase().includes(serialSearchTerm.toLowerCase())
+        );
 
-            <form onSubmit={handleSaveProductEdit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Product Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
-                    value={editProdName}
-                    onChange={(e) => setEditProdName(e.target.value)}
-                  />
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto">
+              {/* Header */}
+              <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-150 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-150 flex items-center justify-center text-[#0a382c] shrink-0">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                      Edit Product Details
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {editingProduct.name} &bull; {editingProduct.brand} (Model: {editingProduct.modelNumber})
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Brand <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
-                    value={editProdBrand}
-                    onChange={(e) => setEditProdBrand(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Category <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
-                    value={editProdCategory}
-                    onChange={(e) => setEditProdCategory(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Model Number <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
-                    value={editProdModel}
-                    onChange={(e) => setEditProdModel(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Stock Level <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
-                    value={editProdStock}
-                    onChange={(e) => setEditProdStock(Math.max(0, parseInt(e.target.value) || 0))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Purchase (PKR) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
-                    value={editProdPurchasePrice}
-                    onChange={(e) => setEditProdPurchasePrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Sale (PKR) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
-                    value={editProdSalePrice}
-                    onChange={(e) => setEditProdSalePrice(Math.max(0, parseFloat(e.target.value) || 0))}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-slate-100 mt-6">
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
-                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-200/60 rounded-xl cursor-pointer"
+                  title="Close dialog"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Form fields */}
+                <form id="edit-product-form" onSubmit={handleSaveProductEdit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Product Name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                        value={editProdName}
+                        onChange={(e) => setEditProdName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Brand <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                        value={editProdBrand}
+                        onChange={(e) => setEditProdBrand(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Category <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                        value={editProdCategory}
+                        onChange={(e) => setEditProdCategory(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Model Number <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                        value={editProdModel}
+                        onChange={(e) => setEditProdModel(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Stock Level <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                        value={editProdStock}
+                        onChange={(e) => setEditProdStock(Math.max(0, parseInt(e.target.value) || 0))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Purchase (PKR) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                        value={editProdPurchasePrice}
+                        onChange={(e) => setEditProdPurchasePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Sale (PKR) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-850 font-bold"
+                        value={editProdSalePrice}
+                        onChange={(e) => setEditProdSalePrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                      />
+                    </div>
+                  </div>
+                </form>
+
+                {/* AVAILABLE STOCK SERIAL NUMBERS SECTION */}
+                <div className="pt-5 border-t border-slate-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
+                        <Barcode className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                            Serial Numbers in Available Stock
+                          </h4>
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {availableSerials.length} Available
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Active individual units currently available for sale in inventory
+                        </p>
+                      </div>
+                    </div>
+
+                    {availableSerials.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleCopyAllAvailableSerials}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer shrink-0"
+                        title="Copy all available serial numbers to clipboard"
+                      >
+                        {copiedAll ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                        <span>{copiedAll ? 'Copied All!' : 'Copy All'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter / Search Serial Numbers */}
+                  {availableSerials.length > 4 && (
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search serial numbers..."
+                        value={serialSearchTerm}
+                        onChange={(e) => setSerialSearchTerm(e.target.value)}
+                        className="glass-input block w-full pl-8 pr-3 py-1.5 rounded-xl text-xs font-mono text-slate-800 bg-slate-50 focus:bg-white"
+                      />
+                    </div>
+                  )}
+
+                  {/* Serial Numbers Grid */}
+                  {loadingEditProductSerials ? (
+                    <div className="flex items-center justify-center py-8 bg-slate-50/60 rounded-xl border border-slate-150">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0a382c]"></div>
+                      <span className="text-xs text-slate-500 font-bold ml-2">Loading serial numbers...</span>
+                    </div>
+                  ) : filteredAvailableSerials.length > 0 ? (
+                    <div className="max-h-56 overflow-y-auto p-3 bg-slate-50/70 border border-slate-200 rounded-xl">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {filteredAvailableSerials.map((sn, idx) => (
+                          <div
+                            key={sn.id || idx}
+                            className="group bg-white border border-slate-200/90 hover:border-emerald-300 rounded-lg p-2 flex items-center justify-between text-xs transition-all shadow-2xs"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                              <span className="font-mono font-bold text-slate-800 truncate" title={sn.serialNumber}>
+                                {sn.serialNumber}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleCopySerial(sn.serialNumber)}
+                                className="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                                title="Copy serial number"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSerialFromModal(sn.id, sn.serialNumber)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title="Remove serial number"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : availableSerials.length > 0 ? (
+                    <div className="text-center py-6 bg-slate-50/70 rounded-xl border border-slate-200 text-slate-500 text-xs">
+                      No serial numbers match "{serialSearchTerm}".
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-emerald-50/40 border border-emerald-100 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                      <div className="flex items-center gap-2.5">
+                        <Barcode className="w-5 h-5 text-emerald-700 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">No Serial Numbers in Available Stock</p>
+                          <p className="text-[11px] text-slate-500">
+                            You can add serial numbers to this product through Add Inventory Stock.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const prod = editingProduct;
+                          setEditingProduct(null);
+                          handleOpenAddStock(prod);
+                        }}
+                        className="px-3 py-1.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-xs font-bold rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Stock Serials</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Sold Serials Collapsible View (if any exist) */}
+                  {soldSerials.length > 0 && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowSoldSerials(!showSoldSerials)}
+                        className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        {showSoldSerials ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        <span>{showSoldSerials ? 'Hide' : 'Show'} Sold Serial Numbers ({soldSerials.length} sold)</span>
+                      </button>
+
+                      {showSoldSerials && (
+                        <div className="mt-2 max-h-36 overflow-y-auto p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {soldSerials.map((sn, idx) => (
+                              <div
+                                key={sn.id || idx}
+                                className="bg-white/80 border border-slate-200 rounded-lg p-1.5 px-2 flex items-center justify-between text-xs"
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
+                                  <span className="font-mono text-slate-500 truncate" title={sn.serialNumber}>
+                                    {sn.serialNumber}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
+                                  Sold
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 sm:px-6 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="py-2 px-4 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  form="edit-product-form"
                   disabled={savingProductEdit}
-                  className="flex-1 flex justify-center items-center py-2.5 px-4 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
+                  className="flex justify-center items-center py-2 px-5 border border-transparent rounded-xl shadow-md text-xs font-black text-white bg-[#0a382c] hover:bg-[#0d4a3b] focus:outline-none transition-colors disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
                 >
                   {savingProductEdit ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   ) : (
-                    'Save Product'
+                    'Save Product Changes'
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

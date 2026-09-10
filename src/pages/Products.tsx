@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Package } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Package, Barcode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,6 +23,13 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Serial numbers state for edit view
+  const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold' }>>([]);
+  const [loadingSerials, setLoadingSerials] = useState(false);
+  const [serialSearch, setSerialSearch] = useState('');
+  const [copiedAll, setCopiedAll] = useState(false);
+  const [showSold, setShowSold] = useState(false);
 
   useEffect(() => {
     if (!storeId) return;
@@ -51,6 +58,53 @@ export default function Products() {
     
     return () => unsubscribe();
   }, [storeId]);
+
+  // Fetch Serial Numbers for Product being edited
+  useEffect(() => {
+    if (!editingProduct || !storeId) {
+      setEditProductSerials([]);
+      setSerialSearch('');
+      setShowSold(false);
+      setCopiedAll(false);
+      return;
+    }
+
+    setLoadingSerials(true);
+    const q = query(
+      collection(db, 'serialNumbers'),
+      where('storeId', '==', storeId),
+      where('productId', '==', editingProduct.id)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data: Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold' }> = [];
+      snapshot.forEach(docSnap => {
+        data.push({ id: docSnap.id, ...docSnap.data() } as any);
+      });
+      data.sort((a, b) => a.serialNumber.localeCompare(b.serialNumber, undefined, { numeric: true, sensitivity: 'base' }));
+      setEditProductSerials(data);
+      setLoadingSerials(false);
+    }, (err) => {
+      console.error('Error fetching serial numbers for product:', err);
+      setLoadingSerials(false);
+    });
+
+    return () => unsub();
+  }, [editingProduct?.id, storeId]);
+
+  const handleCopySerial = (sn: string) => {
+    navigator.clipboard.writeText(sn);
+    toast.success(`Copied: ${sn}`);
+  };
+
+  const handleCopyAllAvailable = (serials: Array<{ serialNumber: string }>) => {
+    if (serials.length === 0) return;
+    const text = serials.map(s => s.serialNumber).join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+    toast.success(`Copied ${serials.length} serial numbers to clipboard`);
+  };
 
   const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -182,6 +236,148 @@ export default function Products() {
                   <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
               </div>
+
+              {/* Available Stock Serial Numbers (shown when editing) */}
+              {isEditing && (() => {
+                const availableSerials = editProductSerials.filter(s => s.status === 'Available');
+                const soldSerials = editProductSerials.filter(s => s.status === 'Sold');
+                const filteredAvailable = availableSerials.filter(s =>
+                  s.serialNumber.toLowerCase().includes(serialSearch.toLowerCase())
+                );
+
+                return (
+                  <div className="mt-8 pt-6 border-t border-slate-200 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
+                          <Barcode className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
+                              Serial Numbers in Available Stock
+                            </h4>
+                            <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {availableSerials.length} Available
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            Units currently recorded in store inventory
+                          </p>
+                        </div>
+                      </div>
+
+                      {availableSerials.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyAllAvailable(availableSerials)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer shrink-0"
+                          title="Copy all available serial numbers"
+                        >
+                          {copiedAll ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                          <span>{copiedAll ? 'Copied All!' : 'Copy All'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {availableSerials.length > 4 && (
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                        <input
+                          type="text"
+                          placeholder="Search serial numbers..."
+                          value={serialSearch}
+                          onChange={(e) => setSerialSearch(e.target.value)}
+                          className="glass-input block w-full pl-8 pr-3 py-1.5 rounded-xl text-xs font-mono text-slate-800 bg-slate-50 focus:bg-white"
+                        />
+                      </div>
+                    )}
+
+                    {loadingSerials ? (
+                      <div className="flex items-center justify-center py-6 bg-slate-50 rounded-xl border border-slate-200">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#0a382c]"></div>
+                        <span className="text-xs text-slate-500 font-bold ml-2">Loading serial numbers...</span>
+                      </div>
+                    ) : filteredAvailable.length > 0 ? (
+                      <div className="max-h-52 overflow-y-auto p-3 bg-slate-50/70 border border-slate-200 rounded-xl">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {filteredAvailable.map((sn, idx) => (
+                            <div
+                              key={sn.id || idx}
+                              className="group bg-white border border-slate-200/90 hover:border-emerald-300 rounded-lg p-2 flex items-center justify-between text-xs transition-all shadow-2xs"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                <span className="font-mono font-bold text-slate-800 truncate" title={sn.serialNumber}>
+                                  {sn.serialNumber}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopySerial(sn.serialNumber)}
+                                className="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors cursor-pointer shrink-0"
+                                title="Copy serial number"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : availableSerials.length > 0 ? (
+                      <div className="text-center py-4 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-xs">
+                        No serial numbers match "{serialSearch}".
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-emerald-50/30 border border-emerald-100 rounded-xl flex items-center gap-3">
+                        <Barcode className="w-5 h-5 text-emerald-700 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">No Serial Numbers in Available Stock</p>
+                          <p className="text-[11px] text-slate-500">
+                            Serial numbers can be added when adding stock in the Inventory module.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {soldSerials.length > 0 && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowSold(!showSold)}
+                          className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          {showSold ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          <span>{showSold ? 'Hide' : 'Show'} Sold Serial Numbers ({soldSerials.length} sold)</span>
+                        </button>
+
+                        {showSold && (
+                          <div className="mt-2 max-h-36 overflow-y-auto p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                              {soldSerials.map((sn, idx) => (
+                                <div
+                                  key={sn.id || idx}
+                                  className="bg-white/80 border border-slate-200 rounded-lg p-1.5 px-2 flex items-center justify-between text-xs"
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span>
+                                    <span className="font-mono text-slate-500 truncate" title={sn.serialNumber}>
+                                      {sn.serialNumber}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
+                                    Sold
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div className="bg-[#f8faf9] px-6 py-4 sm:px-8 flex justify-end gap-3 border-t border-slate-200">
               <button type="button" onClick={() => {
