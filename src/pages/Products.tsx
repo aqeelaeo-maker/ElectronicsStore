@@ -11,6 +11,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  unit?: string;
   purchasePrice: number;
   salePrice: number;
   stock: number;
@@ -24,12 +25,51 @@ export default function Products() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  // Store Units of Measurement
+  const [units, setUnits] = useState<Array<{ name: string; abbreviation: string }>>([
+    { name: 'Piece', abbreviation: 'Pcs' },
+    { name: 'Box', abbreviation: 'Box' },
+    { name: 'Packet', abbreviation: 'Pk' },
+    { name: 'Set', abbreviation: 'Set' },
+    { name: 'Kilogram', abbreviation: 'Kg' },
+    { name: 'Meter', abbreviation: 'Mtr' },
+    { name: 'Liter', abbreviation: 'Ltr' },
+    { name: 'Dozen', abbreviation: 'Dzn' },
+    { name: 'Carton', abbreviation: 'Ctn' }
+  ]);
+
   // Serial numbers state for edit view
   const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold' }>>([]);
   const [loadingSerials, setLoadingSerials] = useState(false);
   const [serialSearch, setSerialSearch] = useState('');
   const [copiedAll, setCopiedAll] = useState(false);
   const [showSold, setShowSold] = useState(false);
+
+  // Fetch store units
+  useEffect(() => {
+    if (!storeId) return;
+
+    const storeRef = doc(db, 'stores', storeId);
+    const unsubStore = onSnapshot(storeRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.units) && data.units.length > 0) {
+          const parsed = data.units.map((u: any) => {
+            if (typeof u === 'string') return { name: u, abbreviation: u };
+            return {
+              name: u.name || u.abbreviation || 'Unit',
+              abbreviation: u.abbreviation || u.name || 'Unit'
+            };
+          });
+          setUnits(parsed);
+        }
+      }
+    }, (err) => {
+      console.error('Error fetching store units:', err);
+    });
+
+    return () => unsubStore();
+  }, [storeId]);
 
   useEffect(() => {
     if (!storeId) return;
@@ -119,6 +159,7 @@ export default function Products() {
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
+      unit: (formData.get('unit') as string)?.trim() || (units[0]?.abbreviation || units[0]?.name || 'Pcs'),
       purchasePrice: 0,
       salePrice: 0,
       stock: 0,
@@ -147,6 +188,7 @@ export default function Products() {
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
+      unit: (formData.get('unit') as string)?.trim() || editingProduct.unit || (units[0]?.abbreviation || units[0]?.name || 'Pcs'),
       purchasePrice: editingProduct.purchasePrice || 0,
       salePrice: editingProduct.salePrice || 0,
       stock: editingProduct.stock || 0,
@@ -208,8 +250,8 @@ export default function Products() {
         <div className="glass-panel rounded-2xl shadow-sm overflow-hidden border border-slate-200">
           <form onSubmit={isEditing ? handleUpdateProduct : handleAddProduct}>
             <div className="bg-white px-6 py-6 sm:p-8">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="sm:col-span-2 lg:col-span-3">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="sm:col-span-2 lg:col-span-4">
                   <label htmlFor="name" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Product Name</label>
                   <input type="text" name="name" id="name" defaultValue={initialData.name} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
@@ -229,6 +271,27 @@ export default function Products() {
                     <option value="DVR">DVR</option>
                     <option value="Security System">Security System</option>
                     <option value="Accessories">Accessories</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="unit" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Unit of Measure
+                  </label>
+                  <select
+                    name="unit"
+                    id="unit"
+                    defaultValue={initialData.unit || (units[0]?.abbreviation || units[0]?.name || 'Pcs')}
+                    required
+                    className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm font-semibold text-slate-800"
+                  >
+                    {units.map((u, i) => {
+                      const val = u.abbreviation || u.name;
+                      return (
+                        <option key={i} value={val}>
+                          {u.name} {u.abbreviation && u.abbreviation !== u.name ? `(${u.abbreviation})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -434,6 +497,7 @@ export default function Products() {
               <tr>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stock</th>
                 <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
@@ -442,13 +506,13 @@ export default function Products() {
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No products found. Add a new product to get started.
                   </td>
                 </tr>
@@ -471,6 +535,11 @@ export default function Products() {
                         {product.category}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2.5 py-1 inline-flex text-[11px] font-bold rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-mono">
+                        {product.unit || 'Pcs'}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
                       PKR {product.salePrice.toFixed(2)}
                     </td>
@@ -482,7 +551,7 @@ export default function Products() {
                             ? 'bg-amber-50 text-amber-800 border border-amber-150' 
                             : 'bg-rose-50 text-rose-800 border border-rose-150'
                       }`}>
-                        {product.stock} in stock
+                        {product.stock} {product.unit ? product.unit : 'in stock'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">

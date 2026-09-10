@@ -11,6 +11,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  unit?: string;
   stock: number;
 }
 

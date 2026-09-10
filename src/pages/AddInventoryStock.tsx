@@ -39,6 +39,7 @@ export interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  unit?: string;
   purchasePrice?: number;
   salePrice?: number;
   stock?: number;
@@ -670,7 +671,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   <div className="text-right">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stock</span>
                     <div className="text-lg font-black text-[#0a382c]">
-                      {selectedProduct.stock || 0} units
+                      {selectedProduct.stock || 0} {selectedProduct.unit || 'units'}
                     </div>
                   </div>
                 </div>
@@ -1186,7 +1187,7 @@ SN-4029103"
                     Ready to add {serialNumbersList.length} units to {selectedProduct.name}
                   </h4>
                   <p className="text-xs text-emerald-200 mt-0.5">
-                    Stock will increase from {selectedProduct.stock || 0} to {(selectedProduct.stock || 0) + serialNumbersList.length} units.
+                    Stock will increase from {selectedProduct.stock || 0} to {(selectedProduct.stock || 0) + serialNumbersList.length} {selectedProduct.unit || 'units'}.
                   </p>
                 </div>
               </div>

@@ -87,10 +87,47 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const [editProdBrand, setEditProdBrand] = useState('');
   const [editProdCategory, setEditProdCategory] = useState('');
   const [editProdModel, setEditProdModel] = useState('');
+  const [editProdUnit, setEditProdUnit] = useState('Pcs');
   const [editProdStock, setEditProdStock] = useState<number>(0);
   const [editProdPurchasePrice, setEditProdPurchasePrice] = useState<number>(0);
   const [editProdSalePrice, setEditProdSalePrice] = useState<number>(0);
   const [savingProductEdit, setSavingProductEdit] = useState(false);
+
+  // Store Units
+  const [units, setUnits] = useState<Array<{ name: string; abbreviation: string }>>([
+    { name: 'Piece', abbreviation: 'Pcs' },
+    { name: 'Box', abbreviation: 'Box' },
+    { name: 'Packet', abbreviation: 'Pk' },
+    { name: 'Set', abbreviation: 'Set' },
+    { name: 'Kilogram', abbreviation: 'Kg' },
+    { name: 'Meter', abbreviation: 'Mtr' },
+    { name: 'Liter', abbreviation: 'Ltr' },
+    { name: 'Dozen', abbreviation: 'Dzn' },
+    { name: 'Carton', abbreviation: 'Ctn' }
+  ]);
+
+  useEffect(() => {
+    if (!storeId) return;
+
+    const storeRef = doc(db, 'stores', storeId);
+    const unsubStore = onSnapshot(storeRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.units) && data.units.length > 0) {
+          const parsed = data.units.map((u: any) => {
+            if (typeof u === 'string') return { name: u, abbreviation: u };
+            return {
+              name: u.name || u.abbreviation || 'Unit',
+              abbreviation: u.abbreviation || u.name || 'Unit'
+            };
+          });
+          setUnits(parsed);
+        }
+      }
+    });
+
+    return () => unsubStore();
+  }, [storeId]);
 
   // Serial Numbers for Product being edited
   const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold'; createdAt?: any }>>([]);
@@ -259,6 +296,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     setEditProdBrand(product.brand || '');
     setEditProdCategory(product.category || '');
     setEditProdModel(product.modelNumber || '');
+    setEditProdUnit(product.unit || (units[0]?.abbreviation || units[0]?.name || 'Pcs'));
     setEditProdStock(product.stock || 0);
     setEditProdPurchasePrice(product.purchasePrice || 0);
     setEditProdSalePrice(product.salePrice || 0);
@@ -350,6 +388,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
         brand: editProdBrand,
         category: editProdCategory,
         modelNumber: editProdModel,
+        unit: editProdUnit || 'Pcs',
         stock: editProdStock,
         purchasePrice: editProdPurchasePrice,
         salePrice: editProdSalePrice,
@@ -920,7 +959,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                         Category <span className="text-rose-500">*</span>
@@ -944,6 +983,26 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                         value={editProdModel}
                         onChange={(e) => setEditProdModel(e.target.value)}
                       />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Unit of Measure <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800"
+                        value={editProdUnit}
+                        onChange={(e) => setEditProdUnit(e.target.value)}
+                      >
+                        {units.map((u, i) => {
+                          const val = u.abbreviation || u.name;
+                          return (
+                            <option key={i} value={val}>
+                              {u.name} {u.abbreviation && u.abbreviation !== u.name ? `(${u.abbreviation})` : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
                     </div>
                   </div>
 
