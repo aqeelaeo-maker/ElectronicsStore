@@ -29,7 +29,12 @@ import {
   Check, 
   Package,
   Layers,
-  Info
+  Info,
+  Scale,
+  Ruler,
+  Boxes,
+  DollarSign,
+  Calculator
 } from 'lucide-react';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
@@ -62,6 +67,31 @@ interface AddInventoryStockProps {
   onBack: () => void;
   initialProduct?: Product | null;
 }
+
+// Unit helper functions
+export const isPieceUnit = (unit?: string): boolean => {
+  if (!unit) return true;
+  const u = unit.trim().toLowerCase();
+  return u === 'piece' || u === 'pieces' || u === 'pcs' || u === 'pc';
+};
+
+export const getUnitDisplayName = (unit?: string): string => {
+  if (!unit) return 'Piece';
+  const u = unit.trim().toLowerCase();
+  if (u === 'piece' || u === 'pieces' || u === 'pcs' || u === 'pc') return 'Piece';
+  if (u === 'meter' || u === 'mtr' || u === 'm') return 'Meter';
+  if (u === 'kilogram' || u === 'kg' || u === 'kgs') return 'Kilogram';
+  if (u === 'liter' || u === 'litre' || u === 'ltr' || u === 'l') return 'Liter';
+  if (u === 'dozen' || u === 'dzn') return 'Dozen';
+  if (u === 'carton' || u === 'ctn') return 'Carton';
+  if (u === 'packet' || u === 'pk' || u === 'pkt') return 'Packet';
+  if (u === 'box') return 'Box';
+  if (u === 'set') return 'Set';
+  if (u === 'roll') return 'Roll';
+  if (u === 'foot' || u === 'ft') return 'Foot';
+  if (u === 'yard' || u === 'yd') return 'Yard';
+  return unit.trim();
+};
 
 export default function AddInventoryStock({ onBack, initialProduct }: AddInventoryStockProps) {
   const { storeId } = useAuth();
@@ -99,6 +129,10 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
   const [seqPrefix, setSeqPrefix] = useState('SN-');
   const [seqStart, setSeqStart] = useState('1001');
   const [seqCount, setSeqCount] = useState('10');
+
+  // Manual quantity intake (for non-piece products: meter, kg, liter, etc.)
+  const [manualQuantity, setManualQuantity] = useState<number | ''>('');
+  const manualQuantityInputRef = useRef<HTMLInputElement>(null);
 
   // Search filter inside added list
   const [listFilter, setListFilter] = useState('');
@@ -192,9 +226,16 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     setSalePriceInput(product.salePrice || 0);
     setIsProductDropdownOpen(false);
     setProductSearch('');
-    // Automatically focus the serial scan input
+    setManualQuantity('');
+    setSerialNumbersList([]);
+
+    // Automatically focus the appropriate input based on product unit
     setTimeout(() => {
-      singleInputRef.current?.focus();
+      if (isPieceUnit(product.unit)) {
+        singleInputRef.current?.focus();
+      } else {
+        manualQuantityInputRef.current?.focus();
+      }
     }, 150);
   };
 
@@ -411,85 +452,138 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
       return;
     }
 
-    if (serialNumbersList.length === 0) {
-      toast.error('Please add at least one serial number to increment stock');
-      return;
-    }
-
     if (!storeId) {
       toast.error('Store ID not found. Please re-login.');
       return;
     }
 
+    const isSerialized = isPieceUnit(selectedProduct.unit);
+    const unitName = getUnitDisplayName(selectedProduct.unit);
+    const unitDisplay = selectedProduct.unit || unitName;
+
+    if (isSerialized) {
+      if (serialNumbersList.length === 0) {
+        toast.error('Please add at least one serial number to increment stock');
+        return;
+      }
+    } else {
+      const numQty = typeof manualQuantity === 'number' ? manualQuantity : parseFloat(manualQuantity as string);
+      if (isNaN(numQty) || numQty <= 0) {
+        toast.error(`Please enter a valid quantity greater than 0 ${unitDisplay} to add stock`);
+        return;
+      }
+    }
+
     setSaving(true);
-    const quantityAdded = serialNumbersList.length;
+    const quantityAdded = isSerialized 
+      ? serialNumbersList.length 
+      : (typeof manualQuantity === 'number' ? manualQuantity : parseFloat(manualQuantity as string));
     const previousStock = selectedProduct.stock || 0;
     const newStock = previousStock + quantityAdded;
     const selectedVendor = vendors.find(v => v.id === selectedVendorId);
 
     try {
-      // Execute in batches of 400 to respect Firestore 500 limit
-      const chunkSize = 400;
-      for (let i = 0; i < serialNumbersList.length; i += chunkSize) {
-        const chunk = serialNumbersList.slice(i, i + chunkSize);
-        const batch = writeBatch(db);
+      if (isSerialized) {
+        // Execute in batches of 400 to respect Firestore 500 limit
+        const chunkSize = 400;
+        for (let i = 0; i < serialNumbersList.length; i += chunkSize) {
+          const chunk = serialNumbersList.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
 
-        chunk.forEach(sn => {
-          const serialDocRef = doc(collection(db, 'serialNumbers'));
-          batch.set(serialDocRef, {
-            productId: selectedProduct.id,
-            productName: selectedProduct.name,
-            productBrand: selectedProduct.brand,
-            productModelNumber: selectedProduct.modelNumber,
-            storeId,
-            serialNumber: sn,
-            status: 'Available',
-            purchasePrice: purchasePriceInput,
-            salePrice: salePriceInput,
-            vendorId: selectedVendorId || null,
-            vendorName: selectedVendor?.companyName || null,
-            referenceNumber: referenceNumber.trim() || null,
-            createdAt: serverTimestamp()
-          });
-        });
-
-        // In first batch, also update product doc and add inventory log
-        if (i === 0) {
-          const productRef = doc(db, 'products', selectedProduct.id);
-          batch.update(productRef, {
-            stock: newStock,
-            purchasePrice: purchasePriceInput,
-            salePrice: salePriceInput,
-            updatedAt: serverTimestamp()
+          chunk.forEach(sn => {
+            const serialDocRef = doc(collection(db, 'serialNumbers'));
+            batch.set(serialDocRef, {
+              productId: selectedProduct.id,
+              productName: selectedProduct.name,
+              productBrand: selectedProduct.brand,
+              productModelNumber: selectedProduct.modelNumber,
+              storeId,
+              serialNumber: sn,
+              status: 'Available',
+              purchasePrice: purchasePriceInput,
+              salePrice: salePriceInput,
+              vendorId: selectedVendorId || null,
+              vendorName: selectedVendor?.companyName || null,
+              referenceNumber: referenceNumber.trim() || null,
+              createdAt: serverTimestamp()
+            });
           });
 
-          const logRef = doc(collection(db, 'inventoryLogs'));
-          batch.set(logRef, {
-            storeId,
-            productId: selectedProduct.id,
-            productName: selectedProduct.name,
-            productBrand: selectedProduct.brand,
-            productModelNumber: selectedProduct.modelNumber,
-            quantityAdded,
-            serialNumbers: serialNumbersList,
-            previousStock,
-            newStock,
-            purchasePrice: purchasePriceInput,
-            salePrice: salePriceInput,
-            vendorId: selectedVendorId || null,
-            vendorName: selectedVendor?.companyName || null,
-            referenceNumber: referenceNumber.trim() || null,
-            createdAt: serverTimestamp()
-          });
+          // In first batch, also update product doc and add inventory log
+          if (i === 0) {
+            const productRef = doc(db, 'products', selectedProduct.id);
+            batch.update(productRef, {
+              stock: newStock,
+              purchasePrice: purchasePriceInput,
+              salePrice: salePriceInput,
+              updatedAt: serverTimestamp()
+            });
+
+            const logRef = doc(collection(db, 'inventoryLogs'));
+            batch.set(logRef, {
+              storeId,
+              productId: selectedProduct.id,
+              productName: selectedProduct.name,
+              productBrand: selectedProduct.brand,
+              productModelNumber: selectedProduct.modelNumber,
+              unit: unitDisplay,
+              quantityAdded,
+              serialNumbers: serialNumbersList,
+              isManualStock: false,
+              previousStock,
+              newStock,
+              purchasePrice: purchasePriceInput,
+              salePrice: salePriceInput,
+              vendorId: selectedVendorId || null,
+              vendorName: selectedVendor?.companyName || null,
+              referenceNumber: referenceNumber.trim() || null,
+              createdAt: serverTimestamp()
+            });
+          }
+
+          await batch.commit();
         }
 
+        toast.success(`Successfully added ${quantityAdded} serialized units to ${selectedProduct.name}!`);
+      } else {
+        // Direct manual quantity stock intake for non-piece units (meter, kg, liter, etc.)
+        const batch = writeBatch(db);
+        const productRef = doc(db, 'products', selectedProduct.id);
+        batch.update(productRef, {
+          stock: newStock,
+          purchasePrice: purchasePriceInput,
+          salePrice: salePriceInput,
+          updatedAt: serverTimestamp()
+        });
+
+        const logRef = doc(collection(db, 'inventoryLogs'));
+        batch.set(logRef, {
+          storeId,
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
+          productBrand: selectedProduct.brand,
+          productModelNumber: selectedProduct.modelNumber,
+          unit: unitDisplay,
+          quantityAdded,
+          serialNumbers: [],
+          isManualStock: true,
+          previousStock,
+          newStock,
+          purchasePrice: purchasePriceInput,
+          salePrice: salePriceInput,
+          vendorId: selectedVendorId || null,
+          vendorName: selectedVendor?.companyName || null,
+          referenceNumber: referenceNumber.trim() || null,
+          createdAt: serverTimestamp()
+        });
+
         await batch.commit();
+        toast.success(`Successfully added ${quantityAdded} ${unitDisplay} to ${selectedProduct.name}! (Cost: PKR ${(quantityAdded * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
       }
 
-      toast.success(`Successfully added ${quantityAdded} serialized units to ${selectedProduct.name}!`);
       onBack();
     } catch (error: any) {
-      console.error('Error adding serialized inventory stock:', error);
+      console.error('Error adding inventory stock:', error);
       toast.error(`Failed to add stock: ${error?.message || 'Unknown error'}`);
     } finally {
       setSaving(false);
@@ -517,13 +611,31 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     ? allStoreSerials.filter(s => s.productId === selectedProduct.id && s.status === 'Available')
     : [];
 
+  const isSerialized = isPieceUnit(selectedProduct?.unit);
+  const unitName = selectedProduct ? getUnitDisplayName(selectedProduct.unit) : 'Piece';
+  const unitDisplay = selectedProduct?.unit || unitName;
+  const numManualQty = typeof manualQuantity === 'number' ? manualQuantity : (parseFloat(manualQuantity as string) || 0);
+  const quantityToAdd = isSerialized ? serialNumbersList.length : numManualQty;
+  const currentStock = selectedProduct?.stock || 0;
+  const newStockTotal = currentStock + quantityToAdd;
+
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
       {/* Full-Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-3.5">
           <div className="h-12 w-12 rounded-xl bg-emerald-50 border border-emerald-100 text-[#0a382c] flex items-center justify-center shadow-xs">
-            <PackagePlus className="w-6 h-6" />
+            {selectedProduct && !isSerialized ? (
+              unitName === 'Meter' || unitName === 'Foot' || unitName === 'Yard' ? (
+                <Ruler className="w-6 h-6" />
+              ) : unitName === 'Kilogram' ? (
+                <Scale className="w-6 h-6" />
+              ) : (
+                <Boxes className="w-6 h-6" />
+              )
+            ) : (
+              <PackagePlus className="w-6 h-6" />
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -531,11 +643,19 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 Add Inventory Stock
               </h1>
               <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-[#0a382c]">
-                Serialized Intake
+                {!selectedProduct 
+                  ? 'Stock Intake' 
+                  : isSerialized 
+                    ? 'Serialized Intake (Pieces)' 
+                    : `Manual Intake (${unitName})`}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Select a product and add incoming stock with unique serial numbers
+              {!selectedProduct 
+                ? 'Select a product and add incoming stock' 
+                : isSerialized 
+                  ? 'Select a product and add incoming stock with unique serial numbers' 
+                  : `Add incoming stock measured in ${unitDisplay}. Serial numbers are not required.`}
             </p>
           </div>
         </div>
@@ -553,7 +673,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           <button
             type="button"
             onClick={handleSubmitStock}
-            disabled={saving || !selectedProduct || serialNumbersList.length === 0}
+            disabled={saving || !selectedProduct || (isSerialized ? serialNumbersList.length === 0 : numManualQty <= 0)}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/15 text-xs font-black transition-all disabled:opacity-50 cursor-pointer"
           >
             {saving ? (
@@ -561,7 +681,9 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
             ) : (
               <>
                 <Check className="w-4 h-4" />
-                Confirm & Add Stock ({serialNumbersList.length})
+                {isSerialized 
+                  ? `Confirm & Add Stock (${serialNumbersList.length})` 
+                  : `Confirm & Add Stock (${numManualQty > 0 ? numManualQty : 0} ${unitDisplay})`}
               </>
             )}
           </button>
@@ -589,6 +711,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   onClick={() => {
                     setSelectedProduct(null);
                     setSerialNumbersList([]);
+                    setManualQuantity('');
                   }}
                   className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
                 >
@@ -637,15 +760,20 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                             <span className="font-extrabold text-xs text-slate-900">
                               {prod.brand} {prod.modelNumber}
                             </span>
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                              Stock: {prod.stock || 0}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-50 text-[#0a382c] border border-emerald-200">
+                                {prod.unit || 'Piece'}
+                              </span>
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                                Stock: {prod.stock || 0}
+                              </span>
+                            </div>
                           </div>
                           <span className="text-xs text-slate-600 font-medium truncate">{prod.name}</span>
                           <div className="flex items-center gap-3 text-[10px] text-slate-400 font-mono mt-0.5">
                             <span>Cat: {prod.category}</span>
                             <span>•</span>
-                            <span>Cost: PKR {(prod.purchasePrice || 0).toLocaleString()}</span>
+                            <span>Cost: PKR {(prod.purchasePrice || 0).toLocaleString()} / {prod.unit || 'Piece'}</span>
                           </div>
                         </button>
                       ))
@@ -658,9 +786,14 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <div className="p-4 rounded-xl bg-[#f8faf9] border border-emerald-150/80 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#0a382c] bg-emerald-100 px-2 py-0.5 rounded">
-                      {selectedProduct.category}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-[#0a382c] bg-emerald-100 px-2 py-0.5 rounded">
+                        {selectedProduct.category}
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        Unit: {unitDisplay}
+                      </span>
+                    </div>
                     <h3 className="text-base font-black text-slate-900 mt-1.5">
                       {selectedProduct.brand} {selectedProduct.modelNumber}
                     </h3>
@@ -671,38 +804,58 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   <div className="text-right">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Stock</span>
                     <div className="text-lg font-black text-[#0a382c]">
-                      {selectedProduct.stock || 0} {selectedProduct.unit || 'units'}
+                      {selectedProduct.stock || 0} {unitDisplay}
                     </div>
                   </div>
                 </div>
 
-                {/* Registered Serials Info Box */}
-                <div className="pt-2 border-t border-emerald-100 flex justify-between items-center text-xs">
-                  <span className="text-slate-600 font-medium flex items-center gap-1.5">
-                    <Hash className="w-3.5 h-3.5 text-[#0a382c]" />
-                    Registered Serials Available: <strong>{existingProductSerials.length}</strong>
-                  </span>
-                  {existingProductSerials.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowExistingSerials(!showExistingSerials)}
-                      className="text-[11px] font-bold text-[#0a382c] hover:underline cursor-pointer"
-                    >
-                      {showExistingSerials ? 'Hide' : 'View Serials'}
-                    </button>
-                  )}
-                </div>
-
-                {showExistingSerials && existingProductSerials.length > 0 && (
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 max-h-36 overflow-y-auto space-y-1 animate-in fade-in duration-150">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Existing Available Serials:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {existingProductSerials.map((s) => (
-                        <span key={s.id} className="font-mono text-[11px] bg-slate-100 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">
-                          {s.serialNumber}
-                        </span>
-                      ))}
+                {isSerialized ? (
+                  <>
+                    {/* Registered Serials Info Box for Pieces */}
+                    <div className="pt-2 border-t border-emerald-100 flex justify-between items-center text-xs">
+                      <span className="text-slate-600 font-medium flex items-center gap-1.5">
+                        <Hash className="w-3.5 h-3.5 text-[#0a382c]" />
+                        Registered Serials Available: <strong>{existingProductSerials.length}</strong>
+                      </span>
+                      {existingProductSerials.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowExistingSerials(!showExistingSerials)}
+                          className="text-[11px] font-bold text-[#0a382c] hover:underline cursor-pointer"
+                        >
+                          {showExistingSerials ? 'Hide' : 'View Serials'}
+                        </button>
+                      )}
                     </div>
+
+                    {showExistingSerials && existingProductSerials.length > 0 && (
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 max-h-36 overflow-y-auto space-y-1 animate-in fade-in duration-150">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Existing Available Serials:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {existingProductSerials.map((s) => (
+                            <span key={s.id} className="font-mono text-[11px] bg-slate-100 border border-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">
+                              {s.serialNumber}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Informational Callout for Non-Piece Units */
+                  <div className="pt-2.5 border-t border-emerald-150/80 flex flex-col gap-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-[#0a382c]" />
+                        Tracking Unit: <span className="text-[#0a382c] font-black">{unitName} ({unitDisplay})</span>
+                      </span>
+                      <span className="text-[10px] font-black uppercase bg-emerald-100 text-[#0a382c] px-2 py-0.5 rounded">
+                        Manual Intake
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Stock is added directly as a numerical quantity without serial numbers. Pricing and valuations are set per <strong>{unitName.toLowerCase()}</strong>.
+                    </p>
                   </div>
                 )}
               </div>
@@ -721,7 +874,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="purchasePrice" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Purchase Price (PKR) <span className="text-rose-500">*</span>
+                  Purchase Price (per {unitName}) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -729,19 +882,24 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                     id="purchasePrice"
                     required
                     min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-bold text-slate-800"
+                    step="any"
+                    placeholder={`0.00 / ${unitDisplay}`}
+                    className="glass-input block w-full rounded-xl py-2 pl-3 pr-16 text-xs font-bold text-slate-800"
                     value={purchasePriceInput || ''}
                     onChange={(e) => setPurchasePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
                   />
+                  <div className="absolute right-2.5 top-2 text-[10px] font-black uppercase text-slate-400 pointer-events-none">
+                    PKR / {unitDisplay}
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Cost per incoming unit</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Cost per {unitName.toLowerCase()} from supplier
+                </p>
               </div>
 
               <div>
                 <label htmlFor="salePrice" className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Sale Price (PKR) <span className="text-rose-500">*</span>
+                  Sale Price (per {unitName}) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -749,14 +907,19 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                     id="salePrice"
                     required
                     min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-bold text-slate-800"
+                    step="any"
+                    placeholder={`0.00 / ${unitDisplay}`}
+                    className="glass-input block w-full rounded-xl py-2 pl-3 pr-16 text-xs font-bold text-slate-800"
                     value={salePriceInput || ''}
                     onChange={(e) => setSalePriceInput(Math.max(0, parseFloat(e.target.value) || 0))}
                   />
+                  <div className="absolute right-2.5 top-2 text-[10px] font-black uppercase text-[#0a382c] pointer-events-none">
+                    PKR / {unitDisplay}
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">Retail selling price</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Retail selling price per {unitName.toLowerCase()}
+                </p>
               </div>
             </div>
 
@@ -807,35 +970,41 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current</span>
                 <span className="text-base font-black text-slate-700">
-                  {selectedProduct?.stock || 0}
+                  {currentStock} <span className="text-xs font-semibold text-slate-400">{unitDisplay}</span>
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                 <span className="text-[10px] font-black text-[#0a382c] uppercase tracking-wider block">+ Adding</span>
                 <span className="text-base font-black text-[#0a382c]">
-                  +{serialNumbersList.length}
+                  +{quantityToAdd} <span className="text-xs font-semibold text-emerald-800">{unitDisplay}</span>
                 </span>
               </div>
               <div className="p-3 rounded-xl bg-[#0a382c] text-white">
                 <span className="text-[10px] font-bold text-emerald-200 uppercase tracking-wider block">New Total</span>
                 <span className="text-base font-black">
-                  {(selectedProduct?.stock || 0) + serialNumbersList.length}
+                  {newStockTotal} <span className="text-xs font-semibold text-emerald-300">{unitDisplay}</span>
                 </span>
               </div>
             </div>
 
-            {serialNumbersList.length > 0 && (
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-xs">
+            {quantityToAdd > 0 && (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Total Batch Intake Cost:</span>
                   <span className="font-bold text-slate-900 font-mono">
-                    PKR {(serialNumbersList.length * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    PKR {(quantityToAdd * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Projected Retail Value:</span>
                   <span className="font-bold text-[#0a382c] font-mono">
-                    PKR {(serialNumbersList.length * salePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    PKR {(quantityToAdd * salePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600 pt-1 border-t border-slate-200/80">
+                  <span>Projected Margin / Profit:</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    PKR {(quantityToAdd * (salePriceInput - purchasePriceInput)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -843,25 +1012,45 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           </div>
         </div>
 
-        {/* Right Column: Serial Numbers Registration & Review (7 cols) */}
+        {/* Right Column: Serial Numbers Registration or Manual Quantity Intake (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           
           <div className="glass-panel p-5 rounded-2xl bg-white space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 pb-3">
               <div className="flex items-center gap-2">
-                <Barcode className="w-5 h-5 text-[#0a382c]" />
+                {selectedProduct && !isSerialized ? (
+                  unitName === 'Meter' || unitName === 'Foot' || unitName === 'Yard' ? (
+                    <Ruler className="w-5 h-5 text-[#0a382c]" />
+                  ) : unitName === 'Kilogram' ? (
+                    <Scale className="w-5 h-5 text-[#0a382c]" />
+                  ) : (
+                    <Boxes className="w-5 h-5 text-[#0a382c]" />
+                  )
+                ) : (
+                  <Barcode className="w-5 h-5 text-[#0a382c]" />
+                )}
                 <div>
                   <h2 className="text-base font-black text-slate-900">
-                    Register Serial Numbers
+                    {!selectedProduct 
+                      ? 'Stock Intake' 
+                      : isSerialized 
+                        ? 'Register Serial Numbers' 
+                        : `Manual Stock Intake (${unitName})`}
                   </h2>
                   <p className="text-xs text-slate-500">
-                    1 Serial Number = 1 Stock Unit added to physical inventory
+                    {!selectedProduct
+                      ? 'Select a product on the left to begin intake'
+                      : isSerialized
+                        ? '1 Serial Number = 1 Stock Unit added to physical inventory'
+                        : `Add incoming stock measured in ${unitDisplay}. Serial numbers are not required.`}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-[#0a382c]">
-                  {serialNumbersList.length} Units Ready
+                  {isSerialized 
+                    ? `${serialNumbersList.length} Units Ready` 
+                    : `${numManualQty > 0 ? numManualQty : 0} ${unitDisplay} Ready`}
                 </span>
               </div>
             </div>
@@ -874,8 +1063,182 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 <div>
                   <p className="text-sm font-bold text-slate-700">No Product Selected</p>
                   <p className="text-xs text-slate-500 mt-0.5 max-w-sm mx-auto">
-                    Please choose a product on the left to activate serial number scanning, pasting, or generator modes.
+                    Please choose a product on the left to activate stock intake.
                   </p>
+                </div>
+              </div>
+            ) : !isSerialized ? (
+              /* Non-Serialized Manual Intake Section (e.g. meter, kg, liter) */
+              <div className="space-y-5">
+                {/* Informational Guidance Callout */}
+                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
+                  <div className="p-2 bg-emerald-100 rounded-lg text-[#0a382c] shrink-0 mt-0.5">
+                    {unitName === 'Meter' || unitName === 'Foot' || unitName === 'Yard' ? (
+                      <Ruler className="w-5 h-5" />
+                    ) : unitName === 'Kilogram' ? (
+                      <Scale className="w-5 h-5" />
+                    ) : (
+                      <Boxes className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                      Non-Serialized Stock Intake ({unitName})
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      This item is measured in <strong>{unitDisplay}</strong> (e.g. meter, kilogram, liter). Stock is managed as a continuous numerical quantity instead of registering individual serial numbers. Purchase and sale rates on the left are applied per <strong>{unitName.toLowerCase()}</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Direct Quantity Input Field */}
+                <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+                  <div>
+                    <label htmlFor="manualQuantity" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      Quantity to Add (in {unitDisplay}) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={manualQuantityInputRef}
+                        type="number"
+                        id="manualQuantity"
+                        min="0.01"
+                        step="any"
+                        placeholder={`Enter amount in ${unitDisplay} (e.g. 10.5)`}
+                        className="glass-input block w-full pl-4 pr-24 py-3 rounded-xl text-base font-mono font-black text-slate-900 placeholder:font-sans placeholder:text-xs placeholder:font-normal placeholder:text-slate-400"
+                        value={manualQuantity}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setManualQuantity(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                        }}
+                      />
+                      <div className="absolute right-2.5 top-2.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-[#0a382c] text-xs font-black uppercase tracking-wider pointer-events-none">
+                        {unitDisplay}
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5 text-slate-400" />
+                      Decimal quantities are supported (e.g. 12.5 {unitDisplay}).
+                    </p>
+                  </div>
+
+                  {/* Quick Increment Preset Chips */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-200/80">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Quick Add Presets ({unitDisplay}):
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[1, 5, 10, 25, 50, 100, 500].map((inc) => (
+                        <button
+                          key={inc}
+                          type="button"
+                          onClick={() => {
+                            const cur = typeof manualQuantity === 'number' ? manualQuantity : 0;
+                            setManualQuantity(cur + inc);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-50 text-slate-700 hover:text-[#0a382c] border border-slate-200 hover:border-emerald-300 text-xs font-bold font-mono transition-colors shadow-2xs cursor-pointer"
+                        >
+                          +{inc}
+                        </button>
+                      ))}
+                      {manualQuantity !== '' && (
+                        <button
+                          type="button"
+                          onClick={() => setManualQuantity('')}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stock Level Transition Preview */}
+                <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                    Inventory Level Transition
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 items-center text-center">
+                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Starting</span>
+                      <span className="text-sm font-black text-slate-700">
+                        {currentStock} {unitDisplay}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                      <span className="text-[10px] text-[#0a382c] uppercase font-bold block">Adding</span>
+                      <span className="text-sm font-black text-[#0a382c]">
+                        +{numManualQty > 0 ? numManualQty : 0} {unitDisplay}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg bg-[#0a382c] text-white">
+                      <span className="text-[10px] text-emerald-200 uppercase font-bold block">New Stock</span>
+                      <span className="text-sm font-black">
+                        {newStockTotal} {unitDisplay}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Financial Costing & Valuations Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Cost / {unitDisplay}
+                    </span>
+                    <span className="text-xs font-black text-slate-900 font-mono">
+                      PKR {purchasePriceInput.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Batch Cost
+                    </span>
+                    <span className="text-xs font-black text-slate-900 font-mono">
+                      PKR {(numManualQty * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Sale / {unitDisplay}
+                    </span>
+                    <span className="text-xs font-black text-[#0a382c] font-mono">
+                      PKR {salePriceInput.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                    <span className="text-[10px] font-bold text-[#0a382c] uppercase tracking-wider block">
+                      Projected Margin
+                    </span>
+                    <span className="text-xs font-black text-emerald-700 font-mono">
+                      PKR {(numManualQty * (salePriceInput - purchasePriceInput)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Direct Action Button */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    disabled={saving || numManualQty <= 0}
+                    onClick={handleSubmitStock}
+                    className="w-full py-3 px-4 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl text-xs font-black shadow-md shadow-emerald-950/15 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {saving ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>
+                          Confirm Intake & Add {numManualQty > 0 ? numManualQty : 0} {unitDisplay} to Stock
+                        </span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             ) : (
@@ -1176,18 +1539,18 @@ SN-4029103"
           </div>
 
           {/* Bottom Confirmation Bar */}
-          {selectedProduct && serialNumbersList.length > 0 && (
+          {selectedProduct && quantityToAdd > 0 && (
             <div className="p-4 rounded-2xl bg-[#0a382c] text-white flex flex-col sm:flex-row justify-between items-center gap-3 shadow-lg shadow-emerald-950/20 animate-in slide-in-from-bottom-2 duration-200">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-700/60 border border-emerald-500/30 flex items-center justify-center font-black text-sm">
-                  +{serialNumbersList.length}
+                <div className="h-10 px-3 rounded-xl bg-emerald-700/60 border border-emerald-500/30 flex items-center justify-center font-black text-sm">
+                  +{quantityToAdd} {unitDisplay}
                 </div>
                 <div>
                   <h4 className="font-extrabold text-sm text-white">
-                    Ready to add {serialNumbersList.length} units to {selectedProduct.name}
+                    Ready to add {quantityToAdd} {unitDisplay} to {selectedProduct.name}
                   </h4>
                   <p className="text-xs text-emerald-200 mt-0.5">
-                    Stock will increase from {selectedProduct.stock || 0} to {(selectedProduct.stock || 0) + serialNumbersList.length} {selectedProduct.unit || 'units'}.
+                    Stock will increase from {currentStock} to {newStockTotal} {unitDisplay}. Total intake cost: PKR {(quantityToAdd * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
                   </p>
                 </div>
               </div>
