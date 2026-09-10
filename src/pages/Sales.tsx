@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   collection, 
   onSnapshot, 
@@ -37,7 +37,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
 interface Product {
@@ -131,6 +130,10 @@ export default function Sales() {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedCustomerId, setSelectedCustomerId] = useState('walk-in');
+  const [customerSearchInput, setCustomerSearchInput] = useState('Walk In Customer');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [selectedBankAccNumber, setSelectedBankAccNumber] = useState('');
   const [invoiceStatus, setInvoiceStatus] = useState<'Paid' | 'Pending'>('Paid');
@@ -141,13 +144,16 @@ export default function Sales() {
     discount: number;
     warranty: string;
     selectedSerials: string[];
-  }>>([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
+  }>>([]);
   const [saving, setSaving] = useState(false);
   const [printOnCreate, setPrintOnCreate] = useState(false);
 
-  // Barcode & Camera Scanner States
+  // Serial Selection & Scanner States
   const [showSalesCameraScanner, setShowSalesCameraScanner] = useState(false);
-  const [barcodeScanInput, setBarcodeScanInput] = useState('');
+  const [serialSearchInput, setSerialSearchInput] = useState('');
+  const [isSerialDropdownOpen, setIsSerialDropdownOpen] = useState(false);
+  const serialDropdownRef = useRef<HTMLDivElement>(null);
+  const serialInputRef = useRef<HTMLInputElement>(null);
   const [activeScanningItemIndex, setActiveScanningItemIndex] = useState<number | null>(null);
 
   const getNextInvoiceNumber = () => {
@@ -300,45 +306,95 @@ export default function Sales() {
     return () => unsubscribe();
   }, [storeId]);
 
-  // Form Management Helpers
-  const handleAddItemRow = () => {
-    setInvoiceItems([...invoiceItems, { productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
-  };
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setIsCustomerDropdownOpen(false);
+      }
+      if (serialDropdownRef.current && !serialDropdownRef.current.contains(event.target as Node)) {
+        setIsSerialDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
+  // Available serial numbers in stock (or part of current editing invoice)
+  const availableSerialsInStock = useMemo(() => {
+    return allSerials.filter(sn => {
+      if (sn.status === 'Available') return true;
+      if (editingSale && editingSale.items) {
+        return editingSale.items.some(
+          item => item.selectedSerials?.includes(sn.id) || item.selectedSerials?.includes(sn.serialNumber)
+        );
+      }
+      return false;
+    });
+  }, [allSerials, editingSale]);
+
+  // Set of serial IDs & serial numbers currently added to this invoice
+  const alreadyAddedSerialIds = useMemo(() => {
+    const set = new Set<string>();
+    invoiceItems.forEach(item => {
+      item.selectedSerials?.forEach(idOrSn => {
+        set.add(idOrSn);
+        const snDoc = allSerials.find(s => s.id === idOrSn || s.serialNumber === idOrSn);
+        if (snDoc) {
+          set.add(snDoc.id);
+          set.add(snDoc.serialNumber);
+        }
+      });
+    });
+    return set;
+  }, [invoiceItems, allSerials]);
+
+  // Filtered customers matching typed search text
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearchInput.toLowerCase().trim();
+    const nonWalkInCustomers = customers.filter(
+      c => c.name?.trim().toLowerCase() !== 'walk in customer' && c.name?.trim().toLowerCase() !== 'walk-in customer'
+    );
+    if (!q || q === 'walk in customer' || q === 'walk-in customer') {
+      return nonWalkInCustomers;
+    }
+    return nonWalkInCustomers.filter(c => {
+      return (
+        c.name?.toLowerCase().includes(q) ||
+        c.mobile?.toLowerCase().includes(q) ||
+        c.city?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q)
+      );
+    });
+  }, [customers, customerSearchInput]);
+
+  // Filtered available in-stock serial numbers matching search text
+  const filteredStockSerials = useMemo(() => {
+    const q = serialSearchInput.toLowerCase().trim();
+    return availableSerialsInStock
+      .filter(s => !alreadyAddedSerialIds.has(s.id) && !alreadyAddedSerialIds.has(s.serialNumber))
+      .map(s => {
+        const product = products.find(p => p.id === s.productId);
+        return { ...s, product };
+      })
+      .filter(s => !!s.product)
+      .filter(s => {
+        if (!q) return true;
+        return (
+          s.serialNumber.toLowerCase().includes(q) ||
+          s.product!.name.toLowerCase().includes(q) ||
+          s.product!.brand?.toLowerCase().includes(q) ||
+          s.product!.modelNumber?.toLowerCase().includes(q) ||
+          s.product!.category?.toLowerCase().includes(q)
+        );
+      });
+  }, [availableSerialsInStock, alreadyAddedSerialIds, products, serialSearchInput]);
+
+  // Form Management Helpers
   const handleRemoveItemRow = (index: number) => {
     const updated = invoiceItems.filter((_, i) => i !== index);
-    setInvoiceItems(updated.length > 0 ? updated : [{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
-  };
-
-  const handleItemProductChange = (index: number, pId: string) => {
-    const product = products.find(p => p.id === pId);
-    const updated = [...invoiceItems];
-    updated[index] = {
-      productId: pId,
-      quantity: 1,
-      salePrice: product ? product.salePrice : 0,
-      discount: 0,
-      warranty: 'No Warranty',
-      selectedSerials: []
-    };
-    setInvoiceItems(updated);
-  };
-
-  const handleItemQuantityChange = (index: number, qtyVal: number) => {
-    const updated = [...invoiceItems];
-    const item = updated[index];
-    const product = products.find(p => p.id === item.productId);
-    const maxStock = product ? product.stock : 999;
-    
-    const qty = Math.max(1, Math.min(maxStock, qtyVal || 1));
-    // Prune excess serial numbers if quantity is reduced
-    const currentSerials = item.selectedSerials.slice(0, qty);
-    
-    updated[index] = {
-      ...item,
-      quantity: qty,
-      selectedSerials: currentSerials
-    };
     setInvoiceItems(updated);
   };
 
@@ -370,7 +426,67 @@ export default function Sales() {
   };
 
   const calculateInvoiceTotal = () => {
-    return invoiceItems.reduce((sum, item) => sum + Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)), 0);
+    return invoiceItems.reduce((sum, item) => sum + Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)), 0);
+  };
+
+  // Add a selected serial number from stock to the invoice
+  const addSerialNumberToInvoice = (serialDoc: SerialNumber): boolean => {
+    // 1. Verify availability
+    let isAllowed = serialDoc.status === 'Available';
+    if (!isAllowed && editingSale && editingSale.items) {
+      isAllowed = editingSale.items.some(
+        item => item.selectedSerials?.includes(serialDoc.id) || item.selectedSerials?.includes(serialDoc.serialNumber)
+      );
+    }
+    if (!isAllowed) {
+      playScanBeep('error');
+      toast.warning(`Serial "${serialDoc.serialNumber}" is already marked as ${serialDoc.status}.`);
+      return false;
+    }
+
+    // 2. Check if already added
+    if (alreadyAddedSerialIds.has(serialDoc.id) || alreadyAddedSerialIds.has(serialDoc.serialNumber)) {
+      playScanBeep('warning');
+      toast.info(`Serial "${serialDoc.serialNumber}" is already added to this invoice.`);
+      return false;
+    }
+
+    // 3. Find linked product
+    const product = products.find(p => p.id === serialDoc.productId);
+    if (!product) {
+      playScanBeep('error');
+      toast.error(`Product linked to serial "${serialDoc.serialNumber}" was not found.`);
+      return false;
+    }
+
+    // 4. Verify stock
+    const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
+    const maxAllowed = product.stock + previousQty;
+    const currentlyAddedForProduct = invoiceItems.filter(i => i.productId === product.id).length;
+    if (currentlyAddedForProduct >= maxAllowed) {
+      playScanBeep('warning');
+      toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
+      return false;
+    }
+
+    const newItem = {
+      productId: product.id,
+      quantity: 1,
+      salePrice: product.salePrice || 0,
+      discount: 0,
+      warranty: 'No Warranty',
+      selectedSerials: [serialDoc.id]
+    };
+
+    // Filter out any empty placeholder item if present
+    const existingValid = invoiceItems.filter(i => i.productId && i.productId !== '');
+    setInvoiceItems([...existingValid, newItem]);
+
+    playScanBeep('success');
+    toast.success(`Added ${product.name} (SN: ${serialDoc.serialNumber})`);
+    setSerialSearchInput('');
+    setIsSerialDropdownOpen(false);
+    return true;
   };
 
   // Add items and attach serial numbers via barcode or camera scan
@@ -378,178 +494,43 @@ export default function Sales() {
     const trimmed = scannedText.trim();
     if (!trimmed) return false;
 
-    // Check if matching serial in allSerials
+    // 1. Check matching serial in allSerials
     const matchedSerial = allSerials.find(
       s => s.serialNumber.trim().toLowerCase() === trimmed.toLowerCase()
     );
 
     if (matchedSerial) {
-      // 1. Verify availability
-      let isAllowed = matchedSerial.status === 'Available';
-      if (!isAllowed && editingSale && editingSale.items) {
-        isAllowed = editingSale.items.some(
-          item => item.selectedSerials?.includes(matchedSerial.id) || item.selectedSerials?.includes(matchedSerial.serialNumber)
-        );
-      }
-
-      if (!isAllowed) {
-        playScanBeep('error');
-        toast.warning(`Serial "${matchedSerial.serialNumber}" is already marked as ${matchedSerial.status}.`);
-        return false;
-      }
-
-      // 2. Check if already added in current invoice
-      const isAlreadyAdded = invoiceItems.some(
-        item => item.selectedSerials && (item.selectedSerials.includes(matchedSerial.id) || item.selectedSerials.includes(matchedSerial.serialNumber))
-      );
-
-      if (isAlreadyAdded) {
-        playScanBeep('warning');
-        toast.info(`Serial "${matchedSerial.serialNumber}" is already added to this invoice.`);
-        return false;
-      }
-
-      // 3. Find the product
-      const product = products.find(p => p.id === matchedSerial.productId);
-      if (!product) {
-        playScanBeep('error');
-        toast.error(`Product linked to serial "${matchedSerial.serialNumber}" not found.`);
-        return false;
-      }
-
-      let newItems = [...invoiceItems];
-
-      // If user triggered scanning from a specific row and the serial matches that row's product
-      if (activeScanningItemIndex !== null && newItems[activeScanningItemIndex] && newItems[activeScanningItemIndex].productId === product.id) {
-        const row = newItems[activeScanningItemIndex];
-        const currentSerials = row.selectedSerials || [];
-        if (currentSerials.length < row.quantity) {
-          newItems[activeScanningItemIndex] = {
-            ...row,
-            selectedSerials: [...currentSerials, matchedSerial.id]
-          };
-        } else {
-          const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
-          const maxAllowed = product.stock + previousQty;
-          if (row.quantity + 1 > maxAllowed) {
-            playScanBeep('warning');
-            toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
-            return false;
-          }
-          newItems[activeScanningItemIndex] = {
-            ...row,
-            quantity: row.quantity + 1,
-            selectedSerials: [...currentSerials, matchedSerial.id]
-          };
-        }
-      } else {
-        // Global scan: check if row for this product already exists
-        const existingRowIndex = newItems.findIndex(item => item.productId === product.id);
-
-        if (existingRowIndex >= 0) {
-          const row = newItems[existingRowIndex];
-          const currentSerials = row.selectedSerials || [];
-          if (currentSerials.length < row.quantity) {
-            newItems[existingRowIndex] = {
-              ...row,
-              selectedSerials: [...currentSerials, matchedSerial.id]
-            };
-          } else {
-            const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
-            const maxAllowed = product.stock + previousQty;
-            if (row.quantity + 1 > maxAllowed) {
-              playScanBeep('warning');
-              toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
-              return false;
-            }
-            newItems[existingRowIndex] = {
-              ...row,
-              quantity: row.quantity + 1,
-              selectedSerials: [...currentSerials, matchedSerial.id]
-            };
-          }
-        } else {
-          // Check if first row is empty
-          const firstRowIsEmpty = newItems.length === 1 && (!newItems[0].productId || newItems[0].productId === '');
-          const newRow = {
-            productId: product.id,
-            quantity: 1,
-            salePrice: product.salePrice || 0,
-            discount: 0,
-            warranty: 'No Warranty',
-            selectedSerials: [matchedSerial.id]
-          };
-
-          if (firstRowIsEmpty) {
-            newItems = [newRow];
-          } else {
-            newItems.push(newRow);
-          }
-        }
-      }
-
-      setInvoiceItems(newItems);
-      playScanBeep('success');
-      toast.success(`Added ${product.name} (SN: ${matchedSerial.serialNumber})`);
-      return true;
+      return addSerialNumberToInvoice(matchedSerial);
     }
 
-    // If not a serial number, check if user scanned a product model number or barcode
+    // 2. If not found in allSerials, check if user scanned a product model number or name
     const matchedProduct = products.find(
       p => (p.modelNumber && p.modelNumber.trim().toLowerCase() === trimmed.toLowerCase()) ||
            (p.name && p.name.trim().toLowerCase() === trimmed.toLowerCase())
     );
 
     if (matchedProduct) {
-      let newItems = [...invoiceItems];
-      const existingRowIndex = newItems.findIndex(item => item.productId === matchedProduct.id);
-      const previousQty = editingSale?.items?.find(pi => pi.productId === matchedProduct.id)?.quantity || 0;
-      const maxAllowed = matchedProduct.stock + previousQty;
-
-      if (existingRowIndex >= 0) {
-        const row = newItems[existingRowIndex];
-        if (row.quantity + 1 > maxAllowed) {
-          playScanBeep('warning');
-          toast.warning(`Maximum available stock (${maxAllowed}) reached for ${matchedProduct.name}.`);
-          return false;
-        }
-        newItems[existingRowIndex] = {
-          ...row,
-          quantity: row.quantity + 1
-        };
+      const availableSerial = availableSerialsInStock.find(
+        s => s.productId === matchedProduct.id && !alreadyAddedSerialIds.has(s.id) && !alreadyAddedSerialIds.has(s.serialNumber)
+      );
+      if (availableSerial) {
+        return addSerialNumberToInvoice(availableSerial);
       } else {
-        const firstRowIsEmpty = newItems.length === 1 && (!newItems[0].productId || newItems[0].productId === '');
-        const newRow = {
-          productId: matchedProduct.id,
-          quantity: 1,
-          salePrice: matchedProduct.salePrice || 0,
-          discount: 0,
-          warranty: 'No Warranty',
-          selectedSerials: []
-        };
-        if (firstRowIsEmpty) {
-          newItems = [newRow];
-        } else {
-          newItems.push(newRow);
-        }
+        playScanBeep('warning');
+        toast.warning(`No available in-stock serial numbers remaining for "${matchedProduct.name}".`);
+        return false;
       }
-
-      setInvoiceItems(newItems);
-      playScanBeep('success');
-      toast.success(`Added product: ${matchedProduct.name}`);
-      return true;
     }
 
     playScanBeep('error');
-    toast.error(`Serial or barcode "${trimmed}" not found in inventory.`);
+    toast.error(`Serial number "${trimmed}" not found in registered stock.`);
     return false;
   };
 
   const handleHardwareBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = barcodeScanInput.trim();
+    const trimmed = serialSearchInput.trim();
     if (!trimmed) return;
-    setBarcodeScanInput('');
     handleScanSerialNumber(trimmed);
   };
 
@@ -565,30 +546,40 @@ export default function Sales() {
     } else {
       setSelectedCustomerId('walk-in');
     }
+    setCustomerSearchInput(sale.customerName || (sale.customerId && customers.find(c => c.id === sale.customerId)?.name) || 'Walk In Customer');
     setPaymentMode(sale.paymentMode || 'Cash');
     setSelectedBankAccNumber(sale.bankAccountNumber || '');
     setInvoiceStatus((sale.status as 'Paid' | 'Pending') || 'Paid');
     
     if (sale.items) {
-      const mappedItems = sale.items.map(item => {
-        // Map the serial number strings back to Firestore document IDs from allSerials
-        const selectedSerialsWithIds = item.selectedSerials.map(snStr => {
-          const matchedDoc = allSerials.find(s => s.serialNumber === snStr && s.productId === item.productId);
-          return matchedDoc ? matchedDoc.id : snStr;
-        });
-        
-        return {
-          productId: item.productId,
-          quantity: item.quantity,
-          salePrice: item.salePrice,
-          discount: item.discount,
-          warranty: item.warranty || 'No Warranty',
-          selectedSerials: selectedSerialsWithIds
-        };
+      const mappedItems: any[] = [];
+      sale.items.forEach(item => {
+        if (item.selectedSerials && item.selectedSerials.length > 0) {
+          item.selectedSerials.forEach(snStr => {
+            const matchedDoc = allSerials.find(s => (s.serialNumber === snStr || s.id === snStr) && s.productId === item.productId);
+            mappedItems.push({
+              productId: item.productId,
+              quantity: 1,
+              salePrice: item.salePrice,
+              discount: item.discount ? (item.discount / item.selectedSerials.length) : 0,
+              warranty: item.warranty || 'No Warranty',
+              selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
+            });
+          });
+        } else {
+          mappedItems.push({
+            productId: item.productId,
+            quantity: item.quantity || 1,
+            salePrice: item.salePrice,
+            discount: item.discount || 0,
+            warranty: item.warranty || 'No Warranty',
+            selectedSerials: []
+          });
+        }
       });
       setInvoiceItems(mappedItems);
     } else {
-      setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
+      setInvoiceItems([]);
     }
     
     setShowModal(true);
@@ -721,6 +712,11 @@ export default function Sales() {
     }
 
     // Validation
+    if (invoiceItems.length === 0 || invoiceItems.every(i => !i.productId)) {
+      toast.error('Please select at least one product by serial number in stock');
+      return;
+    }
+
     for (let i = 0; i < invoiceItems.length; i++) {
       const item = invoiceItems[i];
       if (!item.productId) {
@@ -1019,8 +1015,12 @@ export default function Sales() {
       }
 
       // Reset form states
-      setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
+      setInvoiceItems([]);
       setSelectedCustomerId('walk-in');
+      setCustomerSearchInput('Walk In Customer');
+      setIsCustomerDropdownOpen(false);
+      setSerialSearchInput('');
+      setIsSerialDropdownOpen(false);
       setPaymentMode('Cash');
       setSelectedBankAccNumber('');
       setInvoiceStatus('Paid');
@@ -1575,6 +1575,11 @@ export default function Sales() {
               setInvoiceNumber('');
               setInvoiceDate(new Date().toISOString().split('T')[0]);
               setSelectedCustomerId('walk-in'); 
+              setCustomerSearchInput('Walk In Customer');
+              setIsCustomerDropdownOpen(false);
+              setSerialSearchInput('');
+              setIsSerialDropdownOpen(false);
+              setInvoiceItems([]);
               setPaymentMode('Cash'); 
               setSelectedBankAccNumber('');
               setInvoiceStatus('Paid');
@@ -1610,48 +1615,155 @@ export default function Sales() {
                     </span>
                   </div>
 
-                  {/* Customer Selection */}
-                  <div className="space-y-1 pb-2.5 border-b border-slate-200/80">
+                  {/* Customer Selection - Searchable Textbox */}
+                  <div className="space-y-1 pb-2.5 border-b border-slate-200/80 relative" ref={customerDropdownRef}>
                     <div className="flex items-center justify-between">
-                      <label htmlFor="customerId" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <label htmlFor="customerSearchInput" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-slate-500" />
                         <span>Select Customer:</span>
                       </label>
                       {selectedCustomerId === 'walk-in' ? (
-                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
                           Walk-In
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           Selected
                         </span>
                       )}
                     </div>
-                    <select
-                      id="customerId"
-                      className="glass-input block w-full rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                      value={selectedCustomerId}
-                      onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    >
-                      <option value="walk-in">Walk In Customer</option>
-                      {editingSale && !customers.some(c => c.id === editingSale.customerId) && editingSale.customerName && editingSale.customerName !== 'Walk In Customer' && (
-                        <option value={editingSale.customerName}>{editingSale.customerName}</option>
-                      )}
-                      {customers
-                        .filter(c => c.name?.trim().toLowerCase() !== 'walk in customer' && c.name?.trim().toLowerCase() !== 'walk-in customer')
-                        .map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.mobile || 'No Mobile'})</option>
-                        ))}
-                    </select>
 
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                      <input
+                        id="customerSearchInput"
+                        type="text"
+                        autoComplete="off"
+                        placeholder="Type customer name or phone to search..."
+                        value={customerSearchInput}
+                        onFocus={() => setIsCustomerDropdownOpen(true)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomerSearchInput(val);
+                          setIsCustomerDropdownOpen(true);
+                          if (!val.trim()) {
+                            setSelectedCustomerId('walk-in');
+                          } else {
+                            const exactMatch = customers.find(c => c.name.toLowerCase() === val.toLowerCase().trim());
+                            if (exactMatch) {
+                              setSelectedCustomerId(exactMatch.id);
+                            } else {
+                              setSelectedCustomerId(val);
+                            }
+                          }
+                        }}
+                        className="glass-input block w-full pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-[#0a382c] focus:ring-2 focus:ring-[#0a382c]/10"
+                      />
+                      {customerSearchInput && customerSearchInput !== 'Walk In Customer' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerSearchInput('');
+                            setSelectedCustomerId('walk-in');
+                            setIsCustomerDropdownOpen(true);
+                          }}
+                          className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                          title="Clear search"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+
+                      {/* Dropdown displaying customers filtered by text */}
+                      {isCustomerDropdownOpen && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                          {/* Walk In option */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomerId('walk-in');
+                              setCustomerSearchInput('Walk In Customer');
+                              setIsCustomerDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex items-center justify-between transition-colors ${
+                              selectedCustomerId === 'walk-in' ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Walk In Customer</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Default</span>
+                          </button>
+
+                          {/* Filtered list of customers according to typed text */}
+                          {filteredCustomers.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomerId(c.id);
+                                setCustomerSearchInput(c.name);
+                                setIsCustomerDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex flex-col transition-colors ${
+                                selectedCustomerId === c.id ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-800'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold">{c.name}</span>
+                                {c.mobile && <span className="text-[11px] font-mono text-slate-500">{c.mobile}</span>}
+                              </div>
+                              {(c.city || c.address) && (
+                                <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                                  {[c.city, c.address].filter(Boolean).join(' • ')}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+
+                          {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomerId(customerSearchInput.trim());
+                                setIsCustomerDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-slate-50 text-slate-600 italic flex items-center justify-between"
+                            >
+                              <span>Use <strong>"{customerSearchInput.trim()}"</strong> as customer</span>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Custom</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected Customer Details Card */}
                     {selectedCustomerId !== 'walk-in' && (() => {
                       const selectedCust = customers.find(c => c.id === selectedCustomerId);
-                      if (!selectedCust) return null;
+                      if (!selectedCust) {
+                        return (
+                          <div className="mt-1.5 p-2 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
+                            <div className="font-bold text-slate-900">{customerSearchInput}</div>
+                            <div className="text-[10px] text-slate-400 italic">Custom customer name</div>
+                          </div>
+                        );
+                      }
                       return (
-                        <div className="mt-1.5 p-2 rounded-lg bg-white border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
-                          <div className="font-bold text-slate-800">{selectedCust.name}</div>
+                        <div className="mt-1.5 p-2 rounded-xl bg-white border border-emerald-200/80 text-[11px] text-slate-600 space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900">{selectedCust.name}</span>
+                            <span className="text-[10px] font-bold text-[#0a382c] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                              Active Customer
+                            </span>
+                          </div>
                           {selectedCust.mobile && <div>Phone: <span className="font-semibold text-slate-800">{selectedCust.mobile}</span></div>}
-                          {selectedCust.address && <div className="truncate">Address: <span className="font-medium text-slate-700">{selectedCust.address}</span></div>}
+                          {(selectedCust.address || selectedCust.city) && (
+                            <div className="truncate text-slate-500">
+                              Address: <span className="font-medium text-slate-700">{[selectedCust.address, selectedCust.city].filter(Boolean).join(', ')}</span>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -1793,7 +1905,7 @@ export default function Sales() {
                   </div>
                 </div>
 
-                {/* RIGHT PANEL: Items (Vertically) */}
+                {/* RIGHT PANEL: Items (Selected by Serial numbers in stock) */}
                 <div className="lg:col-span-8 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
                   <div className="flex justify-between items-center pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
@@ -1806,20 +1918,14 @@ export default function Sales() {
                       <span className="text-xs text-slate-600 font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-full">
                         {invoiceItems.length} {invoiceItems.length === 1 ? 'item' : 'items'}
                       </span>
-                      <button
-                        type="button"
-                        onClick={handleAddItemRow}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer"
-                        title="Add Product to invoice"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add Product
-                      </button>
+                      <span className="text-[11px] text-slate-500 font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-full">
+                        {availableSerialsInStock.length} In Stock
+                      </span>
                     </div>
                   </div>
 
-                  {/* Quick Scan Barcode / Serial Number Bar */}
-                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5">
+                  {/* Serial Number Selection & Barcode Scanner */}
+                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5 relative" ref={serialDropdownRef}>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
@@ -1827,10 +1933,10 @@ export default function Sales() {
                         </div>
                         <div>
                           <h4 className="text-xs font-black text-slate-900 tracking-tight">
-                            Add Items by Scanning Serial Numbers
+                            Select Product by Serial Number in Stock
                           </h4>
                           <p className="text-[11px] text-slate-500">
-                            Scan with USB/Bluetooth barcode gun or use device camera
+                            Scan with barcode gun, camera scanner, or type to select from stock
                           </p>
                         </div>
                       </div>
@@ -1848,223 +1954,252 @@ export default function Sales() {
                       </button>
                     </div>
 
-                    <form onSubmit={handleHardwareBarcodeSubmit} className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder="Scan serial barcode with barcode gun (or type & press Enter)..."
-                          value={barcodeScanInput}
-                          onChange={(e) => setBarcodeScanInput(e.target.value)}
-                          className="glass-input block w-full pl-9 pr-3 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white"
-                        />
+                    {/* Search / Scan Input with Live Autocomplete Dropdown */}
+                    <form onSubmit={handleHardwareBarcodeSubmit} className="relative">
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                          <input
+                            ref={serialInputRef}
+                            type="text"
+                            placeholder="Scan or type serial number in stock (e.g. SN-1002)..."
+                            value={serialSearchInput}
+                            onFocus={() => setIsSerialDropdownOpen(true)}
+                            onChange={(e) => {
+                              setSerialSearchInput(e.target.value);
+                              setIsSerialDropdownOpen(true);
+                            }}
+                            autoComplete="off"
+                            className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white border border-slate-200"
+                          />
+                          {serialSearchInput && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSerialSearchInput('');
+                                setIsSerialDropdownOpen(false);
+                              }}
+                              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                              title="Clear input"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={!serialSearchInput.trim()}
+                          className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
                       </div>
-                      <button
-                        type="submit"
-                        disabled={!barcodeScanInput.trim()}
-                        className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add</span>
-                      </button>
+
+                      {/* Dropdown displaying in-stock serial numbers */}
+                      {isSerialDropdownOpen && (
+                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 text-xs">
+                          <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                            <span>Available In-Stock Serial Numbers ({filteredStockSerials.length})</span>
+                            <span className="text-[10px] text-slate-400">Click to add to invoice</span>
+                          </div>
+                          {filteredStockSerials.length > 0 ? (
+                            filteredStockSerials.map(sn => (
+                              <button
+                                key={sn.id}
+                                type="button"
+                                onClick={() => addSerialNumberToInvoice(sn)}
+                                className="w-full text-left p-3 hover:bg-emerald-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                              >
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50 group-hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                      {sn.serialNumber}
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-900 truncate">
+                                      {sn.product?.name}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                    {sn.product?.brand && <span>Brand: {sn.product.brand}</span>}
+                                    {sn.product?.modelNumber && <span>• Model: {sn.product.modelNumber}</span>}
+                                    <span>• Stock: {sn.product?.stock}</span>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-xs font-bold font-mono text-slate-900 block">
+                                    PKR {sn.product?.salePrice?.toFixed(2) || '0.00'}
+                                  </span>
+                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">
+                                    + Add Item
+                                  </span>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="p-4 text-center text-slate-400 italic text-xs">
+                              {serialSearchInput.trim() 
+                                ? `No in-stock serial numbers found matching "${serialSearchInput.trim()}"`
+                                : 'No available in-stock serial numbers remaining.'
+                              }
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </form>
                   </div>
 
-                  {/* Vertical Stack of Item Rows */}
-                  <div className="space-y-3.5">
-                    {invoiceItems.map((item, index) => {
-                      const selectedProduct = products.find(p => p.id === item.productId);
-                      const productSerials = allSerials.filter(sn => 
-                        sn.productId === item.productId && 
-                        (sn.status === 'Available' || item.selectedSerials.includes(sn.id))
-                      );
+                  {/* List of Selected Items - Details shown below with price editable */}
+                  <div className="space-y-3 pt-1">
+                    {invoiceItems.length === 0 ? (
+                      <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-white/70 text-center space-y-3">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#0a382c] flex items-center justify-center mx-auto">
+                          <Barcode className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="text-sm font-black text-slate-800">No Items Added Yet</h4>
+                          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                            Scan a product's serial number barcode using your barcode scanner or camera, or type and select an available serial number above.
+                          </p>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-[11px] font-bold text-slate-600">
+                          <span>{availableSerialsInStock.length} serial numbers currently in stock</span>
+                        </div>
+                      </div>
+                    ) : (
+                      invoiceItems.map((item, index) => {
+                        const selectedProduct = products.find(p => p.id === item.productId);
+                        const serialDoc = allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber));
+                        const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || 'Unknown Serial';
 
-                      return (
-                        <div key={index} className="p-3.5 sm:p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs hover:border-slate-350 transition-all">
-                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                            {/* Product Selection */}
-                            <div className="md:col-span-4">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                                Product #{index + 1}
-                              </label>
-                              <SearchableProductSelect
-                                products={products}
-                                selectedProductId={item.productId}
-                                onSelectProduct={(pId) => handleItemProductChange(index, pId)}
-                                required
-                              />
-                            </div>
+                        return (
+                          <div 
+                            key={index} 
+                            className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5 shadow-2xs hover:border-slate-300 transition-all"
+                          >
+                            {/* Header: Item #, Serial Number badge, Product Name, Total, and Delete */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <span className="w-6 h-6 rounded-lg bg-[#0a382c] text-white text-xs font-black flex items-center justify-center shrink-0">
+                                  #{index + 1}
+                                </span>
+                                <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-xl">
+                                  <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
+                                  <span className="text-xs font-mono font-black text-[#0a382c]">{serialText}</span>
+                                  <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">In Stock</span>
+                                </div>
+                                <h4 className="text-sm font-black text-slate-900">
+                                  {selectedProduct?.name || 'Product'}
+                                </h4>
+                              </div>
 
-                            {/* Unit Price */}
-                            <div className="md:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Unit Price (PKR)</label>
-                              <input
-                                type="number"
-                                required
-                                min="0"
-                                step="0.01"
-                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                value={item.salePrice || ''}
-                                onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
-                              />
-                            </div>
-
-                            {/* Quantity */}
-                            <div className="md:col-span-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Qty</label>
-                              <input
-                                type="number"
-                                required
-                                min="1"
-                                max={(() => {
-                                  let previousQty = 0;
-                                  if (editingSale && editingSale.items) {
-                                    const prevItem = editingSale.items.find(pi => pi.productId === item.productId);
-                                    if (prevItem) {
-                                      previousQty = prevItem.quantity;
-                                    }
-                                  }
-                                  return selectedProduct ? (selectedProduct.stock + previousQty) : 999;
-                                })()}
-                                className="glass-input block w-full rounded-xl py-2 px-1 text-xs font-bold text-center"
-                                value={item.quantity || ''}
-                                onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
-                              />
-                            </div>
-
-                            {/* Discount */}
-                            <div className="md:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Discount (PKR)</label>
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="0.00"
-                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                value={item.discount || ''}
-                                onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
-                              />
-                            </div>
-
-                            {/* Warranty */}
-                            <div className="md:col-span-2">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Warranty</label>
-                              <select
-                                className="glass-input block w-full rounded-xl py-2 px-3 text-xs"
-                                value={item.warranty || 'No Warranty'}
-                                onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
-                              >
-                                <option value="No Warranty">No Warranty</option>
-                                <option value="3 Months">3 Months</option>
-                                <option value="6 Months">6 Months</option>
-                                <option value="1 Year">1 Year</option>
-                                <option value="2 Years">2 Years</option>
-                                <option value="3 Years">3 Years</option>
-                              </select>
-                            </div>
-
-                            {/* Subtotal & Delete */}
-                            <div className="md:col-span-1 flex flex-col justify-start">
-                              <span className="hidden md:block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-right">Total</span>
-                              <div className="flex items-center justify-between md:justify-end gap-1.5 w-full pt-1 md:pt-1">
+                              <div className="flex items-center gap-3 self-end sm:self-center">
                                 <div className="text-right">
-                                  <span className="block md:hidden text-[10px] font-bold text-slate-400 uppercase">Subtotal</span>
-                                  <span className="text-xs font-black text-slate-900 font-mono whitespace-nowrap">
-                                    PKR {Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)).toFixed(2)}
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total</span>
+                                  <span className="text-sm font-black text-slate-900 font-mono">
+                                    PKR {Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)).toFixed(2)}
                                   </span>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveItemRow(index)}
-                                  className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer shrink-0"
-                                  title="Delete row"
+                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                                  title="Remove product"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
-                          </div>
 
-                          {/* Serial Number Selector for Electronics */}
-                          {selectedProduct && productSerials.length > 0 && (
-                            <div className="mt-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider block">
-                                  Select Sold Serial Numbers (Required: {item.quantity})
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveScanningItemIndex(index);
-                                      setShowSalesCameraScanner(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded border border-emerald-200 transition-colors cursor-pointer"
-                                    title="Scan serial barcodes specifically for this item"
-                                  >
-                                    <Camera className="w-3 h-3" />
-                                    <span>Scan for this item</span>
-                                  </button>
-                                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                                    {productSerials.length} Available
+                            {/* Product Meta Details: Brand, Model, Category, Current Stock */}
+                            {selectedProduct && (
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
+                                {selectedProduct.brand && (
+                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
+                                    Brand: {selectedProduct.brand}
                                   </span>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-32 overflow-y-auto pr-1">
-                                {productSerials.map(sn => {
-                                  const isChecked = item.selectedSerials.includes(sn.id);
-                                  return (
-                                    <label key={sn.id} className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
-                                      isChecked 
-                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold' 
-                                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
-                                    }`}>
-                                      <input
-                                        type="checkbox"
-                                        className="rounded border-slate-300 text-[#0a382c] focus:ring-[#0a382c] h-3.5 w-3.5"
-                                        checked={isChecked}
-                                        disabled={!isChecked && item.selectedSerials.length >= item.quantity}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
-                                          let newSerials = [...item.selectedSerials];
-                                          if (checked) {
-                                            if (newSerials.length < item.quantity) {
-                                              newSerials.push(sn.id);
-                                            }
-                                          } else {
-                                            newSerials = newSerials.filter(id => id !== sn.id);
-                                          }
-                                          const updatedItems = [...invoiceItems];
-                                          updatedItems[index] = { ...item, selectedSerials: newSerials };
-                                          setInvoiceItems(updatedItems);
-                                        }}
-                                      />
-                                      <span className="font-mono truncate">{sn.serialNumber}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                              {item.selectedSerials.length !== item.quantity && (
-                                <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
-                                  <Info className="w-3 h-3" /> Please check exactly {item.quantity} serial number(s) to verify item delivery. (Selected: {item.selectedSerials.length})
+                                )}
+                                {selectedProduct.modelNumber && (
+                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
+                                    Model: {selectedProduct.modelNumber}
+                                  </span>
+                                )}
+                                {selectedProduct.category && (
+                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
+                                    Category: {selectedProduct.category}
+                                  </span>
+                                )}
+                                <span className="text-slate-400">
+                                  Stock Available: {selectedProduct.stock}
                                 </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                              </div>
+                            )}
 
-                  {/* Add Product Button */}
-                  <button
-                    type="button"
-                    onClick={handleAddItemRow}
-                    className="flex items-center text-xs font-bold text-[#0a382c] hover:text-[#0d4a3b] bg-white hover:bg-emerald-50/70 border border-slate-200 hover:border-emerald-200 px-4 py-2.5 rounded-xl transition-all shadow-2xs cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Add Product
-                  </button>
+                            {/* Editable Fields: Unit Price, Discount, Warranty */}
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end">
+                              {/* Unit Price (PKR) - Editable */}
+                              <div className="sm:col-span-5">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                                  <span className="flex items-center gap-1 text-[#0a382c]">
+                                    <DollarSign className="w-3 h-3" />
+                                    <span>Unit Price (PKR) [Editable] *</span>
+                                  </span>
+                                  {selectedProduct && (
+                                    <span className="text-[9px] text-slate-400 font-normal">Catalog: PKR {selectedProduct.salePrice.toFixed(2)}</span>
+                                  )}
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="0"
+                                  step="0.01"
+                                  value={item.salePrice === 0 ? '' : item.salePrice}
+                                  onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
+                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-bold text-slate-900 border border-slate-200 focus:border-[#0a382c] focus:ring-2 focus:ring-[#0a382c]/10 bg-white"
+                                  placeholder="Enter unit selling price"
+                                />
+                              </div>
+
+                              {/* Discount (PKR) */}
+                              <div className="sm:col-span-3">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                  Discount (PKR)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  value={item.discount || ''}
+                                  onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
+                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 border border-slate-200 focus:border-[#0a382c] bg-white"
+                                />
+                              </div>
+
+                              {/* Warranty */}
+                              <div className="sm:col-span-4">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                  Warranty
+                                </label>
+                                <select
+                                  value={item.warranty || 'No Warranty'}
+                                  onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
+                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 border border-slate-200 focus:border-[#0a382c] bg-white"
+                                >
+                                  <option value="No Warranty">No Warranty</option>
+                                  <option value="3 Months">3 Months</option>
+                                  <option value="6 Months">6 Months</option>
+                                  <option value="1 Year">1 Year</option>
+                                  <option value="2 Years">2 Years</option>
+                                  <option value="3 Years">3 Years</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
 
