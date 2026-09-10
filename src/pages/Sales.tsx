@@ -1261,11 +1261,11 @@ export default function Sales() {
           .items-table th {
             background-color: #000000 !important;
             color: #ffffff !important;
-            font-size: 11px;
-            font-weight: 800;
+            font-size: 14px;
+            font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 7px 10px;
+            padding: 9px 10px;
             border: 1px solid #000000;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -1274,8 +1274,8 @@ export default function Sales() {
             border-bottom: 1.5px solid #000000 !important;
           }
           .items-table td {
-            padding: 6px 10px;
-            font-size: 11px;
+            padding: 7px 10px;
+            font-size: 12px;
             color: #000000;
             border-bottom: 1.5px solid #000000 !important;
           }
@@ -1286,18 +1286,18 @@ export default function Sales() {
             page-break-inside: avoid;
           }
           .totals-table {
-            width: 320px;
+            width: 360px;
             margin-left: auto;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 15px;
             color: #000000;
           }
           .totals-table td {
-            padding: 4px 0;
+            padding: 5px 0;
             color: #000000;
           }
           .totals-table .total-row {
-            font-size: 14px;
+            font-size: 17px;
             font-weight: 900;
             color: #000000;
             border-top: 2px solid #000000;
@@ -1418,10 +1418,10 @@ export default function Sales() {
             <table class="items-table">
               <thead>
                 <tr style="background-color: #000000; color: #ffffff;">
-                  <th style="text-align: left; width: 55%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRODUCT</th>
-                  <th style="text-align: center; width: 15%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">PRICE</th>
-                  <th style="text-align: center; width: 12%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">QTY</th>
-                  <th style="text-align: right; width: 18%; background-color: #000000; color: #ffffff; padding: 7px 10px; border: 1px solid #000000;">TOTAL</th>
+                  <th style="text-align: left; width: 52%; background-color: #000000; color: #ffffff; padding: 9px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRODUCT</th>
+                  <th style="text-align: center; width: 16%; background-color: #000000; color: #ffffff; padding: 9px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRICE</th>
+                  <th style="text-align: center; width: 12%; background-color: #000000; color: #ffffff; padding: 9px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">QTY</th>
+                  <th style="text-align: right; width: 20%; background-color: #000000; color: #ffffff; padding: 9px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">TOTAL</th>
                 </tr>
               </thead>
               <tbody>
@@ -1433,16 +1433,16 @@ export default function Sales() {
           <div class="invoice-bottom-section">
             <table class="totals-table">
               <tr>
-                <td style="color: #000000; font-weight: bold; font-size: 13px;">Subtotal (Pre-discount):</td>
-                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 13px;">PKR ${subtotal.toFixed(2)}</td>
+                <td style="color: #000000; font-weight: bold; font-size: 15px; padding: 5px 0;">Subtotal (Pre-discount):</td>
+                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 15px; padding: 5px 0;">PKR ${subtotal.toFixed(2)}</td>
               </tr>
               <tr>
-                <td style="color: #000000; font-weight: bold; font-size: 13px;">Discount:</td>
-                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 13px;">PKR ${totalDiscount.toFixed(2)}</td>
+                <td style="color: #000000; font-weight: bold; font-size: 15px; padding: 5px 0;">Discount:</td>
+                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 15px; padding: 5px 0;">PKR ${totalDiscount.toFixed(2)}</td>
               </tr>
               <tr class="total-row">
-                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 14px;">Total Amount Paid:</td>
-                <td style="text-align: right; padding-top: 8px; color: #000000; font-weight: 900; font-size: 14px;">PKR ${sale.total?.toFixed(2)}</td>
+                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 17px;">Total Amount Paid:</td>
+                <td style="text-align: right; padding-top: 8px; color: #000000; font-weight: 900; font-size: 17px;">PKR ${sale.total?.toFixed(2)}</td>
               </tr>
             </table>
 
@@ -2328,10 +2328,10 @@ export default function Sales() {
                       <table className="min-w-full text-xs border-collapse">
                         <thead>
                           <tr className="bg-black text-white">
-                            <th className="py-2 px-3 text-left font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRODUCT</th>
-                            <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">PRICE</th>
-                            <th className="py-2 px-3 text-center font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">QTY</th>
-                            <th className="py-2 px-3 text-right font-extrabold uppercase text-[11px] tracking-wider text-white bg-black">TOTAL</th>
+                            <th className="py-2.5 px-3.5 text-left font-black uppercase text-sm sm:text-[15px] tracking-wider text-white bg-black">PRODUCT</th>
+                            <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-[15px] tracking-wider text-white bg-black">PRICE</th>
+                            <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-[15px] tracking-wider text-white bg-black">QTY</th>
+                            <th className="py-2.5 px-3.5 text-right font-black uppercase text-sm sm:text-[15px] tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-black text-black">
@@ -2379,20 +2379,20 @@ export default function Sales() {
                   <div className="mt-auto pt-6 space-y-3">
                     {/* Totals Summary */}
                     <div className="flex justify-end pt-3">
-                      <div className="w-72 space-y-1.5 text-xs text-black">
-                        <div className="flex justify-between font-bold text-black">
+                      <div className="w-80 sm:w-96 space-y-2 text-black">
+                        <div className="flex justify-between font-bold text-black text-sm sm:text-[15px]">
                           <span>Subtotal (Pre-discount):</span>
-                          <span className="font-mono">PKR {draftSubtotal.toFixed(2)}</span>
+                          <span className="font-mono font-bold">PKR {draftSubtotal.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between font-bold text-black">
+                        <div className="flex justify-between font-bold text-black text-sm sm:text-[15px]">
                           <span>Discount:</span>
-                          <span className="font-mono">PKR {draftTotalDiscount.toFixed(2)}</span>
+                          <span className="font-mono font-bold">PKR {draftTotalDiscount.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-center pt-2 border-t-2 border-black text-sm">
+                        <div className="flex justify-between items-center pt-2.5 border-t-2 border-black text-base sm:text-lg">
                           <span className="font-black text-black">
                             {invoiceStatus === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}
                           </span>
-                          <span className="font-black font-mono text-base text-black">
+                          <span className="font-black font-mono text-base sm:text-lg text-black">
                             PKR {draftTotal.toFixed(2)}
                           </span>
                         </div>
@@ -2765,10 +2765,10 @@ export default function Sales() {
                       <table className="min-w-full divide-y divide-black text-black">
                         <thead className="bg-black text-white">
                           <tr>
-                            <th className="px-4 py-2.5 text-left text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">PRODUCT</th>
-                            <th className="px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">PRICE</th>
-                            <th className="px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">QTY</th>
-                            <th className="px-4 py-2.5 text-right text-[11px] font-extrabold uppercase tracking-wider text-white bg-black">TOTAL</th>
+                            <th className="px-4 py-3 text-left text-sm sm:text-[15px] font-black uppercase tracking-wider text-white bg-black">PRODUCT</th>
+                            <th className="px-4 py-3 text-center text-sm sm:text-[15px] font-black uppercase tracking-wider text-white bg-black">PRICE</th>
+                            <th className="px-4 py-3 text-center text-sm sm:text-[15px] font-black uppercase tracking-wider text-white bg-black">QTY</th>
+                            <th className="px-4 py-3 text-right text-sm sm:text-[15px] font-black uppercase tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-black text-xs text-black">
@@ -2808,20 +2808,20 @@ export default function Sales() {
 
                 {/* Totals panel */}
                 <div className="flex flex-col sm:flex-row justify-end items-start gap-4 pt-4 border-t-2 border-black">
-                  <div className="w-full sm:w-1/2 text-right space-y-1.5 text-xs text-black">
-                    <div className="flex justify-between font-bold text-black">
+                  <div className="w-full sm:w-80 md:w-96 text-right space-y-2 text-black">
+                    <div className="flex justify-between font-bold text-black text-sm sm:text-[15px]">
                       <span>Subtotal (Pre-discount):</span>
-                      <span className="font-mono">
+                      <span className="font-mono font-bold">
                         PKR {selectedSale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0).toFixed(2) || selectedSale.total?.toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex justify-between font-bold text-black">
+                    <div className="flex justify-between font-bold text-black text-sm sm:text-[15px]">
                       <span>Discount:</span>
-                      <span className="font-mono">
+                      <span className="font-mono font-bold">
                         PKR {(selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0).toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-base font-black text-black border-t-2 border-black pt-2">
+                    <div className="flex justify-between text-base sm:text-lg font-black text-black border-t-2 border-black pt-2.5">
                       <span>Total Amount Paid:</span>
                       <span className="font-mono">PKR {selectedSale.total?.toFixed(2)}</span>
                     </div>
