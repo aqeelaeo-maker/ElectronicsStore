@@ -33,7 +33,10 @@ import {
   Banknote,
   Globe,
   Camera,
-  Barcode
+  Barcode,
+  Package,
+  Layers,
+  Minus
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -96,6 +99,64 @@ interface Sale {
   accountTitle?: string | null;
 }
 
+// Helper function to group all items and serial numbers of the same product model for the printable invoice view
+const groupSaleItemsForPrint = (items: SaleItem[]): SaleItem[] => {
+  if (!items || items.length === 0) return [];
+  
+  const grouped: SaleItem[] = [];
+  const map = new Map<string, SaleItem>();
+
+  for (const item of items) {
+    if (!item.productId && !item.productName) continue;
+    
+    // Group key by product ID (fallback to productName)
+    const key = item.productId || item.productName;
+
+    if (map.has(key)) {
+      const existing = map.get(key)!;
+      const addedQty = item.quantity || 1;
+      const prevQty = existing.quantity || 1;
+      const newQty = prevQty + addedQty;
+
+      existing.quantity = newQty;
+      existing.discount = (existing.discount || 0) + (item.discount || 0);
+      existing.subtotal = (existing.subtotal || 0) + (item.subtotal || 0);
+
+      // Keep salePrice or recalculate if prices differ
+      if (existing.salePrice !== item.salePrice && newQty > 0) {
+        existing.salePrice = (existing.subtotal + existing.discount) / newQty;
+      }
+
+      // Merge all serial numbers horizontally without duplicates
+      if (item.selectedSerials && item.selectedSerials.length > 0) {
+        if (!existing.selectedSerials) {
+          existing.selectedSerials = [];
+        }
+        for (const sn of item.selectedSerials) {
+          if (sn && !existing.selectedSerials.includes(sn)) {
+            existing.selectedSerials.push(sn);
+          }
+        }
+      }
+    } else {
+      const clone: SaleItem = {
+        ...item,
+        quantity: item.quantity || 1,
+        salePrice: item.salePrice || 0,
+        discount: item.discount || 0,
+        subtotal: item.subtotal !== undefined 
+          ? item.subtotal 
+          : Math.max(0, ((item.quantity || 1) * (item.salePrice || 0)) - (item.discount || 0)),
+        selectedSerials: item.selectedSerials ? [...item.selectedSerials] : []
+      };
+      map.set(key, clone);
+      grouped.push(clone);
+    }
+  }
+
+  return grouped;
+};
+
 export default function Sales() {
   const { storeId, role } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
@@ -156,6 +217,13 @@ export default function Sales() {
   const serialDropdownRef = useRef<HTMLDivElement>(null);
   const serialInputRef = useRef<HTMLInputElement>(null);
   const [activeScanningItemIndex, setActiveScanningItemIndex] = useState<number | null>(null);
+
+  // Product Selection Mode: 'with_serial' (By Serial Number) vs 'without_serial' (Without Serial Number)
+  const [productSelectionMode, setProductSelectionMode] = useState<'with_serial' | 'without_serial'>('with_serial');
+  const [productSearchInput, setProductSearchInput] = useState('');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
+  const productInputRef = useRef<HTMLInputElement>(null);
 
   const getNextInvoiceNumber = () => {
     const currentYear = new Date().getFullYear();
@@ -316,6 +384,9 @@ export default function Sales() {
       if (serialDropdownRef.current && !serialDropdownRef.current.contains(event.target as Node)) {
         setIsSerialDropdownOpen(false);
       }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -371,7 +442,25 @@ export default function Sales() {
     });
   }, [customers, customerSearchInput]);
 
-  // Filtered available in-stock serial numbers matching search text
+  // Products WITH serial numbers: products that have registered serial numbers in allSerials
+  const productsWithSerials = useMemo(() => {
+    return products.filter(p => allSerials.some(s => s.productId === p.id));
+  }, [products, allSerials]);
+
+  // Products WITHOUT serial numbers: products that do NOT have registered serial numbers in allSerials
+  const productsWithoutSerials = useMemo(() => {
+    return products.filter(p => !allSerials.some(s => s.productId === p.id));
+  }, [products, allSerials]);
+
+  // Available non-serialized products: falls back to all products if no dedicated non-serialized products exist
+  const availableProductsWithoutSerials = useMemo(() => {
+    if (productsWithoutSerials.length > 0) {
+      return productsWithoutSerials;
+    }
+    return products;
+  }, [productsWithoutSerials, products]);
+
+  // Filtered available in-stock serial numbers matching search text (for "By Serial Number" mode)
   const filteredStockSerials = useMemo(() => {
     const q = serialSearchInput.toLowerCase().trim();
     return availableSerialsInStock
@@ -393,9 +482,45 @@ export default function Sales() {
       });
   }, [availableSerialsInStock, alreadyAddedSerialIds, products, serialSearchInput]);
 
+  // Filtered products WITHOUT serial numbers matching search text (for "Without Serial Number" mode)
+  const filteredProductsWithoutSerials = useMemo(() => {
+    const q = productSearchInput.toLowerCase().trim();
+    return availableProductsWithoutSerials.filter(p => {
+      if (!q) return true;
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (p.brand && p.brand.toLowerCase().includes(q)) ||
+        (p.modelNumber && p.modelNumber.toLowerCase().includes(q)) ||
+        (p.category && p.category.toLowerCase().includes(q))
+      );
+    });
+  }, [availableProductsWithoutSerials, productSearchInput]);
+
   // Form Management Helpers
   const handleRemoveItemRow = (index: number) => {
     const updated = invoiceItems.filter((_, i) => i !== index);
+    setInvoiceItems(updated);
+  };
+
+  const handleItemQuantityChange = (index: number, newQty: number) => {
+    const updated = [...invoiceItems];
+    const item = updated[index];
+    if (!item) return;
+
+    const prod = products.find(p => p.id === item.productId);
+    const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
+    const maxAllowed = (prod?.stock || 0) + previousQty;
+
+    let validQty = Math.max(1, newQty);
+    if (maxAllowed > 0 && validQty > maxAllowed) {
+      toast.warning(`Maximum available stock for "${prod?.name}" is ${maxAllowed}.`);
+      validQty = maxAllowed;
+    }
+
+    updated[index] = {
+      ...updated[index],
+      quantity: validQty
+    };
     setInvoiceItems(updated);
   };
 
@@ -428,6 +553,73 @@ export default function Sales() {
 
   const calculateInvoiceTotal = () => {
     return invoiceItems.reduce((sum, item) => sum + Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)), 0);
+  };
+
+  // Add a product WITHOUT serial number to the invoice
+  const addProductWithoutSerialToInvoice = (product: Product): boolean => {
+    const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
+    const maxAllowed = (product.stock || 0) + previousQty;
+
+    const existingIndex = invoiceItems.findIndex(
+      i => i.productId === product.id && (!i.selectedSerials || i.selectedSerials.length === 0)
+    );
+
+    const currentQtyInInvoice = invoiceItems
+      .filter(i => i.productId === product.id)
+      .reduce((sum, item) => sum + (item.quantity || 1), 0);
+
+    if (maxAllowed > 0 && currentQtyInInvoice >= maxAllowed) {
+      playScanBeep('warning');
+      toast.warning(`Maximum available stock (${maxAllowed}) reached for "${product.name}".`);
+      return false;
+    }
+
+    if (existingIndex >= 0) {
+      const updated = [...invoiceItems];
+      const newQty = (updated[existingIndex].quantity || 1) + 1;
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        quantity: newQty
+      };
+      setInvoiceItems(updated);
+      playScanBeep('success');
+      toast.success(`Incremented quantity for "${product.name}" (${newQty})`);
+    } else {
+      const newItem = {
+        productId: product.id,
+        quantity: 1,
+        salePrice: product.salePrice || 0,
+        discount: 0,
+        warranty: 'No Warranty',
+        selectedSerials: []
+      };
+      const existingValid = invoiceItems.filter(i => i.productId && i.productId !== '');
+      setInvoiceItems([...existingValid, newItem]);
+      playScanBeep('success');
+      toast.success(`Added "${product.name}" without serial number`);
+    }
+
+    setProductSearchInput('');
+    setIsProductDropdownOpen(false);
+    return true;
+  };
+
+  const handleWithoutSerialSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = productSearchInput.trim().toLowerCase();
+    if (!trimmed) return;
+
+    const match = filteredProductsWithoutSerials.find(
+      p => p.name.toLowerCase() === trimmed ||
+           (p.modelNumber && p.modelNumber.toLowerCase() === trimmed)
+    ) || filteredProductsWithoutSerials[0];
+
+    if (match) {
+      addProductWithoutSerialToInvoice(match);
+    } else {
+      playScanBeep('error');
+      toast.warning(`No matching product without serial number found for "${productSearchInput}".`);
+    }
   };
 
   // Add a selected serial number from stock to the invoice
@@ -551,6 +743,11 @@ export default function Sales() {
     setPaymentMode(sale.paymentMode || 'Cash');
     setSelectedBankAccNumber(sale.bankAccountNumber || '');
     setInvoiceStatus((sale.status as 'Paid' | 'Pending') || 'Paid');
+    setSerialSearchInput('');
+    setIsSerialDropdownOpen(false);
+    setProductSearchInput('');
+    setIsProductDropdownOpen(false);
+    setProductSelectionMode('with_serial');
     
     if (sale.items) {
       const mappedItems: any[] = [];
@@ -714,7 +911,7 @@ export default function Sales() {
 
     // Validation
     if (invoiceItems.length === 0 || invoiceItems.every(i => !i.productId)) {
-      toast.error('Please select at least one product by serial number in stock');
+      toast.error('Please select at least one product for the invoice');
       return;
     }
 
@@ -745,14 +942,12 @@ export default function Sales() {
         return;
       }
       
-      // Serial selection count check
-      const productSerials = allSerials.filter(sn => 
-        sn.productId === item.productId && 
-        (sn.status === 'Available' || (editingSale && editingSale.items?.some(pi => pi.productId === item.productId && pi.selectedSerials.includes(sn.serialNumber))))
-      );
-      if (productSerials.length > 0 && item.selectedSerials.length !== item.quantity) {
-        toast.error(`Please select exactly ${item.quantity} serial number(s) for "${prod.name}"`);
-        return;
+      // Serial selection count check: only validate if item was added with serial numbers
+      if (item.selectedSerials && item.selectedSerials.length > 0) {
+        if (item.selectedSerials.length !== item.quantity) {
+          toast.error(`Please select exactly ${item.quantity} serial number(s) for "${prod.name}"`);
+          return;
+        }
       }
     }
 
@@ -785,7 +980,7 @@ export default function Sales() {
 
     const batch = writeBatch(db);
 
-    const itemsToSave: SaleItem[] = invoiceItems.map(item => {
+    const rawItemsToSave: SaleItem[] = invoiceItems.map(item => {
       const prod = products.find(p => p.id === item.productId)!;
       return {
         productId: item.productId,
@@ -804,6 +999,8 @@ export default function Sales() {
         })
       };
     });
+
+    const itemsToSave: SaleItem[] = groupSaleItemsForPrint(rawItemsToSave);
 
     const totalAmount = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
     const saleId = editingSale ? editingSale.id : doc(collection(db, 'sales')).id;
@@ -1022,6 +1219,9 @@ export default function Sales() {
       setIsCustomerDropdownOpen(false);
       setSerialSearchInput('');
       setIsSerialDropdownOpen(false);
+      setProductSearchInput('');
+      setIsProductDropdownOpen(false);
+      setProductSelectionMode('with_serial');
       setPaymentMode('Cash');
       setSelectedBankAccNumber('');
       setInvoiceStatus('Paid');
@@ -1069,24 +1269,27 @@ export default function Sales() {
       return;
     }
 
-    const itemsRows = sale.items && sale.items.length > 0 
-      ? sale.items.map(item => `
+    const groupedPrintItems = groupSaleItemsForPrint(sale.items || []);
+    const itemsRows = groupedPrintItems && groupedPrintItems.length > 0 
+      ? groupedPrintItems.map(item => `
         <tr style="border-bottom: 1.5px solid #000000;">
-          <td style="padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
+          <td style="padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
             <div style="font-weight: bold; color: #000000; font-size: 11px;">${item.productName}</div>
-            <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
-              ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
-            </div>
+            ${(item.brand || item.modelNumber || item.category) ? `
+              <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
+                ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
+              </div>
+            ` : ''}
             ${item.selectedSerials && item.selectedSerials.length > 0 ? `
-              <div style="margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px;">
-                <span style="font-size: 9px; color: #000000; font-weight: bold; text-transform: uppercase;">Serials:</span>
-                ${item.selectedSerials.map(sn => `<span style="font-family: monospace; font-size: 9px; background-color: #f8fafc; color: #000000; padding: 0.5px 3px; border-radius: 2px; border: 1px solid #000000; margin-right: 3px; display: inline-block;">${sn}</span>`).join('')}
+              <div style="font-size: 9.5px; color: #000000; margin-top: 2px; line-height: 1.25; word-break: break-word;">
+                <span style="font-weight: bold; text-transform: uppercase; font-size: 8.5px;">S/N: </span>
+                <span style="font-family: monospace; font-weight: 600;">${item.selectedSerials.join(', ')}</span>
               </div>
             ` : ''}
           </td>
-          <td style="padding: 7px 10px; text-align: center; font-weight: 700; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.salePrice.toFixed(2)}</td>
-          <td style="padding: 7px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
-          <td style="padding: 7px 10px; text-align: right; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
+          <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 6px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
+          <td style="padding: 6px 10px; text-align: right; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
@@ -1532,6 +1735,8 @@ export default function Sales() {
       };
     });
 
+    const groupedDraftItems = groupSaleItemsForPrint(draftItems.filter(item => item.productId));
+
     const draftSubtotal = draftItems.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
     const draftTotalDiscount = draftItems.reduce((sum, item) => sum + (item.discount || 0), 0);
     const draftTotal = Math.max(0, draftSubtotal - draftTotalDiscount);
@@ -1541,7 +1746,7 @@ export default function Sales() {
       invoiceNo: currentInvoiceNo,
       customerId: currentCustomer.id,
       customerName: currentCustomer.name,
-      items: draftItems,
+      items: groupedDraftItems,
       total: draftTotal,
       status: invoiceStatus,
       paymentMode,
@@ -1580,6 +1785,9 @@ export default function Sales() {
               setIsCustomerDropdownOpen(false);
               setSerialSearchInput('');
               setIsSerialDropdownOpen(false);
+              setProductSearchInput('');
+              setIsProductDropdownOpen(false);
+              setProductSelectionMode('with_serial');
               setInvoiceItems([]);
               setPaymentMode('Cash'); 
               setSelectedBankAccNumber('');
@@ -1920,175 +2128,357 @@ export default function Sales() {
                         {invoiceItems.length} {invoiceItems.length === 1 ? 'item' : 'items'}
                       </span>
                       <span className="text-[11px] text-slate-500 font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-full">
-                        {availableSerialsInStock.length} In Stock
+                        {productSelectionMode === 'with_serial'
+                          ? `${availableSerialsInStock.length} Serials In Stock`
+                          : `${availableProductsWithoutSerials.length} Products Without Serials`}
                       </span>
                     </div>
                   </div>
 
-                  {/* Serial Number Selection & Barcode Scanner */}
-                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5 relative" ref={serialDropdownRef}>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
-                          <Barcode className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black text-slate-900 tracking-tight">
-                            Select Product by Serial Number in Stock
-                          </h4>
-                          <p className="text-[11px] text-slate-500">
-                            Scan with barcode gun, camera scanner, or type to select from stock
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveScanningItemIndex(null);
-                          setShowSalesCameraScanner(true);
-                        }}
-                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer"
-                        title="Open device camera to scan serial barcodes"
-                      >
-                        <Camera className="w-4 h-4" />
-                        <span>Scan with Camera</span>
-                      </button>
-                    </div>
+                  {/* Mode Selector: By Serial Number vs Without Serial Number */}
+                  <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1.5 border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductSelectionMode('with_serial');
+                        setIsProductDropdownOpen(false);
+                        setTimeout(() => serialInputRef.current?.focus(), 50);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        productSelectionMode === 'with_serial'
+                          ? 'bg-white text-[#0a382c] shadow-sm border border-emerald-300 ring-2 ring-emerald-500/10'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <Barcode className="w-4 h-4 text-[#0a382c]" />
+                      <span>By Serial Number</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        productSelectionMode === 'with_serial' ? 'bg-emerald-100 text-[#0a382c]' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {availableSerialsInStock.length}
+                      </span>
+                    </button>
 
-                    {/* Search / Scan Input with Live Autocomplete Dropdown */}
-                    <form onSubmit={handleHardwareBarcodeSubmit} className="relative">
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <input
-                            ref={serialInputRef}
-                            type="text"
-                            placeholder="Scan or type serial number in stock (e.g. SN-1002)..."
-                            value={serialSearchInput}
-                            onFocus={() => setIsSerialDropdownOpen(true)}
-                            onChange={(e) => {
-                              setSerialSearchInput(e.target.value);
-                              setIsSerialDropdownOpen(true);
-                            }}
-                            autoComplete="off"
-                            className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white border border-slate-200"
-                          />
-                          {serialSearchInput && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSerialSearchInput('');
-                                setIsSerialDropdownOpen(false);
-                              }}
-                              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-                              title="Clear input"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductSelectionMode('without_serial');
+                        setIsSerialDropdownOpen(false);
+                        setTimeout(() => productInputRef.current?.focus(), 50);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        productSelectionMode === 'without_serial'
+                          ? 'bg-white text-[#0a382c] shadow-sm border border-emerald-300 ring-2 ring-emerald-500/10'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <Package className="w-4 h-4 text-[#0a382c]" />
+                      <span>Without Serial Number</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        productSelectionMode === 'without_serial' ? 'bg-emerald-100 text-[#0a382c]' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {availableProductsWithoutSerials.length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Mode 1: Product Selection By Serial Number */}
+                  {productSelectionMode === 'with_serial' && (
+                    <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5 relative" ref={serialDropdownRef}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-[#0a382c] text-white flex items-center justify-center shrink-0">
+                            <Barcode className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-900 tracking-tight">
+                              Select Product by Serial Number in Stock
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Scan with barcode gun, camera scanner, or type to select from stock
+                            </p>
+                          </div>
                         </div>
                         <button
-                          type="submit"
-                          disabled={!serialSearchInput.trim()}
-                          className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                          type="button"
+                          onClick={() => {
+                            setActiveScanningItemIndex(null);
+                            setShowSalesCameraScanner(true);
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer"
+                          title="Open device camera to scan serial barcodes"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
+                          <Camera className="w-4 h-4" />
+                          <span>Scan with Camera</span>
                         </button>
                       </div>
 
-                      {/* Dropdown displaying in-stock serial numbers */}
-                      {isSerialDropdownOpen && (
-                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 text-xs">
-                          <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                            <span>Available In-Stock Serial Numbers ({filteredStockSerials.length})</span>
-                            <span className="text-[10px] text-slate-400">Click to add to invoice</span>
-                          </div>
-                          {filteredStockSerials.length > 0 ? (
-                            filteredStockSerials.map(sn => (
+                      {/* Search / Scan Input with Live Autocomplete Dropdown */}
+                      <form onSubmit={handleHardwareBarcodeSubmit} className="relative">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                            <input
+                              ref={serialInputRef}
+                              type="text"
+                              placeholder="Scan or type serial number or product in stock (e.g. SN-1002)..."
+                              value={serialSearchInput}
+                              onFocus={() => setIsSerialDropdownOpen(true)}
+                              onChange={(e) => {
+                                setSerialSearchInput(e.target.value);
+                                setIsSerialDropdownOpen(true);
+                              }}
+                              autoComplete="off"
+                              className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white border border-slate-200"
+                            />
+                            {serialSearchInput && (
                               <button
-                                key={sn.id}
                                 type="button"
-                                onClick={() => addSerialNumberToInvoice(sn)}
-                                className="w-full text-left p-3 hover:bg-emerald-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                                onClick={() => {
+                                  setSerialSearchInput('');
+                                  setIsSerialDropdownOpen(false);
+                                }}
+                                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                                title="Clear input"
                               >
-                                <div className="space-y-0.5 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50 group-hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                      {sn.serialNumber}
-                                    </span>
-                                    <span className="text-xs font-bold text-slate-900 truncate">
-                                      {sn.product?.name}
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                                    {sn.product?.brand && <span>Brand: {sn.product.brand}</span>}
-                                    {sn.product?.modelNumber && <span>• Model: {sn.product.modelNumber}</span>}
-                                    <span>• Stock: {sn.product?.stock}</span>
-                                  </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <span className="text-xs font-bold font-mono text-slate-900 block">
-                                    PKR {sn.product?.salePrice?.toFixed(2) || '0.00'}
-                                  </span>
-                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">
-                                    + Add Item
-                                  </span>
-                                </div>
+                                <X className="w-3.5 h-3.5" />
                               </button>
-                            ))
-                          ) : (
-                            <div className="p-4 text-center text-slate-400 italic text-xs">
-                              {serialSearchInput.trim() 
-                                ? `No in-stock serial numbers found matching "${serialSearchInput.trim()}"`
-                                : 'No available in-stock serial numbers remaining.'
-                              }
-                            </div>
-                          )}
+                            )}
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={!serialSearchInput.trim()}
+                            className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add</span>
+                          </button>
                         </div>
-                      )}
-                    </form>
-                  </div>
+
+                        {/* Dropdown displaying in-stock products with serial numbers */}
+                        {isSerialDropdownOpen && (
+                          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 text-xs">
+                            <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                              <span>Available Products with Serial Numbers ({filteredStockSerials.length})</span>
+                              <span className="text-[10px] text-slate-400">Click to add to invoice</span>
+                            </div>
+                            {filteredStockSerials.length > 0 ? (
+                              filteredStockSerials.map(sn => (
+                                <button
+                                  key={sn.id}
+                                  type="button"
+                                  onClick={() => addSerialNumberToInvoice(sn)}
+                                  className="w-full text-left p-3 hover:bg-emerald-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                                >
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50 group-hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                        {sn.serialNumber}
+                                      </span>
+                                      <span className="text-xs font-bold text-slate-900 truncate">
+                                        {sn.product?.name}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                      {sn.product?.brand && <span>Brand: {sn.product.brand}</span>}
+                                      {sn.product?.modelNumber && <span>• Model: {sn.product.modelNumber}</span>}
+                                      <span>• Stock: {sn.product?.stock}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-xs font-bold font-mono text-slate-900 block">
+                                      PKR {sn.product?.salePrice?.toFixed(2) || '0.00'}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">
+                                      + Add Item
+                                    </span>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-4 text-center text-slate-400 italic text-xs">
+                                {serialSearchInput.trim() 
+                                  ? `No in-stock serial numbers found matching "${serialSearchInput.trim()}"`
+                                  : 'No available in-stock serial numbers remaining.'
+                                }
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Mode 2: Product Selection Without Serial Number */}
+                  {productSelectionMode === 'without_serial' && (
+                    <div className="bg-sky-50/70 border border-sky-200/80 rounded-2xl p-3 sm:p-3.5 space-y-2.5 relative" ref={productDropdownRef}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-sky-700 text-white flex items-center justify-center shrink-0">
+                            <Package className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-900 tracking-tight">
+                              Select Product Without Serial Number
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Type to search and select products sold without individual serial numbers
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Search Input with Autocomplete Dropdown */}
+                      <form onSubmit={handleWithoutSerialSubmit} className="relative">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Package className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                            <input
+                              ref={productInputRef}
+                              type="text"
+                              placeholder="Type product name, brand, or model (e.g. USB Cable, Adapter)..."
+                              value={productSearchInput}
+                              onFocus={() => setIsProductDropdownOpen(true)}
+                              onChange={(e) => {
+                                setProductSearchInput(e.target.value);
+                                setIsProductDropdownOpen(true);
+                              }}
+                              autoComplete="off"
+                              className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500/20 bg-white border border-slate-200"
+                            />
+                            {productSearchInput && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setProductSearchInput('');
+                                  setIsProductDropdownOpen(false);
+                                }}
+                                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                                title="Clear input"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={!productSearchInput.trim()}
+                            className="px-4 py-2 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add</span>
+                          </button>
+                        </div>
+
+                        {/* Dropdown displaying products without serial numbers */}
+                        {isProductDropdownOpen && (
+                          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 text-xs">
+                            <div className="p-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                              <span>Products Without Serial Numbers ({filteredProductsWithoutSerials.length})</span>
+                              <span className="text-[10px] text-slate-400">Click to add to invoice</span>
+                            </div>
+                            {filteredProductsWithoutSerials.length > 0 ? (
+                              filteredProductsWithoutSerials.map(prod => (
+                                <button
+                                  key={prod.id}
+                                  type="button"
+                                  onClick={() => addProductWithoutSerialToInvoice(prod)}
+                                  className="w-full text-left p-3 hover:bg-sky-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                                >
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-black text-slate-900 truncate">
+                                        {prod.name}
+                                      </span>
+                                      {prod.category && (
+                                        <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded">
+                                          {prod.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                      {prod.brand && <span>Brand: {prod.brand}</span>}
+                                      {prod.modelNumber && <span>• Model: {prod.modelNumber}</span>}
+                                      <span className="text-sky-700 font-bold">• Stock: {prod.stock} {prod.unit || 'pcs'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-xs font-bold font-mono text-slate-900 block">
+                                      PKR {prod.salePrice?.toFixed(2) || '0.00'}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 uppercase group-hover:bg-sky-100">
+                                      + Add Product
+                                    </span>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="p-4 text-center text-slate-400 italic text-xs">
+                                {productSearchInput.trim()
+                                  ? `No products without serial numbers found matching "${productSearchInput.trim()}"`
+                                  : 'No products without serial numbers available.'}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </form>
+                    </div>
+                  )}
 
                   {/* List of Selected Items - Details shown below with price editable */}
                   <div className="space-y-3 pt-1">
                     {invoiceItems.length === 0 ? (
                       <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-white/70 text-center space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#0a382c] flex items-center justify-center mx-auto">
-                          <Barcode className="w-6 h-6" />
+                          <Layers className="w-6 h-6" />
                         </div>
                         <div className="space-y-1">
                           <h4 className="text-sm font-black text-slate-800">No Items Added Yet</h4>
                           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                            Scan a product's serial number barcode using your barcode scanner or camera, or type and select an available serial number above.
+                            Select products above <strong className="text-slate-700 font-bold">By Serial Number</strong> or <strong className="text-slate-700 font-bold">Without Serial Number</strong> to add them to this invoice.
                           </p>
                         </div>
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-full text-[11px] font-bold text-slate-600">
-                          <span>{availableSerialsInStock.length} serial numbers currently in stock</span>
+                        <div className="inline-flex items-center gap-3 px-3.5 py-1.5 bg-slate-100 rounded-full text-[11px] font-bold text-slate-600">
+                          <span>{availableSerialsInStock.length} serials in stock</span>
+                          <span>•</span>
+                          <span>{availableProductsWithoutSerials.length} products without serials</span>
                         </div>
                       </div>
                     ) : (
                       invoiceItems.map((item, index) => {
                         const selectedProduct = products.find(p => p.id === item.productId);
-                        const serialDoc = allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber));
-                        const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || 'Unknown Serial';
+                        const isSerialized = Boolean(item.selectedSerials && item.selectedSerials.length > 0);
+                        const serialDoc = isSerialized ? allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber)) : null;
+                        const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || '';
+                        const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
+                        const maxAllowed = (selectedProduct?.stock || 0) + previousQty;
 
                         return (
                           <div 
                             key={index} 
                             className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5 shadow-2xs hover:border-slate-300 transition-all"
                           >
-                            {/* Header: Item #, Serial Number badge, Product Name, Total, and Delete */}
+                            {/* Header: Item #, Serial Number badge / Without Serial badge, Product Name, Total, and Delete */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
                               <div className="flex items-center gap-2.5 flex-wrap">
                                 <span className="w-6 h-6 rounded-lg bg-[#0a382c] text-white text-xs font-black flex items-center justify-center shrink-0">
                                   #{index + 1}
                                 </span>
-                                <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-xl">
-                                  <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
-                                  <span className="text-xs font-mono font-black text-[#0a382c]">{serialText}</span>
-                                  <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">In Stock</span>
-                                </div>
+                                {isSerialized ? (
+                                  <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-xl">
+                                    <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
+                                    <span className="text-xs font-mono font-black text-[#0a382c]">{serialText}</span>
+                                    <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">In Stock</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-200/90 px-2.5 py-1 rounded-xl">
+                                    <Package className="w-3.5 h-3.5 text-sky-700" />
+                                    <span className="text-xs font-bold text-sky-800">Without Serial Number</span>
+                                    <span className="text-[9px] font-black uppercase text-sky-800 bg-sky-100 px-1.5 py-0.5 rounded ml-1">
+                                      Qty: {item.quantity} {selectedProduct?.unit || 'pcs'}
+                                    </span>
+                                  </div>
+                                )}
                                 <h4 className="text-sm font-black text-slate-900">
                                   {selectedProduct?.name || 'Product'}
                                 </h4>
@@ -2131,19 +2521,56 @@ export default function Sales() {
                                   </span>
                                 )}
                                 <span className="text-slate-400">
-                                  Stock Available: {selectedProduct.stock}
+                                  Stock Available: {selectedProduct.stock} {selectedProduct.unit || ''}
                                 </span>
                               </div>
                             )}
 
-                            {/* Editable Fields: Unit Price, Discount, Warranty */}
-                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end">
+                            {/* Editable Fields: Quantity (for without serial), Unit Price, Discount, Warranty */}
+                            <div className={`grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end`}>
+                              {/* Quantity control for without-serial items */}
+                              {!isSerialized && (
+                                <div className="sm:col-span-3">
+                                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                    Quantity *
+                                  </label>
+                                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemQuantityChange(index, Math.max(1, (item.quantity || 1) - 1))}
+                                      disabled={(item.quantity || 1) <= 1}
+                                      className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                                      title="Decrease quantity"
+                                    >
+                                      <Minus className="w-3.5 h-3.5" />
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max={maxAllowed > 0 ? maxAllowed : undefined}
+                                      value={item.quantity || 1}
+                                      onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
+                                      className="w-full text-center py-2 px-1 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemQuantityChange(index, (item.quantity || 1) + 1)}
+                                      disabled={maxAllowed > 0 && (item.quantity || 1) >= maxAllowed}
+                                      className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-colors"
+                                      title="Increase quantity"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Unit Price (PKR) - Editable */}
-                              <div className="sm:col-span-5">
+                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-5'}>
                                 <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
                                   <span className="flex items-center gap-1 text-[#0a382c]">
                                     <DollarSign className="w-3 h-3" />
-                                    <span>Unit Price (PKR) [Editable] *</span>
+                                    <span>Unit Price (PKR) *</span>
                                   </span>
                                   {selectedProduct && (
                                     <span className="text-[9px] text-slate-400 font-normal">Catalog: PKR {selectedProduct.salePrice.toFixed(2)}</span>
@@ -2162,7 +2589,7 @@ export default function Sales() {
                               </div>
 
                               {/* Discount (PKR) */}
-                              <div className="sm:col-span-3">
+                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-3'}>
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                                   Discount (PKR)
                                 </label>
@@ -2178,7 +2605,7 @@ export default function Sales() {
                               </div>
 
                               {/* Warranty */}
-                              <div className="sm:col-span-4">
+                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-4'}>
                                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                                   Warranty
                                 </label>
@@ -2336,34 +2763,30 @@ export default function Sales() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-black text-black">
-                          {draftItems.filter(item => item.productId).length > 0 ? (
-                            draftItems
-                              .filter(item => item.productId)
-                              .map((item, idx) => (
-                                <tr key={idx} className="align-top border-b border-black">
-                                  <td className="py-2.5 px-3">
-                                    <div className="font-bold text-black">{item.productName}</div>
-                                    {(item.brand || item.modelNumber) && (
-                                      <div className="text-[10px] text-black font-medium mt-0.5">{item.brand} • {item.modelNumber}</div>
-                                    )}
-                                    {item.selectedSerials && item.selectedSerials.length > 0 && (
-                                      <div className="mt-1 flex flex-wrap gap-1">
-                                        <span className="text-[9px] font-bold text-black uppercase">S/N:</span>
-                                        {item.selectedSerials.map((sn, sIdx) => (
-                                          <span key={sIdx} className="font-mono text-[9px] bg-slate-50 text-black px-1.5 py-0.5 rounded border border-black">
-                                            {sn}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center text-black font-semibold font-mono">PKR {item.salePrice.toFixed(2)}</td>
-                                  <td className="py-2.5 px-3 text-center font-bold text-black">{item.quantity}</td>
-                                  <td className="py-2.5 px-3 text-right font-bold font-mono text-black">
-                                    PKR {item.subtotal.toFixed(2)}
-                                  </td>
-                                </tr>
-                              ))
+                          {groupedDraftItems.length > 0 ? (
+                            groupedDraftItems.map((item, idx) => (
+                              <tr key={idx} className="align-top border-b border-black">
+                                <td className="py-2.5 px-3">
+                                  <div className="font-bold text-black">{item.productName}</div>
+                                  {(item.brand || item.modelNumber) && (
+                                    <div className="text-[10px] text-black font-medium mt-0.5">
+                                      {item.brand ? item.brand + ' • ' : ''}{item.modelNumber || ''}
+                                    </div>
+                                  )}
+                                  {item.selectedSerials && item.selectedSerials.length > 0 && (
+                                    <div className="text-[10px] text-black mt-1 leading-snug break-words">
+                                      <span className="font-bold uppercase text-[9px] text-black">S/N: </span>
+                                      <span className="font-mono font-semibold">{item.selectedSerials.join(', ')}</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center text-black font-semibold font-mono">PKR {item.salePrice.toFixed(2)}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-black">{item.quantity}</td>
+                                <td className="py-2.5 px-3 text-right font-bold font-mono text-black">
+                                  PKR {item.subtotal.toFixed(2)}
+                                </td>
+                              </tr>
+                            ))
                           ) : (
                             <tr>
                               <td colSpan={4} className="py-8 text-center text-black italic text-xs">
@@ -2500,7 +2923,12 @@ export default function Sales() {
             setPaymentMode('Cash');
             setSelectedBankAccNumber('');
             setInvoiceStatus('Paid');
-            setInvoiceItems([{ productId: '', quantity: 1, salePrice: 0, discount: 0, warranty: 'No Warranty', selectedSerials: [] }]);
+            setInvoiceItems([]);
+            setSerialSearchInput('');
+            setIsSerialDropdownOpen(false);
+            setProductSearchInput('');
+            setIsProductDropdownOpen(false);
+            setProductSelectionMode('with_serial');
             setShowModal(true);
           }}
           className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
@@ -2773,19 +3201,19 @@ export default function Sales() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-black text-xs text-black">
-                          {selectedSale.items.map((item, i) => (
+                          {groupSaleItemsForPrint(selectedSale.items).map((item, i) => (
                             <tr key={i} className="align-top border-b border-black">
                               <td className="px-4 py-3">
                                 <div className="font-bold text-black">{item.productName}</div>
-                                <div className="text-[10px] text-black font-medium mt-0.5">{item.brand} • {item.modelNumber}</div>
+                                {(item.brand || item.modelNumber) && (
+                                  <div className="text-[10px] text-black font-medium mt-0.5">
+                                    {item.brand ? item.brand + ' • ' : ''}{item.modelNumber || ''}
+                                  </div>
+                                )}
                                 {item.selectedSerials && item.selectedSerials.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1">
-                                    <span className="text-[9px] text-black uppercase font-bold block w-full">Serials:</span>
-                                    {item.selectedSerials.map((sn, snIdx) => (
-                                      <span key={snIdx} className="font-mono text-[9px] bg-slate-50 text-black px-1.5 py-0.5 rounded border border-black">
-                                        {sn}
-                                      </span>
-                                    ))}
+                                  <div className="text-[10px] text-black mt-1 leading-snug break-words">
+                                    <span className="font-bold uppercase text-[9px] text-black">S/N: </span>
+                                    <span className="font-mono font-semibold">{item.selectedSerials.join(', ')}</span>
                                   </div>
                                 )}
                               </td>
