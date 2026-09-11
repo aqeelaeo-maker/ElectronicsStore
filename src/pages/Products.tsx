@@ -11,6 +11,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  productType?: 'Serials' | 'Without Serials';
   unit?: string;
   purchasePrice: number;
   salePrice: number;
@@ -24,6 +25,7 @@ export default function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [selectedProductType, setSelectedProductType] = useState<'Serials' | 'Without Serials'>('Serials');
 
   // Store Units of Measurement
   const [units, setUnits] = useState<Array<{ name: string; abbreviation: string }>>([
@@ -154,11 +156,13 @@ export default function Products() {
     }
     
     const formData = new FormData(e.currentTarget);
+    const productType = (formData.get('productType') as string) || selectedProductType || 'Serials';
     const newProduct = {
       name: formData.get('name'),
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
+      productType: productType as 'Serials' | 'Without Serials',
       unit: (formData.get('unit') as string)?.trim() || (units[0]?.abbreviation || units[0]?.name || 'Pcs'),
       purchasePrice: 0,
       salePrice: 0,
@@ -183,11 +187,13 @@ export default function Products() {
     if (!editingProduct) return;
     
     const formData = new FormData(e.currentTarget);
+    const productType = (formData.get('productType') as string) || selectedProductType || editingProduct.productType || 'Serials';
     const updatedProduct = {
       name: formData.get('name'),
       brand: formData.get('brand'),
       category: formData.get('category'),
       modelNumber: formData.get('modelNumber'),
+      productType: productType as 'Serials' | 'Without Serials',
       unit: (formData.get('unit') as string)?.trim() || editingProduct.unit || (units[0]?.abbreviation || units[0]?.name || 'Pcs'),
       purchasePrice: editingProduct.purchasePrice || 0,
       salePrice: editingProduct.salePrice || 0,
@@ -274,6 +280,22 @@ export default function Products() {
                   </select>
                 </div>
                 <div>
+                  <label htmlFor="productType" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Product Type <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    name="productType"
+                    id="productType"
+                    value={selectedProductType}
+                    onChange={(e) => setSelectedProductType(e.target.value as 'Serials' | 'Without Serials')}
+                    required
+                    className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm font-semibold text-slate-800"
+                  >
+                    <option value="Serials">1. Serials</option>
+                    <option value="Without Serials">2. Without Serials</option>
+                  </select>
+                </div>
+                <div>
                   <label htmlFor="unit" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Unit of Measure
                   </label>
@@ -298,10 +320,26 @@ export default function Products() {
                   <label htmlFor="modelNumber" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Model Number</label>
                   <input type="text" name="modelNumber" id="modelNumber" defaultValue={initialData.modelNumber} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
+
+                <div className="sm:col-span-2 lg:col-span-4 p-3.5 rounded-xl border bg-slate-50/80 flex items-start gap-3">
+                  <div className={`p-2 rounded-lg shrink-0 ${selectedProductType === 'Serials' ? 'bg-emerald-100 text-[#0a382c]' : 'bg-amber-100 text-amber-900'}`}>
+                    {selectedProductType === 'Serials' ? <Barcode className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-bold text-slate-800">
+                      Product Type Selected: {selectedProductType === 'Serials' ? 'Serials' : 'Without Serials'}
+                    </p>
+                    <p className="text-slate-500 mt-0.5">
+                      {selectedProductType === 'Serials'
+                        ? 'In "Add Inventory Stock", incoming inventory will be added using "Register Serial Numbers" with unique barcode/serial tracking.'
+                        : 'In "Add Inventory Stock", incoming inventory will be added using "Manual Stock Intake (unit of measurement)" without serial numbers.'}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Available Stock Serial Numbers (shown when editing) */}
-              {isEditing && (() => {
+              {isEditing && selectedProductType === 'Serials' && (() => {
                 const availableSerials = editProductSerials.filter(s => s.status === 'Available');
                 const soldSerials = editProductSerials.filter(s => s.status === 'Sold');
                 const filteredAvailable = availableSerials.filter(s =>
@@ -467,7 +505,10 @@ export default function Products() {
           <p className="text-sm text-slate-500 mt-1">Manage your product catalog and inventory</p>
         </div>
         <button 
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setSelectedProductType('Serials');
+            setShowAddForm(true);
+          }}
           className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -496,6 +537,7 @@ export default function Products() {
             <thead className="bg-[#f8faf9]">
               <tr>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Type</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
@@ -506,13 +548,13 @@ export default function Products() {
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No products found. Add a new product to get started.
                   </td>
                 </tr>
@@ -529,6 +571,18 @@ export default function Products() {
                           <div className="text-xs text-slate-500 mt-0.5">{product.brand} • {product.modelNumber}</div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {product.productType === 'Without Serials' ? (
+                        <span className="px-2.5 py-1 inline-flex items-center gap-1 text-[10px] leading-4 font-black rounded-full bg-amber-50 text-amber-900 border border-amber-200 uppercase tracking-wider">
+                          Without Serials
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 inline-flex items-center gap-1 text-[10px] leading-4 font-black rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                          <Barcode className="w-3 h-3" />
+                          Serials
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
@@ -556,7 +610,10 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                       <button 
-                        onClick={() => setEditingProduct(product)}
+                        onClick={() => {
+                          setSelectedProductType(product.productType || 'Serials');
+                          setEditingProduct(product);
+                        }}
                         className="text-slate-400 hover:text-slate-800 mr-4 transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, getDocs, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Search, Plus, Trash2, Hash } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -11,6 +11,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  productType?: 'Serials' | 'Without Serials' | string;
   unit?: string;
   stock: number;
 }
@@ -143,6 +144,15 @@ export default function SerialNumbers() {
         createdAt: serverTimestamp(),
       });
       
+      // Keep product stock count synchronized
+      try {
+        await updateDoc(doc(db, 'products', selectedProduct.id), {
+          stock: increment(1)
+        });
+      } catch (err) {
+        console.warn('Could not update product stock count:', err);
+      }
+
       toast.success('Serial number added successfully');
       setNewSerialNumber('');
     } catch (error) {
@@ -157,6 +167,15 @@ export default function SerialNumbers() {
     if (window.confirm('Are you sure you want to delete this serial number?')) {
       try {
         await deleteDoc(doc(db, 'serialNumbers', id));
+        if (selectedProduct) {
+          try {
+            await updateDoc(doc(db, 'products', selectedProduct.id), {
+              stock: increment(-1)
+            });
+          } catch (err) {
+            console.warn('Could not decrement product stock count:', err);
+          }
+        }
         toast.success('Serial number deleted successfully');
       } catch (error) {
         console.error('Error deleting serial number:', error);
@@ -218,7 +237,14 @@ export default function SerialNumbers() {
                             : 'hover:bg-[#f8faf9] border-transparent'
                         }`}
                       >
-                        <div className="font-bold text-slate-900 text-sm">{product.name}</div>
+                        <div className="font-bold text-slate-900 text-sm flex items-center justify-between">
+                          <span>{product.name}</span>
+                          {product.productType === 'Without Serials' ? (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Without Serials</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Serials</span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500 flex justify-between mt-1.5">
                           <span>{product.brand} • {product.modelNumber}</span>
                           <span className="text-[#0a382c] font-black uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded text-[10px]">Stock: {product.stock}</span>
@@ -245,13 +271,28 @@ export default function SerialNumbers() {
               <div className="p-4 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center">
                 <div>
                   <h2 className="text-base font-bold text-slate-900">{selectedProduct.name}</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">{selectedProduct.brand} | Model: {selectedProduct.modelNumber}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                    <span>{selectedProduct.brand} | Model: {selectedProduct.modelNumber}</span>
+                    <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                      selectedProduct.productType === 'Without Serials' 
+                        ? 'bg-amber-100 text-amber-900' 
+                        : 'bg-emerald-100 text-[#0a382c]'
+                    }`}>
+                      {selectedProduct.productType === 'Without Serials' ? 'Without Serials' : 'With Serials'}
+                    </span>
+                  </p>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider font-extrabold">Available Stock</div>
                   <div className="text-xl font-black text-[#0a382c]">{selectedProduct.stock}</div>
                 </div>
               </div>
+
+              {selectedProduct.productType === 'Without Serials' && (
+                <div className="p-3 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs">
+                  <strong>Notice:</strong> This product has Product Type <strong>"Without Serials"</strong>. Stock is managed directly via <strong>Manual Stock Intake</strong> in Add Inventory Stock without serial numbers.
+                </div>
+              )}
 
               <div className="p-4 border-b border-slate-150 bg-white">
                 <form onSubmit={handleAddSerialNumber} className="flex gap-2">

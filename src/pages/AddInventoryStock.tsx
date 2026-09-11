@@ -44,6 +44,7 @@ export interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  productType?: 'Serials' | 'Without Serials' | string;
   unit?: string;
   purchasePrice?: number;
   salePrice?: number;
@@ -73,6 +74,22 @@ export const isPieceUnit = (unit?: string): boolean => {
   if (!unit) return true;
   const u = unit.trim().toLowerCase();
   return u === 'piece' || u === 'pieces' || u === 'pcs' || u === 'pc';
+};
+
+// Check if a product uses Serial Numbers or Manual Stock Intake based on Product Type
+export const isProductWithSerials = (product?: Product | null): boolean => {
+  if (!product) return true;
+  if (product.productType) {
+    const pt = product.productType.trim().toLowerCase();
+    if (pt === 'without serials' || pt === 'without serial' || pt === 'without_serials') {
+      return false;
+    }
+    if (pt === 'serials' || pt === 'serial' || pt === 'with serials' || pt === 'with serial') {
+      return true;
+    }
+  }
+  // Fallback for legacy products
+  return isPieceUnit(product.unit);
 };
 
 export const getUnitDisplayName = (unit?: string): string => {
@@ -229,9 +246,9 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     setManualQuantity('');
     setSerialNumbersList([]);
 
-    // Automatically focus the appropriate input based on product unit
+    // Automatically focus the appropriate input based on product type
     setTimeout(() => {
-      if (isPieceUnit(product.unit)) {
+      if (isProductWithSerials(product)) {
         singleInputRef.current?.focus();
       } else {
         manualQuantityInputRef.current?.focus();
@@ -457,7 +474,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
       return;
     }
 
-    const isSerialized = isPieceUnit(selectedProduct.unit);
+    const isSerialized = isProductWithSerials(selectedProduct);
     const unitName = getUnitDisplayName(selectedProduct.unit);
     const unitDisplay = selectedProduct.unit || unitName;
 
@@ -611,7 +628,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     ? allStoreSerials.filter(s => s.productId === selectedProduct.id && s.status === 'Available')
     : [];
 
-  const isSerialized = isPieceUnit(selectedProduct?.unit);
+  const isSerialized = isProductWithSerials(selectedProduct);
   const unitName = selectedProduct ? getUnitDisplayName(selectedProduct.unit) : 'Piece';
   const unitDisplay = selectedProduct?.unit || unitName;
   const numManualQty = typeof manualQuantity === 'number' ? manualQuantity : (parseFloat(manualQuantity as string) || 0);
@@ -642,20 +659,26 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
                 Add Inventory Stock
               </h1>
-              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-[#0a382c]">
+              <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                !selectedProduct 
+                  ? 'bg-emerald-100 text-[#0a382c]' 
+                  : isSerialized 
+                    ? 'bg-emerald-100 text-[#0a382c]' 
+                    : 'bg-amber-100 text-amber-900'
+              }`}>
                 {!selectedProduct 
                   ? 'Stock Intake' 
                   : isSerialized 
-                    ? 'Serialized Intake (Pieces)' 
-                    : `Manual Intake (${unitName})`}
+                    ? 'Product Type: Serials • Register Serial Numbers' 
+                    : `Product Type: Without Serials • Manual Stock Intake (${unitDisplay})`}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               {!selectedProduct 
                 ? 'Select a product and add incoming stock' 
                 : isSerialized 
-                  ? 'Select a product and add incoming stock with unique serial numbers' 
-                  : `Add incoming stock measured in ${unitDisplay}. Serial numbers are not required.`}
+                  ? 'Product Type: With Serials. Add incoming stock using Register Serial Numbers with unique serial tags.' 
+                  : `Product Type: Without Serials. Add incoming stock using Manual Stock Intake in ${unitDisplay}. Serial numbers are not required.`}
             </p>
           </div>
         </div>
@@ -682,7 +705,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <>
                 <Check className="w-4 h-4" />
                 {isSerialized 
-                  ? `Confirm & Add Stock (${serialNumbersList.length})` 
+                  ? `Confirm & Add Stock (${serialNumbersList.length} Serials)` 
                   : `Confirm & Add Stock (${numManualQty > 0 ? numManualQty : 0} ${unitDisplay})`}
               </>
             )}
@@ -760,8 +783,17 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                             <span className="font-extrabold text-xs text-slate-900">
                               {prod.brand} {prod.modelNumber}
                             </span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-50 text-[#0a382c] border border-emerald-200">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isProductWithSerials(prod) ? (
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-50 text-[#0a382c] border border-emerald-200 flex items-center gap-1">
+                                  <Barcode className="w-2.5 h-2.5" /> Serials
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                  <Boxes className="w-2.5 h-2.5" /> Without Serials
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
                                 {prod.unit || 'Piece'}
                               </span>
                               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-700">
@@ -786,10 +818,19 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <div className="p-4 rounded-xl bg-[#f8faf9] border border-emerald-150/80 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[10px] font-black uppercase tracking-wider text-[#0a382c] bg-emerald-100 px-2 py-0.5 rounded">
                         {selectedProduct.category}
                       </span>
+                      {isSerialized ? (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                          <Barcode className="w-3 h-3" /> Type: With Serials
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                          <Boxes className="w-3 h-3" /> Type: Without Serials
+                        </span>
+                      )}
                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                         Unit: {unitDisplay}
                       </span>
@@ -842,19 +883,19 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                     )}
                   </>
                 ) : (
-                  /* Informational Callout for Non-Piece Units */
-                  <div className="pt-2.5 border-t border-emerald-150/80 flex flex-col gap-1 text-xs">
+                  /* Informational Callout for Non-Serialized Units */
+                  <div className="pt-2.5 border-t border-amber-200/80 flex flex-col gap-1 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-700 font-bold flex items-center gap-1.5">
-                        <Scale className="w-3.5 h-3.5 text-[#0a382c]" />
-                        Tracking Unit: <span className="text-[#0a382c] font-black">{unitName} ({unitDisplay})</span>
+                        <Boxes className="w-3.5 h-3.5 text-amber-700" />
+                        Tracking Unit: <span className="text-slate-900 font-black">{unitName} ({unitDisplay})</span>
                       </span>
-                      <span className="text-[10px] font-black uppercase bg-emerald-100 text-[#0a382c] px-2 py-0.5 rounded">
-                        Manual Intake
+                      <span className="text-[10px] font-black uppercase bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                        Manual Stock Intake
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Stock is added directly as a numerical quantity without serial numbers. Pricing and valuations are set per <strong>{unitName.toLowerCase()}</strong>.
+                      Product Type is <strong>Without Serials</strong>. Stock is added directly as a numerical quantity using Manual Stock Intake. Serial numbers are not required.
                     </p>
                   </div>
                 )}
@@ -1020,11 +1061,11 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               <div className="flex items-center gap-2">
                 {selectedProduct && !isSerialized ? (
                   unitName === 'Meter' || unitName === 'Foot' || unitName === 'Yard' ? (
-                    <Ruler className="w-5 h-5 text-[#0a382c]" />
+                    <Ruler className="w-5 h-5 text-amber-700" />
                   ) : unitName === 'Kilogram' ? (
-                    <Scale className="w-5 h-5 text-[#0a382c]" />
+                    <Scale className="w-5 h-5 text-amber-700" />
                   ) : (
-                    <Boxes className="w-5 h-5 text-[#0a382c]" />
+                    <Boxes className="w-5 h-5 text-amber-700" />
                   )
                 ) : (
                   <Barcode className="w-5 h-5 text-[#0a382c]" />
@@ -1035,21 +1076,25 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                       ? 'Stock Intake' 
                       : isSerialized 
                         ? 'Register Serial Numbers' 
-                        : `Manual Stock Intake (${unitName})`}
+                        : `Manual Stock Intake (${unitDisplay})`}
                   </h2>
                   <p className="text-xs text-slate-500">
                     {!selectedProduct
                       ? 'Select a product on the left to begin intake'
                       : isSerialized
-                        ? '1 Serial Number = 1 Stock Unit added to physical inventory'
-                        : `Add incoming stock measured in ${unitDisplay}. Serial numbers are not required.`}
+                        ? 'Product Type: With Serials — Register serial numbers. 1 Serial = 1 Unit.'
+                        : `Product Type: Without Serials — Add stock using Manual Stock Intake in ${unitDisplay}.`}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-[#0a382c]">
+                <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                  isSerialized 
+                    ? 'bg-emerald-100 text-[#0a382c]' 
+                    : 'bg-amber-100 text-amber-900'
+                }`}>
                   {isSerialized 
-                    ? `${serialNumbersList.length} Units Ready` 
+                    ? `${serialNumbersList.length} Serials Ready` 
                     : `${numManualQty > 0 ? numManualQty : 0} ${unitDisplay} Ready`}
                 </span>
               </div>
@@ -1068,11 +1113,11 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 </div>
               </div>
             ) : !isSerialized ? (
-              /* Non-Serialized Manual Intake Section (e.g. meter, kg, liter) */
+              /* Without Serials: Manual Stock Intake Section */
               <div className="space-y-5">
                 {/* Informational Guidance Callout */}
-                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-start gap-3">
-                  <div className="p-2 bg-emerald-100 rounded-lg text-[#0a382c] shrink-0 mt-0.5">
+                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-start gap-3">
+                  <div className="p-2 bg-amber-100 rounded-lg text-amber-800 shrink-0 mt-0.5">
                     {unitName === 'Meter' || unitName === 'Foot' || unitName === 'Yard' ? (
                       <Ruler className="w-5 h-5" />
                     ) : unitName === 'Kilogram' ? (
@@ -1083,10 +1128,10 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                      Non-Serialized Stock Intake ({unitName})
+                      Manual Stock Intake ({unitDisplay})
                     </h4>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      This item is measured in <strong>{unitDisplay}</strong> (e.g. meter, kilogram, liter). Stock is managed as a continuous numerical quantity instead of registering individual serial numbers. Purchase and sale rates on the left are applied per <strong>{unitName.toLowerCase()}</strong>.
+                      This product has Product Type <strong>"Without Serials"</strong> measured in <strong>{unitDisplay}</strong>. Stock is added directly using Manual Stock Intake without individual serial numbers. Pricing and valuations are applied per <strong>{unitDisplay}</strong>.
                     </p>
                   </div>
                 </div>

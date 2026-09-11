@@ -6,11 +6,11 @@ import {
   Barcode, 
   SwitchCamera, 
   Flashlight, 
-  CheckCircle2, 
-  AlertCircle, 
   Volume2, 
   VolumeX,
-  Keyboard
+  Keyboard,
+  Upload,
+  AlertCircle
 } from 'lucide-react';
 
 export const playScanBeep = (type: 'success' | 'error' | 'warning' = 'success') => {
@@ -99,9 +99,13 @@ export default function BarcodeScannerModal({
 
     let isMounted = true;
 
-    Html5Qrcode.getCameras()
-      .then(devices => {
+    // Small delay to ensure the modal DOM element is rendered
+    const initTimer = setTimeout(async () => {
+      if (!isMounted) return;
+      try {
+        const devices = await Html5Qrcode.getCameras().catch(() => []);
         if (!isMounted) return;
+
         if (devices && devices.length > 0) {
           const camList = devices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id}` }));
           setCameras(camList);
@@ -111,22 +115,23 @@ export default function BarcodeScannerModal({
             c.label.toLowerCase().includes('rear') ||
             c.label.toLowerCase().includes('environment')
           );
-          const chosenId = backCam ? backCam.id : camList[camList.length - 1].id;
+          const chosenId = backCam ? backCam.id : camList[0].id;
           setCurrentCameraId(chosenId);
-          startScanning(chosenId);
+          await startScanning(chosenId);
         } else {
-          // If no enumerated devices, attempt with facingMode environment
-          startScanning({ facingMode: 'environment' });
+          // If no enumerated devices available yet, start with facingMode environment
+          await startScanning({ facingMode: 'environment' });
         }
-      })
-      .catch(err => {
+      } catch (err: any) {
         if (!isMounted) return;
-        console.warn('Camera enumeration error, fallback to default:', err);
-        startScanning({ facingMode: 'environment' });
-      });
+        console.warn('Camera setup warning, attempting fallback:', err);
+        await startScanning({ facingMode: 'environment' });
+      }
+    }, 120);
 
     return () => {
       isMounted = false;
+      clearTimeout(initTimer);
       cleanupScanner();
     };
   }, [isOpen]);
@@ -152,10 +157,22 @@ export default function BarcodeScannerModal({
       await cleanupScanner();
       setCameraError(null);
 
-      // Create scanner instance with popular 1D and 2D barcode formats
+      // Verify DOM element exists
+      let el = document.getElementById(readerElementId);
+      if (!el) {
+        await new Promise(res => setTimeout(res, 80));
+        el = document.getElementById(readerElementId);
+      }
+      if (!el) {
+        throw new Error('Scanner viewfinder container not found in DOM.');
+      }
+
+      // Clear any prior canvas or video children inside reader element
+      el.innerHTML = '';
+
+      // Create scanner instance with all standard 1D and 2D barcode formats
       const scanner = new Html5Qrcode(readerElementId, {
         formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.CODE_93,
@@ -165,35 +182,61 @@ export default function BarcodeScannerModal({
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.UPC_E,
           Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.DATA_MATRIX
         ],
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
         verbose: false
       });
 
       scannerRef.current = scanner;
 
+      // Config without strict aspectRatio constraint so mobile/desktop cameras don't throw OverconstrainedError
       const config = {
-        fps: 15,
+        fps: 20,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-          // Responsive scanning box ideal for standard 1D barcodes and 2D codes
-          const minDim = Math.min(viewfinderWidth, viewfinderHeight);
-          const width = Math.floor(viewfinderWidth * 0.82);
-          const height = Math.floor(Math.min(minDim * 0.65, 240));
+          // Generous scanning area so thermal barcodes and wide 1D barcodes fit comfortably
+          const width = Math.floor(Math.min(viewfinderWidth * 0.94, 460));
+          const height = Math.floor(Math.min(viewfinderHeight * 0.82, 280));
           return { width, height };
-        },
-        aspectRatio: 1.333334
+        }
       };
 
-      await scanner.start(
-        cameraConfig,
-        config,
-        async (decodedText) => {
-          handleDecodedCode(decodedText);
-        },
-        () => {
-          // Frame parsed without barcode - normal scanning loop
+      try {
+        await scanner.start(
+          cameraConfig,
+          config,
+          (decodedText) => {
+            handleDecodedCode(decodedText);
+          },
+          () => {
+            // Frame parsed without barcode - normal scanning loop
+          }
+        );
+      } catch (firstErr: any) {
+        console.warn('Initial camera start failed, attempting fallback...', firstErr);
+        if (typeof cameraConfig === 'string') {
+          // If specific deviceId failed, fallback to facingMode 'environment'
+          await scanner.start(
+            { facingMode: 'environment' },
+            config,
+            (decodedText) => handleDecodedCode(decodedText),
+            () => {}
+          );
+        } else if (typeof cameraConfig === 'object' && (cameraConfig as any)?.facingMode === 'environment') {
+          // If environment facingMode failed, fallback to facingMode 'user'
+          await scanner.start(
+            { facingMode: 'user' },
+            config,
+            (decodedText) => handleDecodedCode(decodedText),
+            () => {}
+          );
+        } else {
+          throw firstErr;
         }
-      );
+      }
 
       setIsScanning(true);
 
@@ -206,11 +249,21 @@ export default function BarcodeScannerModal({
       } catch (e) {
         setHasTorch(false);
       }
+
+      // Refresh camera devices list after permissions are granted
+      try {
+        const postDevices = await Html5Qrcode.getCameras().catch(() => []);
+        if (postDevices && postDevices.length > 0) {
+          setCameras(postDevices.map(d => ({ id: d.id, label: d.label || `Camera ${d.id}` })));
+        }
+      } catch (e) {
+        // ignore
+      }
     } catch (err: any) {
       console.error('Failed to start camera:', err);
       setIsScanning(false);
       setCameraError(
-        err?.message || 'Could not access device camera. Please grant camera permission or use the manual scanner input.'
+        err?.message || 'Could not access device camera. Please grant camera permission or use the barcode gun / manual input below.'
       );
     }
   };
@@ -276,6 +329,42 @@ export default function BarcodeScannerModal({
     if (!trimmed) return;
     setManualInput('');
     handleDecodedCode(trimmed);
+  };
+
+  const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      let scanner = scannerRef.current;
+      if (!scanner) {
+        scanner = new Html5Qrcode(readerElementId, {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_93,
+            Html5QrcodeSupportedFormats.CODABAR,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.DATA_MATRIX
+          ],
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          verbose: false
+        });
+      }
+      const decodedText = await scanner.scanFile(file, true);
+      if (decodedText) {
+        handleDecodedCode(decodedText);
+      }
+    } catch (err: any) {
+      console.warn('File scan failed:', err);
+      alert('Could not decode a clear barcode from this image. Please ensure the barcode is sharp, high-contrast, and well lit.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   if (!isOpen) return null;
@@ -434,8 +523,20 @@ export default function BarcodeScannerModal({
             </button>
           </form>
 
-          <div className="flex justify-between items-center text-[10px] text-slate-400">
-            <span>Supports 1D Barcodes, 2D QR codes & Serial Numbers</span>
+          <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] text-slate-500 pt-1">
+            <div className="flex items-center gap-3">
+              <span>Supports 1D Barcodes, 2D QR codes & Serial Numbers</span>
+              <label className="inline-flex items-center gap-1 text-[#0a382c] hover:text-emerald-800 font-bold cursor-pointer hover:underline">
+                <Upload className="w-3 h-3" />
+                <span>Upload Barcode Image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileScan}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <button
               type="button"
               onClick={onClose}

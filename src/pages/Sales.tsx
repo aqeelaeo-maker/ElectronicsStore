@@ -48,6 +48,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  productType?: 'Serials' | 'Without Serials' | string;
   unit?: string;
   purchasePrice: number;
   salePrice: number;
@@ -442,14 +443,22 @@ export default function Sales() {
     });
   }, [customers, customerSearchInput]);
 
-  // Products WITH serial numbers: products that have registered serial numbers in allSerials
+  // Products WITH serial numbers: explicit productType === 'Serials' (or fallback: has serials)
   const productsWithSerials = useMemo(() => {
-    return products.filter(p => allSerials.some(s => s.productId === p.id));
+    return products.filter(p => {
+      if (p.productType === 'Without Serials') return false;
+      if (p.productType === 'Serials') return true;
+      return allSerials.some(s => s.productId === p.id);
+    });
   }, [products, allSerials]);
 
-  // Products WITHOUT serial numbers: products that do NOT have registered serial numbers in allSerials
+  // Products WITHOUT serial numbers: explicit productType === 'Without Serials' (or fallback: no serials)
   const productsWithoutSerials = useMemo(() => {
-    return products.filter(p => !allSerials.some(s => s.productId === p.id));
+    return products.filter(p => {
+      if (p.productType === 'Without Serials') return true;
+      if (p.productType === 'Serials') return false;
+      return !allSerials.some(s => s.productId === p.id);
+    });
   }, [products, allSerials]);
 
   // Available non-serialized products: falls back to all products if no dedicated non-serialized products exist
@@ -606,9 +615,18 @@ export default function Sales() {
 
   const handleWithoutSerialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = productSearchInput.trim().toLowerCase();
-    if (!trimmed) return;
+    const raw = productSearchInput.trim();
+    if (!raw) return;
 
+    // First attempt to scan it with the universal scan code handler (e.g. if cashier used barcode scanner gun or typed model/serial)
+    const handled = handleScanCode(raw);
+    if (handled) {
+      setProductSearchInput('');
+      setIsProductDropdownOpen(false);
+      return;
+    }
+
+    const trimmed = raw.toLowerCase();
     const match = filteredProductsWithoutSerials.find(
       p => p.name.toLowerCase() === trimmed ||
            (p.modelNumber && p.modelNumber.toLowerCase() === trimmed)
@@ -652,11 +670,13 @@ export default function Sales() {
       return false;
     }
 
-    // 4. Verify stock
+    // 4. Verify stock (ensure inStockSerialsCount is considered so product.stock being 0 in db doesn't block valid serial)
     const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
-    const maxAllowed = product.stock + previousQty;
+    const inStockSerialsCount = availableSerialsInStock.filter(s => s.productId === product.id).length;
+    const effectiveStock = Math.max(product.stock || 0, inStockSerialsCount);
+    const maxAllowed = effectiveStock + previousQty;
     const currentlyAddedForProduct = invoiceItems.filter(i => i.productId === product.id).length;
-    if (currentlyAddedForProduct >= maxAllowed) {
+    if (maxAllowed > 0 && currentlyAddedForProduct >= maxAllowed) {
       playScanBeep('warning');
       toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
       return false;
@@ -682,50 +702,155 @@ export default function Sales() {
     return true;
   };
 
-  // Add items and attach serial numbers via barcode or camera scan
-  const handleScanSerialNumber = (scannedText: string): boolean => {
-    const trimmed = scannedText.trim();
-    if (!trimmed) return false;
+  // Master Universal Barcode & Serial Scanner Handler (works for camera scanner and hardware barcode scanner)
+  const handleScanCode = (scannedText: string): boolean => {
+    const raw = scannedText.trim();
+    if (!raw) return false;
 
-    // 1. Check matching serial in allSerials
+    // Clean any surrounding quotes or barcode terminal characters
+    const trimmed = raw.replace(/^["']|["']$/g, '').trim();
+    const lower = trimmed.toLowerCase();
+
+    // 1. Direct Match against serial numbers in allSerials (by serialNumber or ID)
     const matchedSerial = allSerials.find(
-      s => s.serialNumber.trim().toLowerCase() === trimmed.toLowerCase()
+      s => s.serialNumber.trim().toLowerCase() === lower || s.id.toLowerCase() === lower
     );
 
     if (matchedSerial) {
       return addSerialNumberToInvoice(matchedSerial);
     }
 
-    // 2. If not found in allSerials, check if user scanned a product model number or name
+    // 2. Direct Match against products (by modelNumber, name, barcode, or ID)
     const matchedProduct = products.find(
-      p => (p.modelNumber && p.modelNumber.trim().toLowerCase() === trimmed.toLowerCase()) ||
-           (p.name && p.name.trim().toLowerCase() === trimmed.toLowerCase())
+      p => (p.modelNumber && p.modelNumber.trim().toLowerCase() === lower) ||
+           (p.name && p.name.trim().toLowerCase() === lower) ||
+           (p.id.toLowerCase() === lower) ||
+           ((p as any).barcode && String((p as any).barcode).trim().toLowerCase() === lower)
     );
 
     if (matchedProduct) {
+      // If product is configured without serials, add it directly!
+      if (matchedProduct.productType === 'Without Serials') {
+        return addProductWithoutSerialToInvoice(matchedProduct);
+      }
+
+      // Check if product has available serials in stock
       const availableSerial = availableSerialsInStock.find(
         s => s.productId === matchedProduct.id && !alreadyAddedSerialIds.has(s.id) && !alreadyAddedSerialIds.has(s.serialNumber)
       );
+
       if (availableSerial) {
         return addSerialNumberToInvoice(availableSerial);
-      } else {
-        playScanBeep('warning');
-        toast.warning(`No available in-stock serial numbers remaining for "${matchedProduct.name}".`);
-        return false;
+      }
+
+      // If no serials are registered for this product and product is not strictly marked 'Serials', allow adding non-serialized
+      const hasAnySerialsRegistered = allSerials.some(s => s.productId === matchedProduct.id);
+      if (!hasAnySerialsRegistered && matchedProduct.productType !== 'Serials') {
+        return addProductWithoutSerialToInvoice(matchedProduct);
+      }
+
+      playScanBeep('warning');
+      toast.warning(`No available in-stock serial numbers remaining for "${matchedProduct.name}".`);
+      return false;
+    }
+
+    // 3. Normalized / Stripped Match for serial numbers (stripping leading zeros or non-alphanumeric noise from hardware scanners)
+    const strippedCode = lower.replace(/^0+/, '');
+    if (strippedCode.length >= 2) {
+      const fuzzySerial = allSerials.find(
+        s => s.serialNumber.trim().toLowerCase().replace(/^0+/, '') === strippedCode
+      );
+      if (fuzzySerial) {
+        return addSerialNumberToInvoice(fuzzySerial);
+      }
+    }
+
+    // 4. Fuzzy Match against products (e.g. scanner captured model number within a full barcode or vice versa)
+    const fuzzyProduct = products.find(
+      p => (p.modelNumber && (lower.includes(p.modelNumber.trim().toLowerCase()) || p.modelNumber.trim().toLowerCase().includes(lower))) ||
+           (p.name && (lower.includes(p.name.trim().toLowerCase()) || p.name.trim().toLowerCase().includes(lower)))
+    );
+
+    if (fuzzyProduct) {
+      if (fuzzyProduct.productType === 'Without Serials') {
+        return addProductWithoutSerialToInvoice(fuzzyProduct);
+      }
+      const availableSerial = availableSerialsInStock.find(
+        s => s.productId === fuzzyProduct.id && !alreadyAddedSerialIds.has(s.id) && !alreadyAddedSerialIds.has(s.serialNumber)
+      );
+      if (availableSerial) {
+        return addSerialNumberToInvoice(availableSerial);
+      }
+      if (fuzzyProduct.productType !== 'Serials' && !allSerials.some(s => s.productId === fuzzyProduct.id)) {
+        return addProductWithoutSerialToInvoice(fuzzyProduct);
       }
     }
 
     playScanBeep('error');
-    toast.error(`Serial number "${trimmed}" not found in registered stock.`);
+    toast.error(`Barcode or serial "${trimmed}" not found in inventory.`);
     return false;
   };
+
+  const handleScanSerialNumber = handleScanCode;
 
   const handleHardwareBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = serialSearchInput.trim();
     if (!trimmed) return;
-    handleScanSerialNumber(trimmed);
+    handleScanCode(trimmed);
   };
+
+  // Global hardware barcode scanner listener (e.g. USB/Bluetooth barcode gun or thermal POS scanner)
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = 0;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Only process hardware scanner when Create/Edit Sales modal is active and scanner/detail modals are closed
+      if (!showModal || showSalesCameraScanner || showDetailModal) {
+        return;
+      }
+
+      const target = e.target as HTMLElement | null;
+      const isSearchInput = target === serialInputRef.current || target === productInputRef.current;
+      const isOtherInput = !isSearchInput && (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA');
+
+      const now = Date.now();
+      const diff = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        // If Enter is pressed and buffer has at least 2 chars within scanner burst speed (<90ms average per char) or inside barcode input
+        if (buffer.length >= 2) {
+          const scannedCode = buffer.trim();
+          buffer = '';
+          if (scannedCode) {
+            e.preventDefault();
+            handleScanCode(scannedCode);
+          }
+          return;
+        }
+        buffer = '';
+        return;
+      }
+
+      // Ignore single modifier keys (Shift, Alt, Control, Meta, Arrow keys, etc.)
+      if (e.key.length > 1) {
+        return;
+      }
+
+      // Barcode scanners send keystrokes extremely rapidly, typically within 20-50ms per key
+      if (diff > 90 && isOtherInput) {
+        // Reset buffer if delay is long and user is typing in another input (e.g. customer name or notes)
+        buffer = e.key;
+      } else {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [showModal, showSalesCameraScanner, showDetailModal, allSerials, products, availableSerialsInStock, alreadyAddedSerialIds, invoiceItems]);
 
   // Handle setting up edit mode
   const handleEditClick = (sale: Sale) => {
@@ -2152,11 +2277,6 @@ export default function Sales() {
                     >
                       <Barcode className="w-4 h-4 text-[#0a382c]" />
                       <span>By Serial Number</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        productSelectionMode === 'with_serial' ? 'bg-emerald-100 text-[#0a382c]' : 'bg-slate-200 text-slate-600'
-                      }`}>
-                        {availableSerialsInStock.length}
-                      </span>
                     </button>
 
                     <button
@@ -2174,11 +2294,6 @@ export default function Sales() {
                     >
                       <Package className="w-4 h-4 text-[#0a382c]" />
                       <span>Without Serial Number</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        productSelectionMode === 'without_serial' ? 'bg-emerald-100 text-[#0a382c]' : 'bg-slate-200 text-slate-600'
-                      }`}>
-                        {availableProductsWithoutSerials.length}
-                      </span>
                     </button>
                   </div>
 
@@ -2322,10 +2437,22 @@ export default function Sales() {
                               Select Product Without Serial Number
                             </h4>
                             <p className="text-[11px] text-slate-500">
-                              Type to search and select products sold without individual serial numbers
+                              Scan with barcode gun, camera scanner, or type to select from stock
                             </p>
                           </div>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveScanningItemIndex(null);
+                            setShowSalesCameraScanner(true);
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 cursor-pointer"
+                          title="Open device camera to scan product barcodes"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Scan with Camera</span>
+                        </button>
                       </div>
 
                       {/* Search Input with Autocomplete Dropdown */}
