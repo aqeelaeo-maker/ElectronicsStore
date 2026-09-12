@@ -36,7 +36,8 @@ import {
   Barcode,
   Package,
   Layers,
-  Minus
+  Minus,
+  Check
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -218,6 +219,7 @@ export default function Sales() {
   const serialDropdownRef = useRef<HTMLDivElement>(null);
   const serialInputRef = useRef<HTMLInputElement>(null);
   const [activeScanningItemIndex, setActiveScanningItemIndex] = useState<number | null>(null);
+  const [editingInvoiceItemIndex, setEditingInvoiceItemIndex] = useState<number | null>(null);
 
   // Product Selection Mode: 'with_serial' (By Serial Number) vs 'without_serial' (Without Serial Number)
   const [productSelectionMode, setProductSelectionMode] = useState<'with_serial' | 'without_serial'>('with_serial');
@@ -509,6 +511,11 @@ export default function Sales() {
   const handleRemoveItemRow = (index: number) => {
     const updated = invoiceItems.filter((_, i) => i !== index);
     setInvoiceItems(updated);
+    if (editingInvoiceItemIndex === index) {
+      setEditingInvoiceItemIndex(null);
+    } else if (editingInvoiceItemIndex !== null && editingInvoiceItemIndex > index) {
+      setEditingInvoiceItemIndex(editingInvoiceItemIndex - 1);
+    }
   };
 
   const handleItemQuantityChange = (index: number, newQty: number) => {
@@ -904,13 +911,14 @@ export default function Sales() {
     } else {
       setInvoiceItems([]);
     }
+    setEditingInvoiceItemIndex(null);
     
     setShowModal(true);
   };
 
-  // Delete invoice with automatic stock and serial restoration
+  // Delete invoice directly without returning products to stock (works whether products are in the list or not)
   const handleDeleteInvoice = async (sale: Sale) => {
-    if (!window.confirm(`Are you sure you want to delete invoice ${sale.invoiceNo}? This will restore all product stock and set serialized numbers to 'Available'.`)) {
+    if (!window.confirm(`Are you sure you want to delete invoice ${sale.invoiceNo}? Products will not be returned to stock.`)) {
       return;
     }
     
@@ -918,84 +926,39 @@ export default function Sales() {
     try {
       const batch = writeBatch(db);
       
-      if (sale.items) {
-        for (const item of sale.items) {
-          // Get current product state from the database to ensure we restore correctly
-          const productRef = doc(db, 'products', item.productId);
-          const productSnap = await getDoc(productRef);
-          
-          if (productSnap.exists()) {
-            const currentStock = productSnap.data().stock || 0;
-            const restoredStock = currentStock + item.quantity;
-            
-            batch.update(productRef, {
-              stock: restoredStock,
-              updatedAt: serverTimestamp()
-            });
-            
-            // Add restoration entry to inventory logs
-            const logId = doc(collection(db, 'inventoryLogs')).id;
-            const logRef = doc(db, 'inventoryLogs', logId);
-            batch.set(logRef, {
-              storeId,
-              productId: item.productId,
-              productName: item.productName,
-              productBrand: item.brand,
-              productModelNumber: item.modelNumber,
-              quantityAdded: item.quantity,
-              previousStock: currentStock,
-              newStock: restoredStock,
-              referenceNumber: sale.invoiceNo,
-              notes: `Stock restored (Deleted Invoice ${sale.invoiceNo})`,
-              createdAt: serverTimestamp()
-            });
-          }
-          
-          // Restore selected serial numbers to Available status
-          if (item.selectedSerials && item.selectedSerials.length > 0) {
-            const matchingSerials = allSerials.filter(s => 
-              s.productId === item.productId && 
-              item.selectedSerials.includes(s.serialNumber)
-            );
-            for (const s of matchingSerials) {
-              batch.update(doc(db, 'serialNumbers', s.id), {
-                status: 'Available',
-                updatedAt: serverTimestamp()
-              });
-            }
-          }
-        }
-      }
-      
       // If deleted invoice was paid online and status was not Pending, revert the bank account balance
       if (sale.paymentMode === 'Online' && sale.bankAccountNumber && sale.status !== 'Pending' && storeId) {
-        const storeRef = doc(db, 'stores', storeId);
-        const storeSnap = await getDoc(storeRef);
-        if (storeSnap.exists()) {
-          const storeData = storeSnap.data();
-          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
-          currentAccounts = currentAccounts.map((acc: any) => {
-            const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
-            const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
-            if (acc.accountNumber === sale.bankAccountNumber) {
+        try {
+          const storeRef = doc(db, 'stores', storeId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            currentAccounts = currentAccounts.map((acc: any) => {
+              const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
+              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
+              if (acc.accountNumber === sale.bankAccountNumber) {
+                return {
+                  ...acc,
+                  balance: Number((curBal - sale.total).toFixed(2))
+                };
+              }
               return {
                 ...acc,
-                balance: Number((curBal - sale.total).toFixed(2))
+                balance: curBal
               };
-            }
-            return {
-              ...acc,
-              balance: curBal
-            };
-          });
-          batch.update(storeRef, {
-            bankAccounts: currentAccounts,
-            updatedAt: serverTimestamp()
-          });
+            });
+            batch.update(storeRef, {
+              bankAccounts: currentAccounts,
+              updatedAt: serverTimestamp()
+            });
+          }
+        } catch (storeErr) {
+          console.warn('Could not revert store bank balance on deletion:', storeErr);
         }
       }
 
-      // Delete the invoice document
+      // Delete the invoice document directly from database
       batch.delete(doc(db, 'sales', sale.id));
       
       await batch.commit();
@@ -2552,8 +2515,8 @@ export default function Sales() {
                     </div>
                   )}
 
-                  {/* List of Selected Items - Details shown below with price editable */}
-                  <div className="space-y-3 pt-1">
+                  {/* List of Selected Items - Displayed in ONLY ONE LINE with edit and delete actions in the end */}
+                  <div className="space-y-2 pt-1">
                     {invoiceItems.length === 0 ? (
                       <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-white/70 text-center space-y-3">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-[#0a382c] flex items-center justify-center mx-auto">
@@ -2572,187 +2535,218 @@ export default function Sales() {
                         </div>
                       </div>
                     ) : (
-                      invoiceItems.map((item, index) => {
-                        const selectedProduct = products.find(p => p.id === item.productId);
-                        const isSerialized = Boolean(item.selectedSerials && item.selectedSerials.length > 0);
-                        const serialDoc = isSerialized ? allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber)) : null;
-                        const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || '';
-                        const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
-                        const maxAllowed = (selectedProduct?.stock || 0) + previousQty;
+                      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs whitespace-nowrap">
+                            <thead className="bg-slate-50/90 text-slate-600 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">
+                              <tr>
+                                <th className="py-2.5 px-3 w-10 text-center">#</th>
+                                <th className="py-2.5 px-3 min-w-[220px]">Product Details</th>
+                                <th className="py-2.5 px-3 text-center w-24">Qty</th>
+                                <th className="py-2.5 px-3 text-right w-28">Unit Price</th>
+                                <th className="py-2.5 px-3 text-right w-24">Discount</th>
+                                <th className="py-2.5 px-3 text-center w-28">Warranty</th>
+                                <th className="py-2.5 px-3 text-right w-28">Total (PKR)</th>
+                                <th className="py-2.5 px-3 text-center w-36">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {invoiceItems.map((item, index) => {
+                                const selectedProduct = products.find(p => p.id === item.productId);
+                                const isSerialized = Boolean(item.selectedSerials && item.selectedSerials.length > 0);
+                                const serialDoc = isSerialized ? allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber)) : null;
+                                const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || '';
+                                const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
+                                const maxAllowed = (selectedProduct?.stock || 0) + previousQty;
+                                const isEditing = editingInvoiceItemIndex === index;
+                                const lineTotal = Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0));
 
-                        return (
-                          <div 
-                            key={index} 
-                            className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5 shadow-2xs hover:border-slate-300 transition-all"
-                          >
-                            {/* Header: Item #, Serial Number badge / Without Serial badge, Product Name, Total, and Delete */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                              <div className="flex items-center gap-2.5 flex-wrap">
-                                <span className="w-6 h-6 rounded-lg bg-[#0a382c] text-white text-xs font-black flex items-center justify-center shrink-0">
-                                  #{index + 1}
-                                </span>
-                                {isSerialized ? (
-                                  <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-xl">
-                                    <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
-                                    <span className="text-xs font-mono font-black text-[#0a382c]">{serialText}</span>
-                                    <span className="text-[9px] font-black uppercase text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">In Stock</span>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 bg-sky-50 border border-sky-200/90 px-2.5 py-1 rounded-xl">
-                                    <Package className="w-3.5 h-3.5 text-sky-700" />
-                                    <span className="text-xs font-bold text-sky-800">Without Serial Number</span>
-                                    <span className="text-[9px] font-black uppercase text-sky-800 bg-sky-100 px-1.5 py-0.5 rounded ml-1">
-                                      Qty: {item.quantity} {selectedProduct?.unit || 'pcs'}
-                                    </span>
-                                  </div>
-                                )}
-                                <h4 className="text-sm font-black text-slate-900">
-                                  {selectedProduct?.name || 'Product'}
-                                </h4>
-                              </div>
+                                return (
+                                  <tr 
+                                    key={index} 
+                                    className={`transition-colors ${isEditing ? 'bg-amber-50/40' : 'hover:bg-slate-50/60'}`}
+                                  >
+                                    {/* 1. Item Index */}
+                                    <td className="py-2.5 px-3 text-center font-bold text-slate-400">
+                                      #{index + 1}
+                                    </td>
 
-                              <div className="flex items-center gap-3 self-end sm:self-center">
-                                <div className="text-right">
-                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Total</span>
-                                  <span className="text-sm font-black text-slate-900 font-mono">
-                                    PKR {Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)).toFixed(2)}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveItemRow(index)}
-                                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                                  title="Remove product"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
+                                    {/* 2. Product Details */}
+                                    <td className="py-2.5 px-3">
+                                      <div className="flex items-center gap-2 max-w-md">
+                                        {isSerialized ? (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-[#0a382c] border border-emerald-200 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold shrink-0">
+                                            <Barcode className="w-3 h-3 text-[#0a382c]" />
+                                            {serialText}
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">
+                                            <Package className="w-3 h-3 text-sky-600" />
+                                            Non-Serial
+                                          </span>
+                                        )}
+                                        <span className="font-bold text-slate-900 truncate" title={selectedProduct?.name}>
+                                          {selectedProduct?.name || 'Product'}
+                                        </span>
+                                        {(selectedProduct?.brand || selectedProduct?.modelNumber) && (
+                                          <span className="text-[11px] text-slate-500 font-normal truncate">
+                                            ({[selectedProduct?.brand, selectedProduct?.modelNumber].filter(Boolean).join(' • ')})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
 
-                            {/* Product Meta Details: Brand, Model, Category, Current Stock */}
-                            {selectedProduct && (
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-medium">
-                                {selectedProduct.brand && (
-                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
-                                    Brand: {selectedProduct.brand}
-                                  </span>
-                                )}
-                                {selectedProduct.modelNumber && (
-                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
-                                    Model: {selectedProduct.modelNumber}
-                                  </span>
-                                )}
-                                {selectedProduct.category && (
-                                  <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-md">
-                                    Category: {selectedProduct.category}
-                                  </span>
-                                )}
-                                <span className="text-slate-400">
-                                  Stock Available: {selectedProduct.stock} {selectedProduct.unit || ''}
-                                </span>
-                              </div>
-                            )}
+                                    {/* 3. Quantity */}
+                                    <td className="py-2.5 px-3 text-center">
+                                      {isEditing && !isSerialized ? (
+                                        <div className="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleItemQuantityChange(index, Math.max(1, (item.quantity || 1) - 1))}
+                                            disabled={(item.quantity || 1) <= 1}
+                                            className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                                            title="Decrease"
+                                          >
+                                            <Minus className="w-3 h-3" />
+                                          </button>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max={maxAllowed > 0 ? maxAllowed : undefined}
+                                            value={item.quantity || 1}
+                                            onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
+                                            className="w-10 text-center py-0.5 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleItemQuantityChange(index, (item.quantity || 1) + 1)}
+                                            disabled={maxAllowed > 0 && (item.quantity || 1) >= maxAllowed}
+                                            className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                                            title="Increase"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                                          {item.quantity || 1} {selectedProduct?.unit || ''}
+                                        </span>
+                                      )}
+                                    </td>
 
-                            {/* Editable Fields: Quantity (for without serial), Unit Price, Discount, Warranty */}
-                            <div className={`grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end`}>
-                              {/* Quantity control for without-serial items */}
-                              {!isSerialized && (
-                                <div className="sm:col-span-3">
-                                  <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Quantity *
-                                  </label>
-                                  <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleItemQuantityChange(index, Math.max(1, (item.quantity || 1) - 1))}
-                                      disabled={(item.quantity || 1) <= 1}
-                                      className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-colors"
-                                      title="Decrease quantity"
-                                    >
-                                      <Minus className="w-3.5 h-3.5" />
-                                    </button>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max={maxAllowed > 0 ? maxAllowed : undefined}
-                                      value={item.quantity || 1}
-                                      onChange={(e) => handleItemQuantityChange(index, parseInt(e.target.value) || 1)}
-                                      className="w-full text-center py-2 px-1 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleItemQuantityChange(index, (item.quantity || 1) + 1)}
-                                      disabled={maxAllowed > 0 && (item.quantity || 1) >= maxAllowed}
-                                      className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 transition-colors"
-                                      title="Increase quantity"
-                                    >
-                                      <Plus className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                                    {/* 4. Unit Price */}
+                                    <td className="py-2.5 px-3 text-right">
+                                      {isEditing ? (
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={item.salePrice === 0 ? '' : item.salePrice}
+                                          onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
+                                          className="w-24 px-2 py-1 text-right text-xs font-mono font-bold border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0a382c] bg-white"
+                                          placeholder="0.00"
+                                        />
+                                      ) : (
+                                        <span className="font-mono font-bold text-slate-900">
+                                          PKR {Number(item.salePrice || 0).toFixed(2)}
+                                        </span>
+                                      )}
+                                    </td>
 
-                              {/* Unit Price (PKR) - Editable */}
-                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-5'}>
-                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
-                                  <span className="flex items-center gap-1 text-[#0a382c]">
-                                    <DollarSign className="w-3 h-3" />
-                                    <span>Unit Price (PKR) *</span>
-                                  </span>
-                                  {selectedProduct && (
-                                    <span className="text-[9px] text-slate-400 font-normal">Catalog: PKR {selectedProduct.salePrice.toFixed(2)}</span>
-                                  )}
-                                </label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="0"
-                                  step="0.01"
-                                  value={item.salePrice === 0 ? '' : item.salePrice}
-                                  onChange={(e) => handleItemPriceChange(index, parseFloat(e.target.value) || 0)}
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-bold text-slate-900 border border-slate-200 focus:border-[#0a382c] focus:ring-2 focus:ring-[#0a382c]/10 bg-white"
-                                  placeholder="Enter unit selling price"
-                                />
-                              </div>
+                                    {/* 5. Discount */}
+                                    <td className="py-2.5 px-3 text-right">
+                                      {isEditing ? (
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={item.discount || ''}
+                                          onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
+                                          placeholder="0.00"
+                                          className="w-20 px-2 py-1 text-right text-xs font-mono border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0a382c] bg-white"
+                                        />
+                                      ) : (
+                                        <span className="font-mono text-slate-600">
+                                          PKR {Number(item.discount || 0).toFixed(2)}
+                                        </span>
+                                      )}
+                                    </td>
 
-                              {/* Discount (PKR) */}
-                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-3'}>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                                  Discount (PKR)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                  value={item.discount || ''}
-                                  onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 border border-slate-200 focus:border-[#0a382c] bg-white"
-                                />
-                              </div>
+                                    {/* 6. Warranty */}
+                                    <td className="py-2.5 px-3 text-center">
+                                      {isEditing ? (
+                                        <select
+                                          value={item.warranty || 'No Warranty'}
+                                          onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
+                                          className="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0a382c] bg-white cursor-pointer"
+                                        >
+                                          <option value="No Warranty">No Warranty</option>
+                                          <option value="3 Months">3 Months</option>
+                                          <option value="6 Months">6 Months</option>
+                                          <option value="1 Year">1 Year</option>
+                                          <option value="2 Years">2 Years</option>
+                                          <option value="3 Years">3 Years</option>
+                                        </select>
+                                      ) : (
+                                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${
+                                          item.warranty && item.warranty !== 'No Warranty'
+                                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                            : 'text-slate-400'
+                                        }`}>
+                                          {item.warranty || 'No Warranty'}
+                                        </span>
+                                      )}
+                                    </td>
 
-                              {/* Warranty */}
-                              <div className={!isSerialized ? 'sm:col-span-3' : 'sm:col-span-4'}>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                                  Warranty
-                                </label>
-                                <select
-                                  value={item.warranty || 'No Warranty'}
-                                  onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
-                                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 border border-slate-200 focus:border-[#0a382c] bg-white"
-                                >
-                                  <option value="No Warranty">No Warranty</option>
-                                  <option value="3 Months">3 Months</option>
-                                  <option value="6 Months">6 Months</option>
-                                  <option value="1 Year">1 Year</option>
-                                  <option value="2 Years">2 Years</option>
-                                  <option value="3 Years">3 Years</option>
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
+                                    {/* 7. Line Total */}
+                                    <td className="py-2.5 px-3 text-right">
+                                      <span className="font-mono font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                        PKR {lineTotal.toFixed(2)}
+                                      </span>
+                                    </td>
+
+                                    {/* 8. Edit and Delete Actions in the end */}
+                                    <td className="py-2.5 px-3 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        {isEditing ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingInvoiceItemIndex(null)}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                            title="Done editing"
+                                          >
+                                            <Check className="w-3.5 h-3.5" />
+                                            <span>Done</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingInvoiceItemIndex(index)}
+                                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                            title="Edit product details"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                            <span>Edit</span>
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveItemRow(index)}
+                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                          title="Delete product"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

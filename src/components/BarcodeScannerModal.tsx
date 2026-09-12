@@ -13,7 +13,14 @@ import {
   RefreshCw,
   CheckCircle2
 } from 'lucide-react';
-import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/library';
+import { 
+  BrowserMultiFormatReader, 
+  BarcodeFormat, 
+  DecodeHintType,
+  HTMLCanvasElementLuminanceSource,
+  BinaryBitmap,
+  HybridBinarizer
+} from '@zxing/library';
 
 // Audio feedback for scanner
 export const playScanBeep = (type: 'success' | 'error' | 'warning' = 'success') => {
@@ -295,7 +302,7 @@ export default function BarcodeScannerModal({
 
   // Frame decoding loop using BarcodeDetector + ZXing
   const startDecodingLoop = useCallback(() => {
-    let hasBarcodeDetector = 'BarcodeDetector' in window;
+    let hasBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
     let barcodeDetector: any = null;
 
     if (hasBarcodeDetector) {
@@ -329,52 +336,71 @@ export default function BarcodeScannerModal({
 
       const video = videoRef.current;
 
-      // Run scan every ~90ms to preserve battery and CPU while maintaining snappy detection
-      if (timestamp - lastScanTick > 90 && video.readyState >= 2 && !isDecodingBusyRef.current) {
+      // Run scan every ~80ms when video frame is active and ready
+      if (timestamp - lastScanTick > 80 && video.readyState >= 2 && video.videoWidth > 0 && !isDecodingBusyRef.current) {
         lastScanTick = timestamp;
         isDecodingBusyRef.current = true;
 
         try {
           let codeFound: string | null = null;
 
-          // 1. Try native BarcodeDetector API (fastest, hardware accelerated)
+          // 1. Try native BarcodeDetector API (fastest, hardware accelerated where supported)
           if (barcodeDetector) {
             try {
               const detected = await barcodeDetector.detect(video);
               if (detected && detected.length > 0 && detected[0].rawValue) {
-                codeFound = detected[0].rawValue;
+                codeFound = detected[0].rawValue.trim();
               }
             } catch {
-              // BarcodeDetector failed on this frame, will fallback to ZXing
+              // BarcodeDetector skipped on this frame
             }
           }
 
-          // 2. Fallback to ZXing MultiFormatReader if native detector didn't find anything
+          // 2. Primary Universal Decoder: ZXing directly on the HTMLVideoElement
           if (!codeFound && zxingReaderRef.current) {
             try {
-              // Draw video frame to hidden canvas
+              const result = zxingReaderRef.current.decode(video);
+              if (result && result.getText()) {
+                codeFound = result.getText().trim();
+              }
+            } catch {
+              // NotFoundException is expected when no barcode is in current frame
+            }
+          }
+
+          // 3. Precision reticle center-crop: Enhances detection for smaller 1D barcodes held in center
+          if (!codeFound && zxingReaderRef.current) {
+            try {
               if (!canvasRef.current) {
                 canvasRef.current = document.createElement('canvas');
               }
               const canvas = canvasRef.current;
-              const vw = video.videoWidth || 640;
-              const vh = video.videoHeight || 480;
-              if (canvas.width !== vw || canvas.height !== vh) {
-                canvas.width = vw;
-                canvas.height = vh;
-              }
+              const vw = video.videoWidth;
+              const vh = video.videoHeight;
+              if (vw > 0 && vh > 0) {
+                const cropW = Math.max(160, Math.floor(vw * 0.7));
+                const cropH = Math.max(120, Math.floor(vh * 0.45));
+                const cropX = Math.floor((vw - cropW) / 2);
+                const cropY = Math.floor((vh - cropH) / 2);
 
-              const ctx = canvas.getContext('2d', { willReadFrequently: true });
-              if (ctx) {
-                ctx.drawImage(video, 0, 0, vw, vh);
-                // Scan canvas with ZXing
-                const result = zxingReaderRef.current.decodeFromCanvas(canvas);
-                if (result && result.getText()) {
-                  codeFound = result.getText();
+                if (canvas.width !== cropW || canvas.height !== cropH) {
+                  canvas.width = cropW;
+                  canvas.height = cropH;
+                }
+
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (ctx) {
+                  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                  const luminance = new HTMLCanvasElementLuminanceSource(canvas);
+                  const bitmap = new BinaryBitmap(new HybridBinarizer(luminance));
+                  const cropResult = zxingReaderRef.current.decodeBitmap(bitmap);
+                  if (cropResult && cropResult.getText()) {
+                    codeFound = cropResult.getText().trim();
+                  }
                 }
               }
             } catch {
-              // No code on this frame
+              // Expected when frame doesn't have a barcode
             }
           }
 
@@ -464,29 +490,50 @@ export default function BarcodeScannerModal({
       let decodedText: string | null = null;
 
       // 1. Try BarcodeDetector on image
-      if ('BarcodeDetector' in window) {
+      if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
         try {
           const detector = new (window as any).BarcodeDetector({
-            formats: ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'itf', 'upc_a', 'upc_e', 'qr_code']
+            formats: ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'itf', 'upc_a', 'upc_e', 'qr_code', 'data_matrix']
           });
           const detected = await detector.detect(img);
           if (detected && detected.length > 0 && detected[0].rawValue) {
-            decodedText = detected[0].rawValue;
+            decodedText = detected[0].rawValue.trim();
           }
         } catch {
           // fallback to ZXing
         }
       }
 
-      // 2. Try ZXing
+      // 2. Try ZXing decodeFromImageElement
       if (!decodedText && zxingReaderRef.current) {
         try {
           const result = await zxingReaderRef.current.decodeFromImageElement(img);
           if (result && result.getText()) {
-            decodedText = result.getText();
+            decodedText = result.getText().trim();
           }
         } catch {
-          // fallback
+          // fallback to canvas binarizer
+        }
+      }
+
+      // 3. Try ZXing Canvas Binarizer (for high resolution uploaded photos)
+      if (!decodedText && zxingReaderRef.current) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            const luminance = new HTMLCanvasElementLuminanceSource(canvas);
+            const bitmap = new BinaryBitmap(new HybridBinarizer(luminance));
+            const result = zxingReaderRef.current.decodeBitmap(bitmap);
+            if (result && result.getText()) {
+              decodedText = result.getText().trim();
+            }
+          }
+        } catch {
+          // not found
         }
       }
 
@@ -495,11 +542,11 @@ export default function BarcodeScannerModal({
       if (decodedText) {
         handleBarcodeDecoded(decodedText);
       } else {
-        alert('Could not decode a clear barcode from this image. Please ensure the barcode is sharp, high-contrast, and well lit.');
+        setCameraError('Could not decode a clear barcode from this image. Please ensure the barcode is sharp, high-contrast, and well lit.');
       }
     } catch (err) {
       console.error('File scan failed:', err);
-      alert('Failed to read image file.');
+      setCameraError('Failed to read image file.');
     } finally {
       setIsProcessingFile(false);
       e.target.value = '';
