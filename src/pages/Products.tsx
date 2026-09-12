@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Package, Barcode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
 
 interface Product {
   id: string;
@@ -40,6 +41,9 @@ export default function Products() {
     { name: 'Carton', abbreviation: 'Ctn' }
   ]);
 
+  // Store Product Categories
+  const [categories, setCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
+
   // Serial numbers state for edit view
   const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold' }>>([]);
   const [loadingSerials, setLoadingSerials] = useState(false);
@@ -47,7 +51,7 @@ export default function Products() {
   const [copiedAll, setCopiedAll] = useState(false);
   const [showSold, setShowSold] = useState(false);
 
-  // Fetch store units
+  // Fetch store units & categories
   useEffect(() => {
     if (!storeId) return;
 
@@ -65,9 +69,18 @@ export default function Products() {
           });
           setUnits(parsed);
         }
+
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          const parsedCategories = data.categories
+            .map((c: any) => typeof c === 'string' ? c.trim() : (c.name || String(c)).trim())
+            .filter(Boolean);
+          if (parsedCategories.length > 0) {
+            setCategories(parsedCategories);
+          }
+        }
       }
     }, (err) => {
-      console.error('Error fetching store units:', err);
+      console.error('Error fetching store settings:', err);
     });
 
     return () => unsubStore();
@@ -266,17 +279,25 @@ export default function Products() {
                   <input type="text" name="brand" id="brand" defaultValue={initialData.brand} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="category" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
-                  <select name="category" id="category" defaultValue={initialData.category} required className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm">
-                    <option value="Television">Television</option>
-                    <option value="Refrigerator">Refrigerator</option>
-                    <option value="Air Conditioner">Air Conditioner</option>
-                    <option value="Mobile Phone">Mobile Phone</option>
-                    <option value="Laptop">Laptop</option>
-                    <option value="Camera">Camera</option>
-                    <option value="DVR">DVR</option>
-                    <option value="Security System">Security System</option>
-                    <option value="Accessories">Accessories</option>
+                  <label htmlFor="category" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
+                  <select 
+                    name="category" 
+                    id="category" 
+                    defaultValue={initialData.category || categories[0] || ''} 
+                    required 
+                    className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm font-semibold text-slate-800"
+                  >
+                    {initialData.category && !categories.includes(initialData.category) && (
+                      <option value={initialData.category}>{initialData.category} (Current)</option>
+                    )}
+                    {categories.map((cat, idx) => (
+                      <option key={idx} value={cat}>{cat}</option>
+                    ))}
+                    {categories.length === 0 && !initialData.category && (
+                      <option value="">No categories defined (Add in Store Settings)</option>
+                    )}
                   </select>
                 </div>
                 <div>

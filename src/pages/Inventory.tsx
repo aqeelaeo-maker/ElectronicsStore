@@ -31,6 +31,7 @@ import {
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import AddInventoryStock, { Product, Vendor } from './AddInventoryStock';
+import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
 
 interface InventoryLog {
   id: string;
@@ -106,6 +107,9 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     { name: 'Carton', abbreviation: 'Ctn' }
   ]);
 
+  // Store Categories
+  const [categories, setCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
+
   useEffect(() => {
     if (!storeId) return;
 
@@ -122,6 +126,15 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
             };
           });
           setUnits(parsed);
+        }
+
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          const parsedCategories = data.categories
+            .map((c: any) => typeof c === 'string' ? c.trim() : (c.name || String(c)).trim())
+            .filter(Boolean);
+          if (parsedCategories.length > 0) {
+            setCategories(parsedCategories);
+          }
         }
       }
     });
@@ -964,13 +977,22 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                         Category <span className="text-rose-500">*</span>
                       </label>
-                      <input
-                        type="text"
+                      <select
                         required
-                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs text-slate-800"
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800"
                         value={editProdCategory}
                         onChange={(e) => setEditProdCategory(e.target.value)}
-                      />
+                      >
+                        {editProdCategory && !categories.includes(editProdCategory) && (
+                          <option value={editProdCategory}>{editProdCategory} (Current)</option>
+                        )}
+                        {categories.map((cat, idx) => (
+                          <option key={idx} value={cat}>{cat}</option>
+                        ))}
+                        {categories.length === 0 && !editProdCategory && (
+                          <option value="">No categories defined</option>
+                        )}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">

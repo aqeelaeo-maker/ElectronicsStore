@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, CreditCard, FileText, Layers, Plus, Save, ShieldAlert, Store, Trash2 } from 'lucide-react';
+import { Building2, CreditCard, FileText, Layers, Plus, Save, ShieldAlert, Store, Tag, Trash2 } from 'lucide-react';
 
 export interface BankAccount {
   bankName: string;
@@ -30,6 +30,18 @@ export const DEFAULT_PRODUCT_UNITS: ProductUnit[] = [
   { name: 'Carton', abbreviation: 'Ctn' }
 ];
 
+export const DEFAULT_PRODUCT_CATEGORIES: string[] = [
+  'Television',
+  'Refrigerator',
+  'Air Conditioner',
+  'Mobile Phone',
+  'Laptop',
+  'Camera',
+  'DVR',
+  'Security System',
+  'Accessories'
+];
+
 interface StoreSettings {
   name: string;
   logoUrl: string;
@@ -39,6 +51,7 @@ interface StoreSettings {
   bankAccounts: BankAccount[];
   termsAndConditions?: string;
   units?: ProductUnit[];
+  categories?: string[];
 }
 
 const compressImage = (base64Str: string, maxWidth = 250, maxHeight = 250): Promise<string> => {
@@ -90,6 +103,8 @@ export default function Settings() {
 
   const [newUnitName, setNewUnitName] = useState('');
   const [newUnitAbbreviation, setNewUnitAbbreviation] = useState('');
+
+  const [newCategoryName, setNewCategoryName] = useState('');
   
   const [storeSettings, setStoreSettings] = useState<StoreSettings>({
     name: '',
@@ -99,7 +114,8 @@ export default function Settings() {
     email: '',
     bankAccounts: [],
     termsAndConditions: '',
-    units: DEFAULT_PRODUCT_UNITS
+    units: DEFAULT_PRODUCT_UNITS,
+    categories: DEFAULT_PRODUCT_CATEGORIES
   });
 
   const [loading, setLoading] = useState(true);
@@ -155,6 +171,13 @@ export default function Settings() {
               });
             }
 
+            let loadedCategories: string[] = DEFAULT_PRODUCT_CATEGORIES;
+            if (Array.isArray(data.categories) && data.categories.length > 0) {
+              loadedCategories = data.categories
+                .map((item: any) => typeof item === 'string' ? item.trim() : (item.name || String(item)).trim())
+                .filter(Boolean);
+            }
+
             setStoreSettings({
               name: data.name || '',
               logoUrl: data.logoUrl || '',
@@ -163,7 +186,8 @@ export default function Settings() {
               email: data.email || '',
               bankAccounts: loadedAccounts,
               termsAndConditions: data.termsAndConditions || '',
-              units: loadedUnits
+              units: loadedUnits,
+              categories: loadedCategories
             });
           }
         }
@@ -328,6 +352,93 @@ export default function Settings() {
         toast.success('Units reset to standard defaults successfully');
       } catch (err: any) {
         console.error('Error resetting units:', err);
+      }
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+
+    if (!name) {
+      toast.warning('Please enter a Category Name (e.g. Television, Mobile Phone, Accessories)');
+      return;
+    }
+
+    const currentCategories = storeSettings.categories || [];
+    const exists = currentCategories.some(
+      c => c.toLowerCase() === name.toLowerCase()
+    );
+
+    if (exists) {
+      toast.warning(`Category "${name}" already exists in the list`);
+      return;
+    }
+
+    const updatedCategories = [...currentCategories, name];
+    setStoreSettings(prev => ({
+      ...prev,
+      categories: updatedCategories
+    }));
+    setNewCategoryName('');
+
+    if (storeId) {
+      try {
+        await setDoc(doc(db, 'stores', storeId), {
+          categories: updatedCategories,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        toast.success(`Category "${name}" added successfully`);
+      } catch (err: any) {
+        console.error('Error saving category:', err);
+        toast.info('Category added locally. Click "Save Store Details" to apply changes.');
+      }
+    } else {
+      toast.info('Category added. Click "Save Store Details" to apply changes.');
+    }
+  };
+
+  const handleRemoveCategory = async (indexToRemove: number) => {
+    const currentCategories = storeSettings.categories || [];
+    const categoryToRemove = currentCategories[indexToRemove];
+    const updatedCategories = currentCategories.filter((_, i) => i !== indexToRemove);
+
+    setStoreSettings(prev => ({
+      ...prev,
+      categories: updatedCategories
+    }));
+
+    if (storeId) {
+      try {
+        await setDoc(doc(db, 'stores', storeId), {
+          categories: updatedCategories,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        toast.success(`Category "${categoryToRemove || ''}" removed`);
+      } catch (err: any) {
+        console.error('Error deleting category:', err);
+      }
+    }
+  };
+
+  const handleResetDefaultCategories = async () => {
+    if (!window.confirm('Reset categories to standard presets (Television, Refrigerator, Air Conditioner, Mobile Phone, Laptop, Camera, DVR, Security System, Accessories)?')) {
+      return;
+    }
+
+    setStoreSettings(prev => ({
+      ...prev,
+      categories: DEFAULT_PRODUCT_CATEGORIES
+    }));
+
+    if (storeId) {
+      try {
+        await setDoc(doc(db, 'stores', storeId), {
+          categories: DEFAULT_PRODUCT_CATEGORIES,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        toast.success('Categories reset to standard defaults successfully');
+      } catch (err: any) {
+        console.error('Error resetting categories:', err);
       }
     }
   };
@@ -614,6 +725,96 @@ export default function Settings() {
             ) : (
               <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center bg-slate-50/50">
                 <p className="text-xs text-slate-400 italic">No bank accounts added yet.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Product Categories Section */}
+          <div className="pt-6 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-[#0a382c]" />
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Product Categories
+                </label>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {storeSettings.categories?.length || 0} Categories
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetDefaultCategories}
+                className="text-[11px] font-bold text-[#0a382c] hover:text-[#0d4a3b] hover:underline self-start sm:self-auto cursor-pointer"
+              >
+                Reset to Standard Presets
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Define and manage product categories for your store (e.g. Television, Refrigerator, Mobile Phone, Accessories). These categories will be available in the <strong>Category</strong> dropdown when adding or updating products in <strong>Add Product</strong>.
+            </p>
+
+            {/* Input Row with "Add Category" button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 mb-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div className="flex-1 min-w-0">
+                <label htmlFor="newCategoryName" className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Category Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="newCategoryName"
+                  placeholder="e.g. Television, Laptops, Mobile Phone, Solar Panels, Groceries..."
+                  className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                  }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddCategory}
+                className="flex items-center justify-center px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-xs transition-colors text-xs font-bold shrink-0 gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+
+            {/* List of Categories */}
+            {storeSettings.categories && storeSettings.categories.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {storeSettings.categories.map((category, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-emerald-300 transition-all group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 text-[#0a382c] flex items-center justify-center shrink-0 border border-emerald-150">
+                        <Tag className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-900 truncate" title={category}>
+                        {category}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCategory(index)}
+                      className="text-slate-400 hover:text-rose-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 shrink-0 cursor-pointer"
+                      title={`Delete category "${category}"`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center bg-slate-50/50">
+                <p className="text-xs text-slate-400 italic">No product categories added yet. Enter a category above or click "Reset to Standard Presets".</p>
               </div>
             )}
           </div>
