@@ -6,7 +6,8 @@ import {
   TrendingUp, 
   Users, 
   ShoppingCart,
-  Building2
+  Building2,
+  Boxes
 } from 'lucide-react';
 import {
   BarChart,
@@ -22,21 +23,34 @@ import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/f
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
-function StatCard({ title, value, icon: Icon, trend, colorClass }: any) {
+function StatCard({ title, value, icon: Icon, trend, colorClass, subtitle, footer, action }: any) {
   return (
-    <div className="glass-panel glass-panel-hover p-6 rounded-2xl shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="glass-panel glass-panel-hover p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+      <div>
+        <div className="flex items-start justify-between gap-2">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
-          <p className="mt-2.5 text-3xl font-black text-slate-900 tracking-tight">{value}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            {action}
+            <div className={`p-2.5 rounded-xl ${colorClass} flex items-center justify-center shrink-0`}>
+              <Icon className="w-5 h-5" />
+            </div>
+          </div>
         </div>
-        <div className={`p-3 rounded-xl ${colorClass} flex items-center justify-center`}>
-          <Icon className="w-6 h-6" />
-        </div>
+        <p className="mt-2 text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-tight">{value}</p>
+        {subtitle && (
+          <div className="mt-1">
+            {subtitle}
+          </div>
+        )}
       </div>
+      {footer && (
+        <div className="mt-3">
+          {footer}
+        </div>
+      )}
       {trend && (
-        <div className="mt-4 flex items-center text-xs font-semibold">
-          <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
+        <div className="mt-3 flex items-center text-xs font-semibold">
+          <TrendingUp className="w-4 h-4 text-emerald-600 mr-1 shrink-0" />
           <span className="text-emerald-700 font-bold">{trend}</span>
           <span className="text-slate-400 ml-1.5">vs last month</span>
         </div>
@@ -51,6 +65,7 @@ export default function Dashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stockPriceBasis, setStockPriceBasis] = useState<'cost' | 'retail'>('cost');
 
   useEffect(() => {
     if (!storeId) return;
@@ -97,7 +112,30 @@ export default function Dashboard() {
   const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + (sale.total || 0), 0), [sales]);
   const totalProducts = products.length;
   const totalCustomers = customers.length;
-  const lowStockProducts = products.filter(p => p.stock < 10).length;
+  const lowStockProducts = products.filter(p => (Number(p.stock) || 0) < 10).length;
+
+  // Calculate Total Price of Stock (Cost basis and Retail basis) + Total Units
+  const { totalStockCost, totalStockRetail, totalStockUnits } = useMemo(() => {
+    let cost = 0;
+    let retail = 0;
+    let units = 0;
+
+    products.forEach((p) => {
+      const stock = Number(p.stock) || 0;
+      const purchasePrice = Number(p.purchasePrice) || 0;
+      const salePrice = Number(p.salePrice) || 0;
+
+      units += stock;
+      cost += stock * purchasePrice;
+      retail += stock * salePrice;
+    });
+
+    return {
+      totalStockCost: cost,
+      totalStockRetail: retail,
+      totalStockUnits: units
+    };
+  }, [products]);
 
   const recentSales = sales.slice(0, 4);
 
@@ -269,24 +307,96 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-1">Real-time overview of your store performance</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">Real-time overview of your store performance</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/inventory"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-xs transition-all cursor-pointer"
+          >
+            <Boxes className="w-4 h-4 text-[#0a382c]" />
+            <span>Manage Inventory</span>
+          </Link>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
         <StatCard 
           title="Total Sales" 
-          value={`PKR ${totalSales.toFixed(2)}`} 
+          value={`PKR ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
           icon={DollarSign} 
           trend={salesTrend}
           colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
+        />
+        <StatCard 
+          title="Total Price of Stock" 
+          value={`PKR ${(stockPriceBasis === 'cost' ? totalStockCost : totalStockRetail).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+          icon={Boxes} 
+          colorClass="bg-teal-50 text-teal-700 border border-teal-100"
+          action={
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setStockPriceBasis('cost')}
+                className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                  stockPriceBasis === 'cost' 
+                    ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Valued at Purchase / Cost Price"
+              >
+                Cost
+              </button>
+              <button
+                type="button"
+                onClick={() => setStockPriceBasis('retail')}
+                className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                  stockPriceBasis === 'retail' 
+                    ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Valued at Retail / Sale Price"
+              >
+                Retail
+              </button>
+            </div>
+          }
+          subtitle={
+            <p className="text-[11px] font-semibold text-slate-500">
+              {stockPriceBasis === 'cost' ? 'At purchase cost value' : 'At retail selling value'}
+            </p>
+          }
+          footer={
+            <div className="pt-2.5 border-t border-slate-150/70 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400 font-medium">
+                  {stockPriceBasis === 'cost' ? 'Retail Value:' : 'Purchase Cost:'}
+                </span>
+                <span className="font-bold text-slate-800 font-mono">
+                  PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+                <span>Total Units in Stock:</span>
+                <span className="text-[#0a382c] font-bold">{totalStockUnits.toLocaleString()} units</span>
+              </div>
+            </div>
+          }
         />
         <StatCard 
           title="Total Products" 
           value={totalProducts} 
           icon={Package} 
           colorClass="bg-amber-50 text-amber-700 border border-amber-100"
+          footer={
+            <div className="pt-2.5 border-t border-slate-150/70 flex items-center justify-between text-[11px]">
+              <span className="text-slate-400 font-medium">Total Units:</span>
+              <span className="font-bold text-amber-900 font-mono">{totalStockUnits.toLocaleString()} units</span>
+            </div>
+          }
         />
         <StatCard 
           title="Total Customers" 
@@ -300,6 +410,11 @@ export default function Dashboard() {
           value={lowStockProducts} 
           icon={AlertTriangle} 
           colorClass="bg-rose-50 text-rose-700 border border-rose-100"
+          subtitle={
+            <p className="text-[11px] font-semibold text-slate-500">
+              Under 10 units remaining
+            </p>
+          }
         />
       </div>
 
