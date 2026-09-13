@@ -199,6 +199,8 @@ export default function Sales() {
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [returnSale, setReturnSale] = useState<Sale | null>(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showSelectReturnInvoiceModal, setShowSelectReturnInvoiceModal] = useState(false);
+  const [returnInvoiceSearch, setReturnInvoiceSearch] = useState('');
 
   // New Invoice Form States
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -3050,30 +3052,43 @@ export default function Sales() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Sales Invoices</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage sales receipts, view item details, and track performance</p>
+          <p className="text-sm text-slate-500 mt-1">Manage sales receipts, process customer returns, and track performance</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingSale(null);
-            setInvoiceNumber(getNextInvoiceNumber());
-            setInvoiceDate(new Date().toISOString().split('T')[0]);
-            setSelectedCustomerId('walk-in');
-            setPaymentMode('Cash');
-            setSelectedBankAccNumber('');
-            setInvoiceStatus('Paid');
-            setInvoiceItems([]);
-            setSerialSearchInput('');
-            setIsSerialDropdownOpen(false);
-            setProductSearchInput('');
-            setIsProductDropdownOpen(false);
-            setProductSelectionMode('with_serial');
-            setShowModal(true);
-          }}
-          className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create Invoice
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button 
+            type="button"
+            onClick={() => {
+              setReturnInvoiceSearch('');
+              setShowSelectReturnInvoiceModal(true);
+            }}
+            className="flex items-center px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl shadow-xs transition-colors text-sm font-bold cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4 mr-2 text-purple-700" />
+            Return Items
+          </button>
+          <button 
+            onClick={() => {
+              setEditingSale(null);
+              setInvoiceNumber(getNextInvoiceNumber());
+              setInvoiceDate(new Date().toISOString().split('T')[0]);
+              setSelectedCustomerId('walk-in');
+              setPaymentMode('Cash');
+              setSelectedBankAccNumber('');
+              setInvoiceStatus('Paid');
+              setInvoiceItems([]);
+              setSerialSearchInput('');
+              setIsSerialDropdownOpen(false);
+              setProductSearchInput('');
+              setIsProductDropdownOpen(false);
+              setProductSelectionMode('with_serial');
+              setShowModal(true);
+            }}
+            className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Invoice
+          </button>
+        </div>
       </div>
 
       <div className="glass-panel rounded-2xl shadow-sm overflow-hidden bg-white">
@@ -3619,6 +3634,166 @@ export default function Sales() {
         subtitle="Point camera at product serial number or barcode label to add to invoice automatically"
         continuous={true}
       />
+
+      {/* Select Invoice to Process Return Modal */}
+      {showSelectReturnInvoiceModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div 
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" 
+              onClick={() => setShowSelectReturnInvoiceModal(false)} 
+            />
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-slate-200">
+              <div className="bg-purple-900 px-6 py-4 text-white flex justify-between items-center">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-white/10 rounded-xl">
+                    <RotateCcw className="w-5 h-5 text-purple-200" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black tracking-tight">Select Invoice to Return</h3>
+                    <p className="text-xs text-purple-200">Choose an existing invoice to process returned items and refunds</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSelectReturnInvoiceModal(false)}
+                  className="p-1.5 rounded-lg text-purple-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Search invoice number, customer name..."
+                    value={returnInvoiceSearch}
+                    onChange={(e) => setReturnInvoiceSearch(e.target.value)}
+                    className="glass-input w-full pl-10 pr-4 py-2.5 rounded-xl text-sm font-medium"
+                  />
+                  {returnInvoiceSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setReturnInvoiceSearch('')}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Invoices List */}
+                <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 border border-slate-150 rounded-xl">
+                  {(() => {
+                    const filtered = sales.filter(s => {
+                      if (!returnInvoiceSearch.trim()) return true;
+                      const q = returnInvoiceSearch.toLowerCase();
+                      return (
+                        s.invoiceNo?.toLowerCase().includes(q) ||
+                        s.customerName?.toLowerCase().includes(q) ||
+                        s.paymentMode?.toLowerCase().includes(q)
+                      );
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-slate-400 text-sm italic">
+                          No matching invoices found.
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((s) => {
+                      const isFullyReturned = s.returnStatus === 'Fully Returned';
+                      const itemsCount = s.items?.length || 0;
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            if (isFullyReturned) return;
+                            setShowSelectReturnInvoiceModal(false);
+                            setReturnSale(s);
+                            setShowReturnModal(true);
+                          }}
+                          className={`p-4 flex items-center justify-between gap-4 transition-colors ${
+                            isFullyReturned 
+                              ? 'bg-slate-50 opacity-60 cursor-not-allowed' 
+                              : 'hover:bg-purple-50/50 cursor-pointer'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-100 text-purple-800 shrink-0 mt-0.5">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900 text-sm">{s.invoiceNo}</span>
+                                <span className="text-xs text-slate-400">•</span>
+                                <span className="text-xs text-slate-600 font-semibold">{s.customerName}</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500">
+                                <span>{s.date ? new Date(s.date).toLocaleDateString() : 'N/A'}</span>
+                                <span>•</span>
+                                <span>{itemsCount} item{itemsCount !== 1 ? 's' : ''}</span>
+                                <span>•</span>
+                                <span className="font-medium text-slate-700">{s.paymentMode || 'Cash'}</span>
+                                {s.returns && s.returns.length > 0 && (
+                                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                    isFullyReturned ? 'bg-rose-100 text-rose-800' : 'bg-purple-100 text-purple-800'
+                                  }`}>
+                                    {s.returnStatus || 'Partially Returned'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div className="font-mono font-black text-slate-900 text-sm">
+                              PKR {s.total?.toFixed(2)}
+                            </div>
+                            {s.totalRefunded && s.totalRefunded > 0 ? (
+                              <div className="text-[10px] font-bold text-purple-700 mt-0.5">
+                                Refunded: PKR {s.totalRefunded.toFixed(2)}
+                              </div>
+                            ) : null}
+                            <div className="mt-1">
+                              {isFullyReturned ? (
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  Fully Returned
+                                </span>
+                              ) : (
+                                <span className="text-xs font-bold text-purple-700 hover:text-purple-900">
+                                  Select &rarr;
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 px-6 py-3 border-t border-slate-150 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowSelectReturnInvoiceModal(false)}
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sales Return & Refund Modal */}
       <SalesReturnModal

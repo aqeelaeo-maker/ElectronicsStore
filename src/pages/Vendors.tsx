@@ -15,6 +15,11 @@ interface Vendor {
   email: string;
   city: string;
   balance: number;
+  remainingAmount?: number;
+  totalPurchases?: number;
+  totalPaid?: number;
+  lastPaymentAmount?: number;
+  lastPaymentDate?: any;
 }
 
 export default function Vendors() {
@@ -75,6 +80,9 @@ export default function Vendors() {
       email: emailVal,
       city: cityVal,
       balance: balanceVal,
+      remainingAmount: balanceVal,
+      totalPurchases: 0,
+      totalPaid: 0,
       storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -110,6 +118,7 @@ export default function Vendors() {
       email: emailVal,
       city: cityVal,
       balance: balanceVal,
+      remainingAmount: editingVendor.remainingAmount !== undefined ? editingVendor.remainingAmount : balanceVal,
       updatedAt: serverTimestamp(),
     };
 
@@ -289,64 +298,81 @@ export default function Vendors() {
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vendor</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">City</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Balance</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Purchases / Paid</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Remaining / Balance</th>
                 <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredVendors.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No vendors found. Add a new vendor to get started.
                   </td>
                 </tr>
               ) : (
-                filteredVendors.map((vendor) => (
-                  <tr key={vendor.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
-                          <Building2 className="h-5 w-5" />
+                filteredVendors.map((vendor) => {
+                  const effectiveRemaining = vendor.remainingAmount !== undefined ? vendor.remainingAmount : (vendor.balance ?? 0);
+                  return (
+                    <tr key={vendor.id} className="hover:bg-[#f8faf9] transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
+                            <Building2 className="h-5 w-5" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-bold text-slate-900">{vendor.companyName || vendor.name}</div>
+                          </div>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-bold text-slate-900">{vendor.companyName || vendor.name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-bold text-slate-800">{vendor.mobile || vendor.phone}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{vendor.email}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
+                        {vendor.city || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-xs font-semibold text-slate-700">
+                          Purchased: <span className="font-mono font-bold text-slate-900">PKR {(vendor.totalPurchases || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-bold text-slate-800">{vendor.mobile || vendor.phone}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{vendor.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
-                      {vendor.city || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-900">
-                      ${(vendor.balance ?? 0).toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
-                      <button 
-                        onClick={() => setEditingVendor(vendor)}
-                        className="text-slate-400 hover:text-slate-800 mr-4 transition-colors"
-                        title="Edit Vendor"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteVendor(vendor.id)}
-                        className="text-red-400 hover:text-red-600 transition-colors"
-                        title="Delete Vendor"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                          Paid: <span className="font-mono font-bold">PKR {(vendor.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className={`font-mono font-extrabold text-sm ${effectiveRemaining > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
+                          PKR {effectiveRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Outstanding Balance
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                        <button 
+                          onClick={() => setEditingVendor(vendor)}
+                          className="text-slate-400 hover:text-slate-800 mr-4 transition-colors cursor-pointer"
+                          title="Edit Vendor"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteVendor(vendor.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors cursor-pointer"
+                          title="Delete Vendor"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

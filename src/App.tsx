@@ -72,6 +72,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isUser } = useAuth();
+  if (isUser) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
 export default function App() {
   return (
     <AuthProvider>
@@ -86,15 +94,18 @@ export default function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="products" element={<Products />} />
-            <Route path="serials" element={<SerialNumbers />} />
             <Route path="sales" element={<Sales />} />
-            <Route path="purchases" element={<Placeholder title="Purchases" />} />
             <Route path="customers" element={<Customers />} />
-            <Route path="vendors" element={<Vendors />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="inventory/add" element={<Inventory initialAddStock={true} />} />
-            <Route path="reports" element={<Placeholder title="Reports" />} />
-            <Route path="settings" element={<Settings />} />
+
+            {/* Admin-only routes */}
+            <Route path="serials" element={<AdminRoute><SerialNumbers /></AdminRoute>} />
+            <Route path="purchases" element={<AdminRoute><Placeholder title="Purchases" /></AdminRoute>} />
+            <Route path="vendors" element={<AdminRoute><Vendors /></AdminRoute>} />
+            <Route path="inventory" element={<AdminRoute><Inventory /></AdminRoute>} />
+            <Route path="inventory/add" element={<AdminRoute><Inventory initialAddStock={true} /></AdminRoute>} />
+            <Route path="reports" element={<AdminRoute><Placeholder title="Reports" /></AdminRoute>} />
+            <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </BrowserRouter>

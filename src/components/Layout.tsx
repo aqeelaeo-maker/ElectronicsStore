@@ -10,15 +10,18 @@ import {
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  ShieldCheck,
+  User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
+import { toast } from 'react-toastify';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import OfflineSyncBanner from './OfflineSyncBanner';
 
-const navigation = [
+const allNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Sales', href: '/sales', icon: ShoppingCart },
   { name: 'Products', href: '/products', icon: Package },
@@ -29,10 +32,16 @@ const navigation = [
 ];
 
 export default function Layout() {
-  const { user, role, storeId, logout } = useAuth();
+  const { user, storeId, logout, activeRole, activeUser, switchActiveRole, isUser } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
+
+  // User role can ONLY view: Dashboard, Sales, Products, Customers
+  // Admin role can view everything in the application
+  const visibleNavigation = isUser
+    ? allNavigation.filter(item => ['Dashboard', 'Sales', 'Products', 'Customers'].includes(item.name))
+    : allNavigation;
 
   useEffect(() => {
     if (!storeId) return;
@@ -97,7 +106,7 @@ export default function Layout() {
         
         <div className="flex-1 overflow-y-auto py-4">
           <nav className="px-3 space-y-1">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
               return (
                 <Link
@@ -123,38 +132,55 @@ export default function Layout() {
           </nav>
         </div>
 
-        {/* Support Section like in the reference image */}
-        <div className="mx-4 mb-4 p-3.5 rounded-xl bg-[#092f25] border border-emerald-900/40">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-[#125d4c] rounded-xl text-emerald-400 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        {/* Support Section */}
+        <div className="mx-4 mb-3 p-3 rounded-xl bg-[#092f25] border border-emerald-900/40">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-[#125d4c] rounded-lg text-emerald-400 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.965C16.528 2.01 14.069.986 11.44.986c-5.442 0-9.866 4.372-9.87 9.802 0 1.73.463 3.42 1.34 4.947l-.997 3.641 3.734-.978zm11.567-7.619c-.302-.15-1.788-.876-2.057-.973-.269-.099-.465-.15-.659.15-.195.299-.752.973-.922 1.17-.17.195-.34.22-.641.07-1.125-.565-1.899-1.025-2.656-2.316-.2-.34.2-.315.572-1.055.062-.125.031-.235-.015-.33-.047-.095-.465-1.11-.637-1.524-.167-.402-.351-.347-.481-.353-.125-.004-.268-.005-.412-.005-.144 0-.379.054-.577.269-.198.215-.756.734-.756 1.792s.772 2.08 1.055 2.457c.284.377 1.543 2.338 3.723 3.269.519.222.923.355 1.238.455.52.164.993.14 1.368.085.418-.06 1.788-.726 2.042-1.427.254-.7.254-1.3.178-1.427-.076-.125-.284-.199-.586-.349z"/>
               </svg>
             </div>
             <div>
               <p className="text-xs font-bold text-white">Need Support?</p>
-              <p className="text-[10px] text-emerald-300">We're here to help you</p>
+              <p className="text-[10px] text-emerald-300">Fast customer service</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-t border-emerald-900/60 bg-[#072d23]">
+        <div className="p-3.5 border-t border-emerald-900/60 bg-[#072d23]">
           <div className="flex items-center p-2 rounded-xl bg-[#0d3c30] border border-emerald-900/50">
             <div className="flex-shrink-0">
-              <div className="h-9 w-9 rounded-full bg-emerald-700 flex items-center justify-center text-white font-extrabold shadow-sm">
-                {user?.email?.[0].toUpperCase()}
+              <div className={cn(
+                "h-9 w-9 rounded-full flex items-center justify-center text-white font-extrabold shadow-sm text-xs",
+                activeRole === 'Admin' ? "bg-emerald-600" : "bg-blue-600"
+              )}>
+                {activeRole === 'Admin' ? (
+                  <ShieldCheck className="w-5 h-5 text-white" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-white" />
+                )}
               </div>
             </div>
             <div className="ml-3 min-w-0 flex-1">
               <p className="text-xs font-bold text-white truncate">
-                {user?.email}
+                {activeUser?.name || (activeRole === 'Admin' ? 'Admin' : 'User')}
               </p>
-              <p className="text-[10px] font-semibold text-emerald-300 capitalize">{role?.toLowerCase() || 'member'}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={cn(
+                  "px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider",
+                  activeRole === 'Admin' ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-blue-500/20 text-blue-200 border border-blue-500/30"
+                )}>
+                  {activeRole}
+                </span>
+                <span className="text-[10px] text-emerald-200/60 truncate">
+                  {activeRole === 'Admin' ? 'Full Access' : 'Restricted'}
+                </span>
+              </div>
             </div>
           </div>
           <button 
             onClick={() => logout()}
-            className="mt-3 flex w-full items-center justify-center px-4 py-2 text-xs font-bold text-red-300 bg-red-950/10 hover:bg-red-950/20 border border-red-900/20 hover:border-red-900/30 rounded-xl transition-all"
+            className="mt-2.5 flex w-full items-center justify-center px-4 py-1.5 text-xs font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-xl transition-all"
           >
             <LogOut className="w-3.5 h-3.5 mr-2" />
             Sign Out
@@ -173,14 +199,47 @@ export default function Layout() {
             <Menu className="w-6 h-6" />
           </button>
           
-          <div className="flex items-center space-x-4 ml-auto">
-             {/* Global Search */}
-             <div className="hidden md:flex relative">
-                <input 
-                  type="text"
-                  placeholder="Global Search..."
-                  className="w-64 pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 rounded-full text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
-                />
+          <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
+             {/* Active Role Quick Switcher */}
+             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+               <button
+                 type="button"
+                 onClick={() => {
+                   if (activeRole !== 'Admin') {
+                     switchActiveRole('Admin');
+                     toast.success('Switched to Admin role: Full access restored');
+                   }
+                 }}
+                 className={cn(
+                   "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                   activeRole === 'Admin'
+                     ? "bg-[#0a382c] text-white shadow-xs"
+                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                 )}
+                 title="Switch to Admin mode (Full access to all modules and financials)"
+               >
+                 <ShieldCheck className="w-3.5 h-3.5" />
+                 <span>Admin</span>
+               </button>
+               <button
+                 type="button"
+                 onClick={() => {
+                   if (activeRole !== 'User') {
+                     switchActiveRole('User');
+                     toast.info('Switched to User role: Only Dashboard, Sales, Products, and Customers accessible. Sensitive metrics hidden.');
+                   }
+                 }}
+                 className={cn(
+                   "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                   activeRole === 'User'
+                     ? "bg-blue-700 text-white shadow-xs"
+                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                 )}
+                 title="Switch to User mode (Restricted: Dashboard, Sales, Products, Customers only)"
+               >
+                 <UserIcon className="w-3.5 h-3.5" />
+                 <span>User</span>
+               </button>
              </div>
 
              {/* Profile selection with dynamic store name and logo */}

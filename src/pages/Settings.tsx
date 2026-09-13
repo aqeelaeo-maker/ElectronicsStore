@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { Building2, CreditCard, FileText, Layers, Plus, Save, ShieldAlert, Store, Tag, Trash2 } from 'lucide-react';
+import UserManagementSettings from '../components/UserManagementSettings';
 
 export interface BankAccount {
   bankName: string;
@@ -475,6 +476,9 @@ export default function Settings() {
         <h1 className="text-3xl font-black tracking-tight text-slate-900">Settings</h1>
         <p className="text-sm text-slate-500 mt-1">Manage system configurations and store details</p>
       </div>
+
+      {/* User Management Section (Admin & User Roles) */}
+      <UserManagementSettings />
 
       <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 bg-white border border-slate-200">
         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">

@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { cn } from '../lib/utils';
 
 function StatCard({ title, value, icon: Icon, trend, colorClass, subtitle, footer, action }: any) {
   return (
@@ -60,7 +61,7 @@ function StatCard({ title, value, icon: Icon, trend, colorClass, subtitle, foote
 }
 
 export default function Dashboard() {
-  const { storeId, role } = useAuth();
+  const { storeId, role, isUser, isAdmin } = useAuth();
   const [sales, setSales] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
@@ -109,7 +110,19 @@ export default function Dashboard() {
     };
   }, [storeId]);
 
-  const totalSales = useMemo(() => sales.reduce((acc, sale) => acc + (sale.total || 0), 0), [sales]);
+  const { totalSales, totalRefunds, netSales } = useMemo(() => {
+    let gross = 0;
+    let refunds = 0;
+    sales.forEach(sale => {
+      gross += (sale.total || 0);
+      refunds += (sale.totalRefunded || 0);
+    });
+    return {
+      totalSales: gross,
+      totalRefunds: refunds,
+      netSales: Math.max(0, gross - refunds)
+    };
+  }, [sales]);
   const totalProducts = products.length;
   const totalCustomers = customers.length;
   const lowStockProducts = products.filter(p => (Number(p.stock) || 0) < 10).length;
@@ -200,10 +213,11 @@ export default function Dashboard() {
       const d = new Date(sale.date);
       if (isNaN(d.getTime())) return;
 
+      const netSale = Math.max(0, (sale.total || 0) - (sale.totalRefunded || 0));
       if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
-        thisMonthTotal += sale.total || 0;
+        thisMonthTotal += netSale;
       } else if (d.getFullYear() === prevYear && d.getMonth() === prevMonth) {
-        lastMonthTotal += sale.total || 0;
+        lastMonthTotal += netSale;
       }
     });
 
@@ -310,82 +324,108 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-1">Real-time overview of your store performance</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {isUser ? "Staff POS & operations dashboard" : "Real-time overview of your store performance"}
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            to="/inventory"
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-xs transition-all cursor-pointer"
-          >
-            <Boxes className="w-4 h-4 text-[#0a382c]" />
-            <span>Manage Inventory</span>
-          </Link>
+          {!isUser ? (
+            <Link
+              to="/inventory"
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-xs transition-all cursor-pointer"
+            >
+              <Boxes className="w-4 h-4 text-[#0a382c]" />
+              <span>Manage Inventory</span>
+            </Link>
+          ) : (
+            <Link
+              to="/sales"
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-[#0a382c] text-white hover:bg-[#0e4839] shadow-xs transition-all cursor-pointer"
+            >
+              <ShoppingCart className="w-4 h-4 text-emerald-300" />
+              <span>New Sale / Invoicing</span>
+            </Link>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-        <StatCard 
-          title="Total Sales" 
-          value={`PKR ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-          icon={DollarSign} 
-          trend={salesTrend}
-          colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
-        />
-        <StatCard 
-          title="Total Price of Stock" 
-          value={`PKR ${(stockPriceBasis === 'cost' ? totalStockCost : totalStockRetail).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-          icon={Boxes} 
-          colorClass="bg-teal-50 text-teal-700 border border-teal-100"
-          action={
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
-              <button
-                type="button"
-                onClick={() => setStockPriceBasis('cost')}
-                className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
-                  stockPriceBasis === 'cost' 
-                    ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Valued at Purchase / Cost Price"
-              >
-                Cost
-              </button>
-              <button
-                type="button"
-                onClick={() => setStockPriceBasis('retail')}
-                className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
-                  stockPriceBasis === 'retail' 
-                    ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Valued at Retail / Sale Price"
-              >
-                Retail
-              </button>
-            </div>
-          }
-          subtitle={
-            <p className="text-[11px] font-semibold text-slate-500">
-              {stockPriceBasis === 'cost' ? 'At purchase cost value' : 'At retail selling value'}
-            </p>
-          }
-          footer={
-            <div className="pt-2.5 border-t border-slate-150/70 space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400 font-medium">
-                  {stockPriceBasis === 'cost' ? 'Retail Value:' : 'Purchase Cost:'}
-                </span>
-                <span className="font-bold text-slate-800 font-mono">
-                  PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
+      <div className={cn(
+        "grid gap-5",
+        isUser 
+          ? "grid-cols-1 sm:grid-cols-3" 
+          : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+      )}>
+        {/* Total Sales: Admin only */}
+        {!isUser && (
+          <StatCard 
+            title="Total Sales" 
+            value={`PKR ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+            icon={DollarSign} 
+            trend={salesTrend}
+            colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
+          />
+        )}
+
+        {/* Total Price of Stock: Admin only */}
+        {!isUser && (
+          <StatCard 
+            title="Total Price of Stock" 
+            value={`PKR ${(stockPriceBasis === 'cost' ? totalStockCost : totalStockRetail).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+            icon={Boxes} 
+            colorClass="bg-teal-50 text-teal-700 border border-teal-100"
+            action={
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setStockPriceBasis('cost')}
+                  className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                    stockPriceBasis === 'cost' 
+                      ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="Valued at Purchase / Cost Price"
+                >
+                  Cost
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockPriceBasis('retail')}
+                  className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                    stockPriceBasis === 'retail' 
+                      ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="Valued at Retail / Sale Price"
+                >
+                  Retail
+                </button>
               </div>
-              <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                <span>Total Units in Stock:</span>
-                <span className="text-[#0a382c] font-bold">{totalStockUnits.toLocaleString()} units</span>
+            }
+            subtitle={
+              <p className="text-[11px] font-semibold text-slate-500">
+                {stockPriceBasis === 'cost' ? 'At purchase cost value' : 'At retail selling value'}
+              </p>
+            }
+            footer={
+              <div className="pt-2.5 border-t border-slate-150/70 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 font-medium">
+                    {stockPriceBasis === 'cost' ? 'Retail Value:' : 'Purchase Cost:'}
+                  </span>
+                  <span className="font-bold text-slate-800 font-mono">
+                    PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+                  <span>Total Units in Stock:</span>
+                  <span className="text-[#0a382c] font-bold">{totalStockUnits.toLocaleString()} units</span>
+                </div>
               </div>
-            </div>
-          }
-        />
+            }
+          />
+        )}
+
+        {/* Total Products: Visible to both Admin and User */}
         <StatCard 
           title="Total Products" 
           value={totalProducts} 
@@ -398,6 +438,8 @@ export default function Dashboard() {
             </div>
           }
         />
+
+        {/* Total Customers: Visible to both Admin and User */}
         <StatCard 
           title="Total Customers" 
           value={totalCustomers} 
@@ -405,6 +447,8 @@ export default function Dashboard() {
           trend={customerTrend}
           colorClass="bg-blue-50 text-blue-700 border border-blue-100"
         />
+
+        {/* Low Stock Items: Visible to both Admin and User */}
         <StatCard 
           title="Low Stock Items" 
           value={lowStockProducts} 
@@ -418,86 +462,150 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sales Chart */}
-        <div className="glass-panel p-6 rounded-2xl shadow-sm">
-          <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-            <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
-            Sales & Profit Overview
-          </h2>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `PKR ${val}`} />
-                <Tooltip 
-                  cursor={{ fill: '#f4f7f6', opacity: 0.5 }}
-                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', color: '#0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-                />
-                <Bar dataKey="sales" fill="#0a382c" radius={[4, 4, 0, 0]} name="Sales" />
-                <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} name="Profit" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="space-y-6">
+      <div className={cn(
+        "grid gap-6",
+        isUser ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 lg:grid-cols-2"
+      )}>
+        {/* Sales & Profit Overview: Admin only */}
+        {!isUser && (
           <div className="glass-panel p-6 rounded-2xl shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
-              Recent Sales
+              Sales & Profit Overview
             </h2>
-            <div className="space-y-4">
-              {recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-[#0a382c]" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-semibold text-slate-950">{sale.invoiceNo}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{sale.customerName}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-slate-900">PKR {sale.total?.toFixed(2)}</span>
-                </div>
-              ))}
-              {recentSales.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-6">No recent sales</p>
-              )}
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `PKR ${val}`} />
+                  <Tooltip 
+                    cursor={{ fill: '#f4f7f6', opacity: 0.5 }}
+                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px', color: '#0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+                  />
+                  <Bar dataKey="sales" fill="#0a382c" radius={[4, 4, 0, 0]} name="Sales" />
+                  <Bar dataKey="profit" fill="#10b981" radius={[4, 4, 0, 0]} name="Profit" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
+        )}
 
-          <div className="glass-panel p-6 rounded-2xl shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
-              Top Products (By Value)
-            </h2>
-            <div className="space-y-4">
-              {topProducts.map((product) => (
-                <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-950">{product.name}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">PKR {product.salePrice?.toFixed(2)}</p>
+        {isUser ? (
+          <>
+            <div className="glass-panel p-6 rounded-2xl shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
+                Recent Sales
+              </h2>
+              <div className="space-y-4">
+                {recentSales.map((sale) => (
+                  <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                        <ShoppingCart className="w-5 h-5 text-[#0a382c]" />
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-semibold text-slate-950">{sale.invoiceNo}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{sale.customerName}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-slate-900">PKR {sale.total?.toFixed(2)}</span>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                      product.stock < 10 
-                        ? 'bg-rose-50 text-rose-600 border border-rose-100' 
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                    }`}>
-                      {product.stock} in stock
-                    </span>
+                ))}
+                {recentSales.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-6">No recent sales</p>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
+                Top Products
+              </h2>
+              <div className="space-y-4">
+                {topProducts.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{product.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">PKR {product.salePrice?.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                        product.stock < 10 
+                          ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      }`}>
+                        {product.stock} in stock
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {topProducts.length === 0 && (
-                <p className="text-sm text-slate-400 text-center py-6">No products available</p>
-              )}
+                ))}
+                {topProducts.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-6">No products available</p>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-6">
+            <div className="glass-panel p-6 rounded-2xl shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
+                Recent Sales
+              </h2>
+              <div className="space-y-4">
+                {recentSales.map((sale) => (
+                  <div key={sale.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
+                        <ShoppingCart className="w-5 h-5 text-[#0a382c]" />
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-semibold text-slate-950">{sale.invoiceNo}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{sale.customerName}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-slate-900">PKR {sale.total?.toFixed(2)}</span>
+                  </div>
+                ))}
+                {recentSales.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-6">No recent sales</p>
+                )}
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 rounded-2xl shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span className="w-1.5 h-4 bg-[#0a382c] rounded-full"></span>
+                Top Products (By Value)
+              </h2>
+              <div className="space-y-4">
+                {topProducts.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between pb-4 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{product.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">PKR {product.salePrice?.toFixed(2)}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                        product.stock < 10 
+                          ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                      }`}>
+                        {product.stock} in stock
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {topProducts.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-6">No products available</p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

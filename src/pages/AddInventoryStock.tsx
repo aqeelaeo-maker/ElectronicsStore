@@ -5,6 +5,7 @@ import {
   where, 
   onSnapshot, 
   doc, 
+  getDoc,
   writeBatch, 
   serverTimestamp 
 } from 'firebase/firestore';
@@ -34,7 +35,10 @@ import {
   Ruler,
   Boxes,
   DollarSign,
-  Calculator
+  Calculator,
+  CreditCard,
+  Wallet,
+  Receipt
 } from 'lucide-react';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
@@ -53,7 +57,27 @@ export interface Product {
 
 export interface Vendor {
   id: string;
+  name?: string;
   companyName: string;
+  contactPerson?: string;
+  mobile?: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+  balance?: number;
+  totalPurchases?: number;
+  totalPaid?: number;
+  remainingAmount?: number;
+  lastPaymentDate?: any;
+  lastPurchaseDate?: any;
+}
+
+export interface BankAccount {
+  bankName: string;
+  accountNumber: string;
+  accountTitle?: string;
+  openingBalance?: number;
+  balance?: number;
 }
 
 export interface StoreSerialNumber {
@@ -128,6 +152,13 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
   const [showExistingSerials, setShowExistingSerials] = useState(false);
+
+  // Vendor payment & settlement state
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [paymentDone, setPaymentDone] = useState<number | ''>('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
+  const [selectedBankAccNumber, setSelectedBankAccNumber] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
 
   // Serial numbers management
   const [serialNumbersList, setSerialNumbersList] = useState<string[]>([]);
@@ -220,6 +251,42 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
       setAllStoreSerials(data);
     }, (error) => {
       console.error('Error fetching serial numbers:', error);
+    });
+
+    return () => unsubscribe();
+  }, [storeId]);
+
+  // 4. Fetch Store Bank Accounts
+  useEffect(() => {
+    if (!storeId) return;
+
+    const storeRef = doc(db, 'stores', storeId);
+    const unsubscribe = onSnapshot(storeRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.bankAccounts)) {
+          const loadedAccounts: BankAccount[] = data.bankAccounts.map((item: any) => {
+            if (typeof item === 'string') {
+              return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
+            }
+            const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
+            const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
+            return {
+              bankName: item.bankName || 'Bank',
+              accountNumber: item.accountNumber || '',
+              accountTitle: item.accountTitle || '',
+              openingBalance: opBal,
+              balance: curBal
+            };
+          });
+          setBankAccounts(loadedAccounts);
+          if (loadedAccounts.length > 0 && !selectedBankAccNumber) {
+            setSelectedBankAccNumber(loadedAccounts[0].accountNumber);
+          }
+        }
+      }
+    }, (error) => {
+      console.error('Error fetching store details:', error);
     });
 
     return () => unsubscribe();
@@ -499,6 +566,123 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     const newStock = previousStock + quantityAdded;
     const selectedVendor = vendors.find(v => v.id === selectedVendorId);
 
+    // Vendor Financials & Payment Record Calculations
+    const totalBatchCost = Number((quantityAdded * purchasePriceInput).toFixed(2));
+    const enteredPaymentDone = paymentDone === '' ? 0 : (typeof paymentDone === 'number' ? paymentDone : (parseFloat(paymentDone) || 0));
+    const actualPaymentDone = Number(enteredPaymentDone.toFixed(2));
+    const actualRemaining = Math.max(0, Number((totalBatchCost - actualPaymentDone).toFixed(2)));
+    const matchedBank = bankAccounts.find(b => b.accountNumber === selectedBankAccNumber);
+
+    const applyVendorPaymentToBatch = async (batchInstance: any) => {
+      if (!selectedVendor || !selectedVendorId) return;
+
+      const vendorRef = doc(db, 'vendors', selectedVendorId);
+      const prevBal = typeof selectedVendor.balance === 'number' ? selectedVendor.balance : (parseFloat(selectedVendor.balance as any) || 0);
+      const prevPurchases = typeof selectedVendor.totalPurchases === 'number' ? selectedVendor.totalPurchases : 0;
+      const prevPaid = typeof selectedVendor.totalPaid === 'number' ? selectedVendor.totalPaid : 0;
+      const prevRemaining = typeof selectedVendor.remainingAmount === 'number' ? selectedVendor.remainingAmount : prevBal;
+
+      const newTotalPurchases = Number((prevPurchases + totalBatchCost).toFixed(2));
+      const newTotalPaid = Number((prevPaid + actualPaymentDone).toFixed(2));
+      const newRemainingAmount = Number((prevRemaining + actualRemaining).toFixed(2));
+      const newBalance = Number((prevBal + actualRemaining).toFixed(2));
+
+      // 1. Update vendor document with updated payment done, remaining amount, and balances
+      batchInstance.update(vendorRef, {
+        balance: newBalance,
+        remainingAmount: newRemainingAmount,
+        totalPurchases: newTotalPurchases,
+        totalPaid: newTotalPaid,
+        lastPaymentAmount: actualPaymentDone,
+        lastPaymentDate: serverTimestamp(),
+        lastPurchaseCost: totalBatchCost,
+        lastPurchaseDate: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      // 2. Vendor payment record in vendor subcollection
+      const vendorPaymentSubRef = doc(collection(db, 'vendors', selectedVendorId, 'payments'));
+      batchInstance.set(vendorPaymentSubRef, {
+        storeId,
+        vendorId: selectedVendorId,
+        vendorName: selectedVendor.companyName || selectedVendor.name || '',
+        type: 'Stock Purchase',
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productBrand: selectedProduct.brand,
+        productModelNumber: selectedProduct.modelNumber,
+        quantity: quantityAdded,
+        unit: unitDisplay,
+        purchasePrice: purchasePriceInput,
+        totalAmount: totalBatchCost,
+        paymentDone: actualPaymentDone,
+        remainingAmount: actualRemaining,
+        paymentStatus: actualRemaining === 0 ? 'Paid' : (actualPaymentDone > 0 ? 'Partially Paid' : 'Pending'),
+        paymentMode: actualPaymentDone > 0 ? paymentMode : 'Credit',
+        bankAccountNumber: (actualPaymentDone > 0 && paymentMode === 'Online' && selectedBankAccNumber) ? selectedBankAccNumber : null,
+        bankName: (actualPaymentDone > 0 && paymentMode === 'Online' && matchedBank) ? matchedBank.bankName : null,
+        referenceNumber: referenceNumber.trim() || null,
+        notes: paymentNotes.trim() || null,
+        date: new Date().toISOString(),
+        createdAt: serverTimestamp()
+      });
+
+      // 3. Top-level vendorPayments record for store-wide auditing
+      const vendorPaymentTopRef = doc(collection(db, 'vendorPayments'));
+      batchInstance.set(vendorPaymentTopRef, {
+        storeId,
+        vendorId: selectedVendorId,
+        vendorName: selectedVendor.companyName || selectedVendor.name || '',
+        type: 'Stock Purchase',
+        productId: selectedProduct.id,
+        productName: selectedProduct.name,
+        productBrand: selectedProduct.brand,
+        productModelNumber: selectedProduct.modelNumber,
+        quantity: quantityAdded,
+        unit: unitDisplay,
+        purchasePrice: purchasePriceInput,
+        totalAmount: totalBatchCost,
+        paymentDone: actualPaymentDone,
+        remainingAmount: actualRemaining,
+        paymentStatus: actualRemaining === 0 ? 'Paid' : (actualPaymentDone > 0 ? 'Partially Paid' : 'Pending'),
+        paymentMode: actualPaymentDone > 0 ? paymentMode : 'Credit',
+        bankAccountNumber: (actualPaymentDone > 0 && paymentMode === 'Online' && selectedBankAccNumber) ? selectedBankAccNumber : null,
+        bankName: (actualPaymentDone > 0 && paymentMode === 'Online' && matchedBank) ? matchedBank.bankName : null,
+        referenceNumber: referenceNumber.trim() || null,
+        notes: paymentNotes.trim() || null,
+        date: new Date().toISOString(),
+        createdAt: serverTimestamp()
+      });
+
+      // 4. Deduct from store bank account if online payment done
+      if (storeId && actualPaymentDone > 0 && paymentMode === 'Online' && selectedBankAccNumber) {
+        const storeRef = doc(db, 'stores', storeId);
+        const storeSnap = await getDoc(storeRef);
+        if (storeSnap.exists()) {
+          const storeData = storeSnap.data();
+          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+          let bankChanged = false;
+          currentAccounts = currentAccounts.map((acc: any) => {
+            if (acc.accountNumber === selectedBankAccNumber) {
+              bankChanged = true;
+              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+              return {
+                ...acc,
+                balance: Number((curBal - actualPaymentDone).toFixed(2))
+              };
+            }
+            return acc;
+          });
+          if (bankChanged) {
+            batchInstance.update(storeRef, {
+              bankAccounts: currentAccounts,
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+      }
+    };
+
     try {
       if (isSerialized) {
         // Execute in batches of 400 to respect Firestore 500 limit
@@ -526,7 +710,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
             });
           });
 
-          // In first batch, also update product doc and add inventory log
+          // In first batch, also update product doc, vendor balance & payments, and add inventory log
           if (i === 0) {
             const productRef = doc(db, 'products', selectedProduct.id);
             batch.update(productRef, {
@@ -535,6 +719,8 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               salePrice: salePriceInput,
               updatedAt: serverTimestamp()
             });
+
+            await applyVendorPaymentToBatch(batch);
 
             const logRef = doc(collection(db, 'inventoryLogs'));
             batch.set(logRef, {
@@ -554,6 +740,14 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               vendorId: selectedVendorId || null,
               vendorName: selectedVendor?.companyName || null,
               referenceNumber: referenceNumber.trim() || null,
+              totalCost: totalBatchCost,
+              paymentDone: actualPaymentDone,
+              remainingAmount: actualRemaining,
+              paymentStatus: actualRemaining === 0 ? 'Paid' : (actualPaymentDone > 0 ? 'Partially Paid' : 'Pending'),
+              paymentMode: actualPaymentDone > 0 ? paymentMode : 'Credit',
+              bankAccountNumber: (actualPaymentDone > 0 && paymentMode === 'Online' && selectedBankAccNumber) ? selectedBankAccNumber : null,
+              bankName: (actualPaymentDone > 0 && paymentMode === 'Online' && matchedBank) ? matchedBank.bankName : null,
+              paymentNotes: paymentNotes.trim() || null,
               createdAt: serverTimestamp()
             });
           }
@@ -561,7 +755,11 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           await batch.commit();
         }
 
-        toast.success(`Successfully added ${quantityAdded} serialized units to ${selectedProduct.name}!`);
+        if (selectedVendor) {
+          toast.success(`Successfully added ${quantityAdded} serialized units to ${selectedProduct.name}! Vendor ${selectedVendor.companyName}: Payment Done PKR ${actualPaymentDone.toLocaleString()}, Remaining PKR ${actualRemaining.toLocaleString()}`);
+        } else {
+          toast.success(`Successfully added ${quantityAdded} serialized units to ${selectedProduct.name}!`);
+        }
       } else {
         // Direct manual quantity stock intake for non-piece units (meter, kg, liter, etc.)
         const batch = writeBatch(db);
@@ -572,6 +770,8 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           salePrice: salePriceInput,
           updatedAt: serverTimestamp()
         });
+
+        await applyVendorPaymentToBatch(batch);
 
         const logRef = doc(collection(db, 'inventoryLogs'));
         batch.set(logRef, {
@@ -591,11 +791,23 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           vendorId: selectedVendorId || null,
           vendorName: selectedVendor?.companyName || null,
           referenceNumber: referenceNumber.trim() || null,
+          totalCost: totalBatchCost,
+          paymentDone: actualPaymentDone,
+          remainingAmount: actualRemaining,
+          paymentStatus: actualRemaining === 0 ? 'Paid' : (actualPaymentDone > 0 ? 'Partially Paid' : 'Pending'),
+          paymentMode: actualPaymentDone > 0 ? paymentMode : 'Credit',
+          bankAccountNumber: (actualPaymentDone > 0 && paymentMode === 'Online' && selectedBankAccNumber) ? selectedBankAccNumber : null,
+          bankName: (actualPaymentDone > 0 && paymentMode === 'Online' && matchedBank) ? matchedBank.bankName : null,
+          paymentNotes: paymentNotes.trim() || null,
           createdAt: serverTimestamp()
         });
 
         await batch.commit();
-        toast.success(`Successfully added ${quantityAdded} ${unitDisplay} to ${selectedProduct.name}! (Cost: PKR ${(quantityAdded * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+        if (selectedVendor) {
+          toast.success(`Successfully added ${quantityAdded} ${unitDisplay} to ${selectedProduct.name}! Vendor ${selectedVendor.companyName}: Payment Done PKR ${actualPaymentDone.toLocaleString()}, Remaining PKR ${actualRemaining.toLocaleString()}`);
+        } else {
+          toast.success(`Successfully added ${quantityAdded} ${unitDisplay} to ${selectedProduct.name}! (Cost: PKR ${(quantityAdded * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+        }
       }
 
       onBack();
@@ -635,6 +847,17 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
   const quantityToAdd = isSerialized ? serialNumbersList.length : numManualQty;
   const currentStock = selectedProduct?.stock || 0;
   const newStockTotal = currentStock + quantityToAdd;
+
+  // Selected Vendor & Payment Record Calculations
+  const selectedVendor = vendors.find(v => v.id === selectedVendorId);
+  const totalBatchCost = Number((quantityToAdd * purchasePriceInput).toFixed(2));
+  const enteredPaymentDone = paymentDone === '' ? 0 : (typeof paymentDone === 'number' ? paymentDone : (parseFloat(paymentDone) || 0));
+  const remainingAmount = Math.max(0, Number((totalBatchCost - enteredPaymentDone).toFixed(2)));
+  const currentVendorBalance = selectedVendor 
+    ? (selectedVendor.remainingAmount !== undefined ? selectedVendor.remainingAmount : (selectedVendor.balance || 0)) 
+    : 0;
+  const updatedVendorBalance = currentVendorBalance + remainingAmount;
+  const matchedBank = bankAccounts.find(b => b.accountNumber === selectedBankAccNumber);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
@@ -996,6 +1219,211 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 />
               </div>
             </div>
+
+            {/* Vendor Payment & Settlement Panel */}
+            {selectedVendor && (
+              <div className="mt-4 pt-4 border-t border-slate-200/80 space-y-3.5 bg-emerald-50/40 -mx-5 -mb-5 p-5 rounded-b-2xl border-emerald-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-[#0a382c]" />
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Vendor Payment & Settlement
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-600">
+                    Supplier: <strong className="text-slate-900">{selectedVendor.companyName || selectedVendor.name}</strong>
+                  </span>
+                </div>
+
+                {/* Vendor Existing Balance Record */}
+                <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs shadow-2xs">
+                  <span className="text-slate-600 font-medium">Previous Balance / Payable:</span>
+                  <span className={`font-mono font-black ${
+                    currentVendorBalance > 0 ? 'text-amber-700' : 'text-slate-700'
+                  }`}>
+                    PKR {currentVendorBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {/* Cost Breakdown & Payment Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Total Batch Intake Cost */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Batch Cost</span>
+                    <span className="text-sm font-black font-mono text-slate-900 block">
+                      PKR {totalBatchCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block truncate">
+                      {quantityToAdd} {unitDisplay} × PKR {purchasePriceInput.toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Payment Done (Amount Paid Now) */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1 shadow-2xs sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="paymentDoneInput" className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                        Payment Done (Amount Paid)
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentDone(totalBatchCost)}
+                          className="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded cursor-pointer transition-colors"
+                        >
+                          Full Paid
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentDone(Number((totalBatchCost / 2).toFixed(2)))}
+                          className="px-1.5 py-0.5 text-[9px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded cursor-pointer transition-colors"
+                        >
+                          50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentDone(0)}
+                          className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-100 hover:bg-rose-200 text-rose-900 rounded cursor-pointer transition-colors"
+                        >
+                          Unpaid (Credit)
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative mt-1">
+                      <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">PKR</span>
+                      <input
+                        type="number"
+                        id="paymentDoneInput"
+                        min="0"
+                        max={totalBatchCost}
+                        step="any"
+                        placeholder="0.00"
+                        value={paymentDone}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPaymentDone(val === '' ? '' : Math.max(0, parseFloat(val) || 0));
+                        }}
+                        className="glass-input block w-full rounded-lg py-1.5 pl-11 pr-3 text-xs font-bold text-emerald-950"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remaining Amount Stat Box & Visual Status */}
+                <div className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
+                  remainingAmount === 0 && totalBatchCost > 0
+                    ? 'bg-emerald-100/70 border-emerald-300 text-emerald-950'
+                    : enteredPaymentDone > 0
+                      ? 'bg-amber-50 border-amber-300 text-amber-950'
+                      : 'bg-rose-50 border-rose-300 text-rose-950'
+                }`}>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block opacity-75">
+                      Remaining Amount (Balance Due)
+                    </span>
+                    <span className="text-base font-black font-mono">
+                      PKR {remainingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      remainingAmount === 0 && totalBatchCost > 0
+                        ? 'bg-emerald-200 text-emerald-900'
+                        : enteredPaymentDone > 0
+                          ? 'bg-amber-200 text-amber-900'
+                          : 'bg-rose-200 text-rose-900'
+                    }`}>
+                      {remainingAmount === 0 && totalBatchCost > 0
+                        ? '✓ Fully Paid'
+                        : enteredPaymentDone > 0
+                          ? `Partial Payment (${((enteredPaymentDone / (totalBatchCost || 1)) * 100).toFixed(0)}%)`
+                          : 'Unpaid / On Credit'}
+                    </span>
+                    <p className="text-[10px] opacity-75 mt-0.5">
+                      {remainingAmount > 0
+                        ? `PKR ${remainingAmount.toFixed(2)} will be added to vendor balance`
+                        : 'Batch cost completely settled'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Payment Method & Bank selection (if paymentDone > 0) */}
+                {enteredPaymentDone > 0 && (
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-700">Payment Paid Via:</span>
+                      <div className="flex items-center gap-3 text-xs font-semibold">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="paymentMode"
+                            value="Cash"
+                            checked={paymentMode === 'Cash'}
+                            onChange={() => setPaymentMode('Cash')}
+                            className="text-[#0a382c] focus:ring-[#0a382c]"
+                          />
+                          <span>Cash</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="paymentMode"
+                            value="Online"
+                            checked={paymentMode === 'Online'}
+                            onChange={() => setPaymentMode('Online')}
+                            className="text-[#0a382c] focus:ring-[#0a382c]"
+                          />
+                          <span>Online Bank Transfer</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {paymentMode === 'Online' && (
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          Deduct from Store Bank Account:
+                        </label>
+                        {bankAccounts.length > 0 ? (
+                          <select
+                            value={selectedBankAccNumber}
+                            onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                            className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800"
+                          >
+                            {bankAccounts.map((acc, idx) => (
+                              <option key={idx} value={acc.accountNumber}>
+                                {acc.bankName} - {acc.accountTitle || acc.accountNumber} (Bal: PKR {(acc.balance || 0).toFixed(2)})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-xs text-amber-600 font-medium italic">
+                            No bank accounts found in Settings. Please add a bank account in Settings to record online payments.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Payment reference / cheque # / notes (optional)"
+                        value={paymentNotes}
+                        onChange={(e) => setPaymentNotes(e.target.value)}
+                        className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs text-slate-700"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Updated Vendor Balance Preview */}
+                <div className="flex items-center justify-between text-[11px] px-2 font-medium text-slate-600 pt-1 border-t border-emerald-100">
+                  <span>Vendor Outstanding after this intake:</span>
+                  <span className="font-mono font-black text-slate-900">
+                    PKR {updatedVendorBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Card 3: Batch Stock Impact Projection */}
@@ -1595,7 +2023,12 @@ SN-4029103"
                     Ready to add {quantityToAdd} {unitDisplay} to {selectedProduct.name}
                   </h4>
                   <p className="text-xs text-emerald-200 mt-0.5">
-                    Stock will increase from {currentStock} to {newStockTotal} {unitDisplay}. Total intake cost: PKR {(quantityToAdd * purchasePriceInput).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+                    Stock will increase from {currentStock} to {newStockTotal} {unitDisplay}. Total intake cost: PKR {totalBatchCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+                    {selectedVendor && (
+                      <span className="block sm:inline sm:ml-1 text-emerald-100 font-semibold">
+                        • Supplier {selectedVendor.companyName || selectedVendor.name}: Paid PKR {enteredPaymentDone.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, Remaining PKR {remainingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
