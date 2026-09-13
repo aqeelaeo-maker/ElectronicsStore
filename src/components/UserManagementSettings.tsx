@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  KeyRound
+  KeyRound,
+  Save
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { StoreUser, UserRole, DEFAULT_STORE_USERS } from '../types';
@@ -39,8 +40,92 @@ export default function UserManagementSettings() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Dedicated Credentials Modal State
+  const [isCredModalOpen, setIsCredModalOpen] = useState(false);
+  const [credTargetUser, setCredTargetUser] = useState<StoreUser | null>(null);
+  const [credUsername, setCredUsername] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [credConfirmPassword, setCredConfirmPassword] = useState('');
+  const [showCredPassword, setShowCredPassword] = useState(false);
+  const [savingCreds, setSavingCreds] = useState(false);
+
   const togglePasswordVisibility = (userId: string) => {
     setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  // Find Admin and User accounts
+  const adminAccount = storeUsers.find(u => u.role === 'Admin') || storeUsers[0];
+  const staffAccount = storeUsers.find(u => u.role === 'User') || storeUsers[1];
+
+  const handleOpenChangeCredentials = (user: StoreUser) => {
+    setCredTargetUser(user);
+    setCredUsername(user.username || (user.role === 'Admin' ? 'admin' : 'user'));
+    const currentPass = user.password || (user.role === 'Admin' ? 'admin123' : 'user123');
+    setCredPassword(currentPass);
+    setCredConfirmPassword(currentPass);
+    setShowCredPassword(false);
+    setIsCredModalOpen(true);
+  };
+
+  const handleSaveCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!credTargetUser) return;
+
+    const cleanUsername = credUsername.trim();
+    const cleanPassword = credPassword.trim();
+    const cleanConfirm = credConfirmPassword.trim();
+
+    if (!cleanUsername) {
+      toast.warning('Please enter a username');
+      return;
+    }
+
+    if (cleanUsername.length < 3) {
+      toast.warning('Username must be at least 3 characters long');
+      return;
+    }
+
+    if (!cleanPassword || cleanPassword.length < 4) {
+      toast.warning('Password must be at least 4 characters long');
+      return;
+    }
+
+    if (cleanPassword !== cleanConfirm) {
+      toast.error('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    // Check username uniqueness
+    const conflict = storeUsers.find(
+      u => u.id !== credTargetUser.id && (u.username || '').toLowerCase() === cleanUsername.toLowerCase()
+    );
+    if (conflict) {
+      toast.error(`The username "${cleanUsername}" is already taken by ${conflict.name}. Please choose another.`);
+      return;
+    }
+
+    setSavingCreds(true);
+    try {
+      const updated = storeUsers.map(u => {
+        if (u.id === credTargetUser.id) {
+          return {
+            ...u,
+            username: cleanUsername,
+            password: cleanPassword
+          };
+        }
+        return u;
+      });
+
+      await updateStoreUsers(updated);
+      toast.success(`Credentials for ${credTargetUser.role} (${credTargetUser.name}) updated! Username: "${cleanUsername}"`);
+      setIsCredModalOpen(false);
+    } catch (err: any) {
+      console.error('Error saving credentials:', err);
+      toast.error('Failed to update credentials');
+    } finally {
+      setSavingCreds(false);
+    }
   };
 
   const handleOpenAdd = () => {
@@ -257,17 +342,138 @@ export default function UserManagementSettings() {
         </div>
       </div>
 
-      {/* Information Banner */}
-      <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-[#0a382c] flex items-center justify-center shrink-0 mt-0.5">
-          <KeyRound className="w-4 h-4" />
+      {/* Prominent Section: Change Usernames and Passwords for Both Admin and User */}
+      <div className="p-5 rounded-2xl bg-gradient-to-br from-[#f8faf9] to-[#edf3f0] border border-emerald-900/10 shadow-xs">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-[#0a382c] text-emerald-300 flex items-center justify-center shadow-xs">
+            <KeyRound className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-900">
+              Change Usernames & Passwords for Admin and User
+            </h3>
+            <p className="text-xs text-slate-500">
+              Set custom login credentials below. Changes take effect immediately for both roles.
+            </p>
+          </div>
         </div>
-        <div className="text-xs text-slate-600 leading-relaxed">
-          <p className="font-bold text-slate-900 mb-0.5">Individual Credentials for Admin & User</p>
-          <p>
-            Both Admin and User log in using their own unique <strong>Username</strong> and <strong>Password</strong>.
-            As an Admin, you have full control to set and change credentials for both accounts below. When saved, users can immediately sign in with their updated credentials.
-          </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          {/* Admin Credentials Card */}
+          {adminAccount && (
+            <div className="p-4 rounded-xl bg-white border border-emerald-200/90 shadow-2xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-700 text-white flex items-center justify-center">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-emerald-950 block">1. Admin Account</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{adminAccount.name}</span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Full Access
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 my-3 p-3 rounded-lg bg-slate-50 border border-slate-200/80 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase">Username:</span>
+                    <code className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {adminAccount.username || 'admin'}
+                    </code>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase">Password:</span>
+                    <div className="flex items-center gap-1">
+                      <code className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {visiblePasswords[adminAccount.id] 
+                          ? (adminAccount.password || 'admin123') 
+                          : '••••••••'}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility(adminAccount.id)}
+                        className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                        title={visiblePasswords[adminAccount.id] ? "Hide password" : "Show password"}
+                      >
+                        {visiblePasswords[adminAccount.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleOpenChangeCredentials(adminAccount)}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Change Admin Username & Password</span>
+              </button>
+            </div>
+          )}
+
+          {/* User Credentials Card */}
+          {staffAccount && (
+            <div className="p-4 rounded-xl bg-white border border-blue-200/90 shadow-2xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-black text-blue-950 block">2. User Account</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{staffAccount.name}</span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-blue-100 text-blue-800 border border-blue-200">
+                    Restricted
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 my-3 p-3 rounded-lg bg-slate-50 border border-slate-200/80 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase">Username:</span>
+                    <code className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {staffAccount.username || 'user'}
+                    </code>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase">Password:</span>
+                    <div className="flex items-center gap-1">
+                      <code className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {visiblePasswords[staffAccount.id] 
+                          ? (staffAccount.password || 'user123') 
+                          : '••••••••'}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility(staffAccount.id)}
+                        className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                        title={visiblePasswords[staffAccount.id] ? "Hide password" : "Show password"}
+                      >
+                        {visiblePasswords[staffAccount.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleOpenChangeCredentials(staffAccount)}
+                className="w-full mt-2 inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-blue-700 hover:bg-blue-800 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Change User Username & Password</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -433,7 +639,18 @@ export default function UserManagementSettings() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                  {/* Dedicated Change Credentials Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenChangeCredentials(user)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title={`Change username and password for ${user.name}`}
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>Change Credentials</span>
+                  </button>
+
                   {!isCurrentActive ? (
                     <button
                       type="button"
@@ -678,6 +895,139 @@ export default function UserManagementSettings() {
                   className="px-5 py-2 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] rounded-xl shadow-xs transition-all disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : editingUserId ? 'Update User' : 'Save User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Dedicated Change Credentials Modal */}
+      {isCredModalOpen && credTargetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-150 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-[#0a382c] flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Change {credTargetUser.role} Credentials
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Account: {credTargetUser.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCredModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCredentials} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Username <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
+                    @
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. admin or user"
+                    value={credUsername}
+                    onChange={(e) => setCredUsername(e.target.value)}
+                    className="glass-input block w-full pl-7 pr-3 py-2 text-xs font-semibold text-slate-800 rounded-xl"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  The user will enter this username to sign in. Must be unique.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  New Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type={showCredPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={credPassword}
+                    onChange={(e) => setCredPassword(e.target.value)}
+                    className="glass-input block w-full pl-8 pr-10 py-2 text-xs font-semibold text-slate-800 rounded-xl font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCredPassword(!showCredPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  >
+                    {showCredPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Minimum 4 characters long.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Confirm Password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type={showCredPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={credConfirmPassword}
+                    onChange={(e) => setCredConfirmPassword(e.target.value)}
+                    className="glass-input block w-full pl-8 pr-10 py-2 text-xs font-semibold text-slate-800 rounded-xl font-mono"
+                  />
+                  {credPassword && credConfirmPassword && (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      {credPassword === credConfirmPassword ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-500" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                {credPassword && credConfirmPassword && credPassword !== credConfirmPassword && (
+                  <p className="text-[10px] text-rose-500 mt-1 font-medium">
+                    Passwords do not match.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCredModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCreds}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-[#0a382c] hover:bg-[#0d4a3b] rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingCreds ? 'Saving...' : 'Save Credentials'}</span>
                 </button>
               </div>
             </form>

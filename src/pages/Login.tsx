@@ -4,19 +4,14 @@ import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { 
   Package, 
-  ShieldCheck, 
-  User as UserIcon, 
   Lock, 
   Eye, 
   EyeOff, 
   AlertCircle, 
-  KeyRound, 
-  ArrowRight,
-  Sparkles
+  ArrowRight
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { cn } from '../lib/utils';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -35,10 +30,6 @@ export default function Login() {
       navigate('/', { replace: true });
     }
   }, [sessionUser, navigate]);
-
-  // Find Admin and User accounts from configured store users
-  const adminAccount = storeUsers.find(u => u.role === 'Admin') || storeUsers[0];
-  const staffAccount = storeUsers.find(u => u.role === 'User') || storeUsers[1];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,33 +62,6 @@ export default function Login() {
     }
   };
 
-  const handleQuickFill = async (account: typeof adminAccount, autoSubmit = false) => {
-    if (!account) return;
-    const loginUser = account.username || (account.role === 'Admin' ? 'admin' : 'user');
-    const loginPass = account.password || (account.role === 'Admin' ? 'admin123' : 'user123');
-
-    setUsernameOrEmail(loginUser);
-    setPassword(loginPass);
-    setErrorMessage(null);
-
-    if (autoSubmit) {
-      setLoading(true);
-      try {
-        const result = await loginWithCredentials(loginUser, loginPass);
-        if (result.success && result.user) {
-          toast.success(`Welcome, ${result.user.name}! Signed in as ${result.user.role}.`);
-          navigate('/', { replace: true });
-        } else {
-          setErrorMessage(result.error || 'Invalid credentials');
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || 'Login failed');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
   const handleGoogleLogin = async () => {
     setLoading(true);
     setErrorMessage(null);
@@ -105,8 +69,9 @@ export default function Login() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       // Fallback default admin signin
-      if (adminAccount) {
-        await loginWithCredentials(adminAccount.username || 'admin', adminAccount.password || 'admin123');
+      const adminAcc = storeUsers.find(u => u.role === 'Admin') || storeUsers[0];
+      if (adminAcc) {
+        await loginWithCredentials(adminAcc.username || 'admin', adminAcc.password || 'admin123');
       }
       toast.success('Logged in with Google successfully');
       navigate('/', { replace: true });
@@ -145,71 +110,6 @@ export default function Login() {
             <p className="text-xs text-slate-500 mt-0.5">
               Enter your assigned username and password to access the system.
             </p>
-          </div>
-
-          {/* Quick 1-Click Credentials Selector */}
-          <div className="mb-5 p-3 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-emerald-600" />
-                Quick 1-Click Demo Login:
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium">Click to sign in</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {/* Admin Chip */}
-              {adminAccount && (
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill(adminAccount, true)}
-                  disabled={loading}
-                  className="p-2.5 rounded-lg bg-white hover:bg-emerald-50 border border-emerald-200/80 hover:border-emerald-400 transition-all text-left shadow-2xs group cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-emerald-950 flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                      <span>1. Admin</span>
-                    </span>
-                    <span className="text-[9px] font-black uppercase px-1 py-0.2 rounded bg-emerald-100 text-emerald-800">
-                      Full
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">
-                    user: <span className="font-bold text-slate-700">{adminAccount.username || 'admin'}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">
-                    pass: <span className="font-bold text-slate-700">{adminAccount.password || 'admin123'}</span>
-                  </div>
-                </button>
-              )}
-
-              {/* User Chip */}
-              {staffAccount && (
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill(staffAccount, true)}
-                  disabled={loading}
-                  className="p-2.5 rounded-lg bg-white hover:bg-blue-50 border border-blue-200/80 hover:border-blue-400 transition-all text-left shadow-2xs group cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-blue-950 flex items-center gap-1">
-                      <UserIcon className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                      <span>2. User</span>
-                    </span>
-                    <span className="text-[9px] font-black uppercase px-1 py-0.2 rounded bg-blue-100 text-blue-800">
-                      Restricted
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">
-                    user: <span className="font-bold text-slate-700">{staffAccount.username || 'user'}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono truncate">
-                    pass: <span className="font-bold text-slate-700">{staffAccount.password || 'user123'}</span>
-                  </div>
-                </button>
-              )}
-            </div>
           </div>
 
           {/* Error Message Alert */}
