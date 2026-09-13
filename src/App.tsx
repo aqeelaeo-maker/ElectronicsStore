@@ -24,7 +24,7 @@ const Placeholder = ({ title }: { title: string }) => (
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading, role, status, logout } = useAuth();
+  const { user, sessionUser, loading, role, status, logout } = useAuth();
 
   if (loading) {
     return (
@@ -36,7 +36,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  if (!user) {
+  if (!sessionUser) {
     return <Navigate to="/login" replace />;
   }
 

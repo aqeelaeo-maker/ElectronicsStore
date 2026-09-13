@@ -3,6 +3,8 @@ export type UserRole = 'Admin' | 'User';
 export interface StoreUser {
   id: string;
   name: string;
+  username: string;
+  password?: string;
   email: string;
   role: UserRole;
   status: 'Active' | 'Inactive';
@@ -16,6 +18,8 @@ export const DEFAULT_STORE_USERS: StoreUser[] = [
   {
     id: 'user-admin',
     name: 'Admin',
+    username: 'admin',
+    password: 'admin123',
     email: 'admin@electromanage.com',
     role: 'Admin',
     status: 'Active',
@@ -26,6 +30,8 @@ export const DEFAULT_STORE_USERS: StoreUser[] = [
   {
     id: 'user-staff',
     name: 'User',
+    username: 'user',
+    password: 'user123',
     email: 'user@electromanage.com',
     role: 'User',
     status: 'Active',

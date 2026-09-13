@@ -32,7 +32,7 @@ const allNavigation = [
 ];
 
 export default function Layout() {
-  const { user, storeId, logout, activeRole, activeUser, switchActiveRole, isUser } = useAuth();
+  const { user, storeId, logout, activeRole, activeUser, sessionUser, switchActiveRole, isUser } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
@@ -163,7 +163,7 @@ export default function Layout() {
             </div>
             <div className="ml-3 min-w-0 flex-1">
               <p className="text-xs font-bold text-white truncate">
-                {activeUser?.name || (activeRole === 'Admin' ? 'Admin' : 'User')}
+                {sessionUser?.name || activeUser?.name || (activeRole === 'Admin' ? 'Admin' : 'User')}
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className={cn(
@@ -172,15 +172,15 @@ export default function Layout() {
                 )}>
                   {activeRole}
                 </span>
-                <span className="text-[10px] text-emerald-200/60 truncate">
-                  {activeRole === 'Admin' ? 'Full Access' : 'Restricted'}
+                <span className="text-[10px] text-emerald-200/70 truncate font-mono">
+                  @{sessionUser?.username || (activeRole === 'Admin' ? 'admin' : 'user')}
                 </span>
               </div>
             </div>
           </div>
           <button 
             onClick={() => logout()}
-            className="mt-2.5 flex w-full items-center justify-center px-4 py-1.5 text-xs font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-xl transition-all"
+            className="mt-2.5 flex w-full items-center justify-center px-4 py-1.5 text-xs font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-xl transition-all cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5 mr-2" />
             Sign Out
@@ -200,47 +200,54 @@ export default function Layout() {
           </button>
           
           <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
-             {/* Active Role Quick Switcher */}
-             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-               <button
-                 type="button"
-                 onClick={() => {
-                   if (activeRole !== 'Admin') {
-                     switchActiveRole('Admin');
-                     toast.success('Switched to Admin role: Full access restored');
-                   }
-                 }}
-                 className={cn(
-                   "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                   activeRole === 'Admin'
-                     ? "bg-[#0a382c] text-white shadow-xs"
-                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                 )}
-                 title="Switch to Admin mode (Full access to all modules and financials)"
-               >
-                 <ShieldCheck className="w-3.5 h-3.5" />
-                 <span>Admin</span>
-               </button>
-               <button
-                 type="button"
-                 onClick={() => {
-                   if (activeRole !== 'User') {
-                     switchActiveRole('User');
-                     toast.info('Switched to User role: Only Dashboard, Sales, Products, and Customers accessible. Sensitive metrics hidden.');
-                   }
-                 }}
-                 className={cn(
-                   "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
-                   activeRole === 'User'
-                     ? "bg-blue-700 text-white shadow-xs"
-                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                 )}
-                 title="Switch to User mode (Restricted: Dashboard, Sales, Products, Customers only)"
-               >
-                 <UserIcon className="w-3.5 h-3.5" />
-                 <span>User</span>
-               </button>
-             </div>
+             {/* Role Status or Admin Preview Switcher */}
+             {sessionUser?.role === 'User' ? (
+               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold">
+                 <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+                 <span>User Mode (Restricted)</span>
+               </div>
+             ) : (
+               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                 <button
+                   type="button"
+                   onClick={() => {
+                     if (activeRole !== 'Admin') {
+                       switchActiveRole('Admin');
+                       toast.success('Switched to Admin role: Full access restored');
+                     }
+                   }}
+                   className={cn(
+                     "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                     activeRole === 'Admin'
+                       ? "bg-[#0a382c] text-white shadow-xs"
+                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                   )}
+                   title="Admin view (Full access to all modules and financials)"
+                 >
+                   <ShieldCheck className="w-3.5 h-3.5" />
+                   <span>Admin</span>
+                 </button>
+                 <button
+                   type="button"
+                   onClick={() => {
+                     if (activeRole !== 'User') {
+                       switchActiveRole('User');
+                       toast.info('Switched to User preview: Only Dashboard, Sales, Products, Customers accessible.');
+                     }
+                   }}
+                   className={cn(
+                     "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                     activeRole === 'User'
+                       ? "bg-blue-700 text-white shadow-xs"
+                       : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                   )}
+                   title="Test User view (Restricted: Dashboard, Sales, Products, Customers only)"
+                 >
+                   <UserIcon className="w-3.5 h-3.5" />
+                   <span>User</span>
+                 </button>
+               </div>
+             )}
 
              {/* Profile selection with dynamic store name and logo */}
              <div className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 rounded-full border border-slate-200 transition-all cursor-pointer">

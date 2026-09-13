@@ -13,7 +13,8 @@ import {
   Check, 
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  KeyRound
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { StoreUser, UserRole, DEFAULT_STORE_USERS } from '../types';
@@ -27,6 +28,10 @@ export default function UserManagementSettings() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showModalPassword, setShowModalPassword] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('User');
   const [phone, setPhone] = useState('');
@@ -34,9 +39,16 @@ export default function UserManagementSettings() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const togglePasswordVisibility = (userId: string) => {
+    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
   const handleOpenAdd = () => {
     setEditingUserId(null);
     setName('');
+    setUsername('');
+    setPassword('');
+    setShowModalPassword(false);
     setEmail('');
     setRole('User');
     setPhone('');
@@ -48,6 +60,9 @@ export default function UserManagementSettings() {
   const handleOpenEdit = (user: StoreUser) => {
     setEditingUserId(user.id);
     setName(user.name);
+    setUsername(user.username || (user.role === 'Admin' ? 'admin' : 'user'));
+    setPassword(user.password || (user.role === 'Admin' ? 'admin123' : 'user123'));
+    setShowModalPassword(false);
     setEmail(user.email);
     setRole(user.role);
     setPhone(user.phone || '');
@@ -62,8 +77,25 @@ export default function UserManagementSettings() {
       toast.warning('Please enter the user name');
       return;
     }
+    if (!username.trim()) {
+      toast.warning('Please enter a username for login');
+      return;
+    }
+    if (!password.trim() || password.trim().length < 4) {
+      toast.warning('Password must be at least 4 characters long');
+      return;
+    }
     if (!email.trim()) {
       toast.warning('Please enter an email address');
+      return;
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+    const conflict = storeUsers.find(
+      u => u.id !== editingUserId && (u.username || '').toLowerCase() === cleanUsername
+    );
+    if (conflict) {
+      toast.error(`The username "${username.trim()}" is already assigned to ${conflict.name}. Choose another.`);
       return;
     }
 
@@ -76,6 +108,8 @@ export default function UserManagementSettings() {
             return {
               ...u,
               name: name.trim(),
+              username: username.trim(),
+              password: password.trim(),
               email: email.trim(),
               role,
               phone: phone.trim(),
@@ -95,12 +129,14 @@ export default function UserManagementSettings() {
         }
 
         await updateStoreUsers(updated);
-        toast.success(`User "${name}" updated successfully`);
+        toast.success(`Credentials and details for "${name}" updated successfully!`);
       } else {
         // Add new
         const newUser: StoreUser = {
           id: `user-${Date.now()}`,
           name: name.trim(),
+          username: username.trim(),
+          password: password.trim(),
           email: email.trim(),
           role,
           phone: phone.trim(),
@@ -110,7 +146,7 @@ export default function UserManagementSettings() {
         };
         const updated = [...storeUsers, newUser];
         await updateStoreUsers(updated);
-        toast.success(`New ${role} user "${name}" added successfully`);
+        toast.success(`New ${role} user "${name}" added with username "${username.trim()}"!`);
       }
       setIsModalOpen(false);
     } catch (err: any) {
@@ -218,6 +254,20 @@ export default function UserManagementSettings() {
             <Plus className="w-4 h-4" />
             <span>Add User</span>
           </button>
+        </div>
+      </div>
+
+      {/* Information Banner */}
+      <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-[#0a382c] flex items-center justify-center shrink-0 mt-0.5">
+          <KeyRound className="w-4 h-4" />
+        </div>
+        <div className="text-xs text-slate-600 leading-relaxed">
+          <p className="font-bold text-slate-900 mb-0.5">Individual Credentials for Admin & User</p>
+          <p>
+            Both Admin and User log in using their own unique <strong>Username</strong> and <strong>Password</strong>.
+            As an Admin, you have full control to set and change credentials for both accounts below. When saved, users can immediately sign in with their updated credentials.
+          </p>
         </div>
       </div>
 
@@ -347,7 +397,34 @@ export default function UserManagementSettings() {
                       {user.phone && <span>• {user.phone}</span>}
                     </div>
 
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    {/* Username & Password Credentials display */}
+                    <div className="flex items-center gap-3 mt-2 text-xs flex-wrap bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/80 w-fit">
+                      <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase">Username:</span>
+                        <code className="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {user.username || (isAdminRole ? 'admin' : 'user')}
+                        </code>
+                      </div>
+                      <div className="h-3 w-px bg-slate-300" />
+                      <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase">Password:</span>
+                        <code className="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {visiblePasswords[user.id] 
+                            ? (user.password || (isAdminRole ? 'admin123' : 'user123')) 
+                            : '••••••••'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(user.id)}
+                          className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                          title={visiblePasswords[user.id] ? "Hide password" : "Show password"}
+                        >
+                          {visiblePasswords[user.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 mt-2">
                       {isAdminRole 
                         ? 'Full Access: All modules, financials, inventory, settings' 
                         : 'Restricted Access: Dashboard (hidden metrics), Sales, Products, Customers only'}
@@ -447,6 +524,61 @@ export default function UserManagementSettings() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800"
                 />
+              </div>
+
+              {/* Login Credentials Section */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <KeyRound className="w-4 h-4 text-emerald-700" />
+                  <span>Login Credentials</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Username (Login ID) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. admin or user"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="glass-input block w-full rounded-xl py-2 px-3 pl-8 text-xs font-semibold text-slate-800 bg-white"
+                    />
+                    <span className="absolute left-2.5 top-2 text-xs text-slate-400 font-bold">@</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Unique identifier used to sign in to this account
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showModalPassword ? "text" : "password"}
+                      required
+                      placeholder="Set account password (min 4 chars)"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="glass-input block w-full rounded-xl py-2 px-3 pr-9 text-xs font-semibold text-slate-800 bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowModalPassword(!showModalPassword)}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                      title={showModalPassword ? "Hide password" : "Show password"}
+                    >
+                      {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Admin can update passwords for both Admin and User anytime
+                  </p>
+                </div>
               </div>
 
               <div>
