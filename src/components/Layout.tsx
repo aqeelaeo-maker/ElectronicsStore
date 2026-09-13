@@ -32,7 +32,7 @@ const allNavigation = [
 ];
 
 export default function Layout() {
-  const { user, storeId, logout, activeRole, activeUser, sessionUser, switchActiveRole, isUser } = useAuth();
+  const { user, storeId, logout, clearSessionUser, activeRole, activeUser, sessionUser, switchActiveRole, isUser } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
@@ -178,13 +178,29 @@ export default function Layout() {
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => logout()}
-            className="mt-2.5 flex w-full items-center justify-center px-4 py-1.5 text-xs font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-xl transition-all cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5 mr-2" />
-            Sign Out
-          </button>
+          <div className="mt-2.5 flex items-center gap-1.5">
+            <button 
+              type="button"
+              onClick={() => {
+                clearSessionUser();
+                toast.info('Store session ended. Select Admin or User login.');
+              }}
+              className="flex-1 flex items-center justify-center px-2 py-1.5 text-[11px] font-bold text-emerald-200 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-800/40 rounded-xl transition-all cursor-pointer shadow-2xs"
+              title="Switch between Admin and User login"
+            >
+              <Users className="w-3 h-3 mr-1" />
+              Switch
+            </button>
+            <button 
+              type="button"
+              onClick={() => logout()}
+              className="flex-1 flex items-center justify-center px-2 py-1.5 text-[11px] font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-xl transition-all cursor-pointer shadow-2xs"
+              title="Sign out of store and Google account"
+            >
+              <LogOut className="w-3 h-3 mr-1" />
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 

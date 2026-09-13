@@ -12,6 +12,8 @@ interface AuthContextType {
   status: string | null;
   loading: boolean;
   logout: () => Promise<void>;
+  signOutGoogle: () => Promise<void>;
+  clearSessionUser: () => void;
   activeRole: UserRole;
   activeUser: StoreUser | null;
   storeUsers: StoreUser[];
@@ -31,6 +33,8 @@ const AuthContext = createContext<AuthContextType>({
   status: null,
   loading: true,
   logout: async () => {},
+  signOutGoogle: async () => {},
+  clearSessionUser: () => {},
   activeRole: 'Admin',
   activeUser: null,
   storeUsers: DEFAULT_STORE_USERS,
@@ -210,16 +214,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, [storeId, activeRole, sessionUser]);
 
-  // Synchronize initial sessionUser if Firebase user is logged in
-  useEffect(() => {
-    if (user && !sessionUser && storeUsers && storeUsers.length > 0) {
-      const defaultUser = storeUsers.find(u => u.role === (activeRole || 'Admin')) || storeUsers[0];
-      setSessionUser(defaultUser);
-      setActiveUser(defaultUser);
-      localStorage.setItem('app_session_user', JSON.stringify(defaultUser));
-    }
-  }, [user, sessionUser, storeUsers, activeRole]);
-
   const switchActiveRole = (newRole: UserRole, profile?: StoreUser) => {
     setActiveRole(newRole);
     localStorage.setItem('app_active_role', newRole);
@@ -350,16 +344,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await updateStoreUsers(updated);
   };
 
-  const logout = async () => {
+  const clearSessionUser = () => {
     setSessionUser(null);
     localStorage.removeItem('app_session_user');
     localStorage.removeItem('app_active_role');
     localStorage.removeItem('app_active_user_id');
+  };
+
+  const signOutGoogle = async () => {
     try {
       await signOut(auth);
     } catch (err) {
-      console.warn('Sign out error:', err);
+      console.warn('Sign out of Google error:', err);
     }
+  };
+
+  const logout = async () => {
+    clearSessionUser();
+    await signOutGoogle();
   };
 
   // Effective role is determined by sessionUser or activeRole
@@ -376,6 +378,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status, 
       loading, 
       logout,
+      signOutGoogle,
+      clearSessionUser,
       activeRole,
       activeUser,
       storeUsers,
