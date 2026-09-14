@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Users, Receipt } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import CustomerLedgerModal from '../components/CustomerLedgerModal';
+import CustomerLedgerView from '../components/CustomerLedgerView';
 
 interface Customer {
   id: string;
@@ -120,6 +120,17 @@ export default function Customers() {
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.mobile.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (ledgerCustomer) {
+    const currentCustomer = customers.find(c => c.id === ledgerCustomer.id) || ledgerCustomer;
+    return (
+      <CustomerLedgerView
+        customer={currentCustomer}
+        storeId={storeId || ''}
+        onBack={() => setLedgerCustomer(null)}
+      />
+    );
+  }
 
   const isFormOpen = showAddForm || !!editingCustomer;
 
@@ -311,13 +322,6 @@ export default function Customers() {
           </table>
         </div>
       </div>
-
-      <CustomerLedgerModal
-        isOpen={!!ledgerCustomer}
-        onClose={() => setLedgerCustomer(null)}
-        customer={ledgerCustomer}
-        storeId={storeId || ''}
-      />
     </div>
   );
 }
