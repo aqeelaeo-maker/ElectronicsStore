@@ -13,6 +13,9 @@ interface Customer {
   email: string;
   city: string;
   balance: number;
+  storeId?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export default function Customers() {
@@ -126,7 +129,7 @@ export default function Customers() {
     return (
       <CustomerLedgerView
         customer={currentCustomer}
-        storeId={storeId || ''}
+        storeId={storeId || currentCustomer.storeId || ''}
         onBack={() => setLedgerCustomer(null)}
       />
     );

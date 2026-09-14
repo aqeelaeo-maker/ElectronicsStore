@@ -35,6 +35,32 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
+
+// Helper to strip any undefined values and prevent Firestore rejection
+function cleanDataForFirestore(obj: any): any {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj;
+  // Handle Firestore FieldValue / Timestamp
+  if (
+    ('_methodName' in obj) ||
+    (obj.constructor && obj.constructor.name === 'FieldValue') ||
+    (typeof (obj as any).isEqual === 'function' && '_delegate' in obj)
+  ) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(cleanDataForFirestore);
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = cleanDataForFirestore(value);
+    }
+  }
+  return clean;
+}
 
 export interface Customer {
   id: string;
@@ -43,6 +69,9 @@ export interface Customer {
   email: string;
   city: string;
   balance: number;
+  storeId?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface CustomerPaymentRecord {
@@ -117,6 +146,9 @@ export default function CustomerLedgerView({
   storeId,
   onBack
 }: CustomerLedgerViewProps) {
+  const { storeId: authStoreId, user } = useAuth();
+  const activeStoreId = storeId || authStoreId || (customer as any)?.storeId || user?.uid || '';
+
   const [sales, setSales] = useState<CustomerSaleRecord[]>([]);
   const [payments, setPayments] = useState<CustomerPaymentRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -140,8 +172,8 @@ export default function CustomerLedgerView({
 
   // Fetch Store Details & Bank Accounts
   useEffect(() => {
-    if (!storeId) return;
-    const storeRef = doc(db, 'stores', storeId);
+    if (!activeStoreId) return;
+    const storeRef = doc(db, 'stores', activeStoreId);
     getDoc(storeRef).then(snap => {
       if (snap.exists()) {
         const data = snap.data();
@@ -153,18 +185,18 @@ export default function CustomerLedgerView({
         }
       }
     }).catch(err => console.warn('Could not fetch store details:', err));
-  }, [storeId]);
+  }, [activeStoreId]);
 
   // Fetch customer sales and payment records
   useEffect(() => {
-    if (!storeId || !customer) return;
+    if (!activeStoreId || !customer?.id) return;
 
     setLoading(true);
 
     // Sales query for this customer
     const salesQuery = query(
       collection(db, 'sales'),
-      where('storeId', '==', storeId),
+      where('storeId', '==', activeStoreId),
       where('customerId', '==', customer.id)
     );
 
@@ -182,7 +214,7 @@ export default function CustomerLedgerView({
     // Payments query for this customer
     const paymentsQuery = query(
       collection(db, 'customerPayments'),
-      where('storeId', '==', storeId),
+      where('storeId', '==', activeStoreId),
       where('customerId', '==', customer.id)
     );
 
@@ -207,7 +239,7 @@ export default function CustomerLedgerView({
       unsubSales();
       unsubPayments();
     };
-  }, [storeId, customer]);
+  }, [activeStoreId, customer?.id]);
 
   // Financial calculations
   const financialTotals = useMemo(() => {
@@ -235,10 +267,129 @@ export default function CustomerLedgerView({
     };
   }, [sales, customer]);
 
+  // Thermal voucher / Receipt Print for an individual payment
+  const printPaymentReceipt = (payment: CustomerPaymentRecord) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.info('Popup blocked. Please allow popups to print payment receipt.');
+      return;
+    }
+
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Payment Receipt - ${payment.referenceNo || payment.id}</title>
+          <style>
+            @page { size: 80mm auto; margin: 4mm; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              width: 72mm;
+              margin: 0 auto;
+              padding: 6px;
+              color: #000;
+              font-size: 11px;
+              line-height: 1.35;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            .font-mono { font-family: monospace; }
+            .divider { border-top: 1px dashed #000; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .title { font-size: 14px; font-weight: 900; text-transform: uppercase; margin-bottom: 2px; }
+            .badge { display: inline-block; padding: 2px 6px; border: 1px solid #000; font-weight: bold; font-size: 10px; text-transform: uppercase; margin: 4px 0; }
+            .amount-box { border: 1.5px solid #000; padding: 6px; text-align: center; margin: 6px 0; }
+            .amount-val { font-size: 16px; font-weight: 900; }
+            .footer { margin-top: 14px; text-align: center; font-size: 9px; }
+            .sig-line { margin-top: 25px; border-top: 1px dotted #000; padding-top: 3px; text-align: center; font-size: 9px; }
+          </style>
+        </head>
+        <body>
+          <div class="text-center">
+            <div class="title">${storeDetails?.name || 'OFFICIAL PAYMENT RECEIPT'}</div>
+            ${storeDetails?.phone ? `<div>Phone: ${storeDetails.phone}</div>` : ''}
+            ${storeDetails?.address ? `<div>Address: ${storeDetails.address}</div>` : ''}
+            <div class="badge">Payment Receipt Voucher</div>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="row">
+            <span>Receipt #:</span>
+            <span class="font-mono font-bold">${payment.referenceNo || payment.id.slice(-8).toUpperCase()}</span>
+          </div>
+          <div class="row">
+            <span>Date:</span>
+            <span>${payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString() : new Date().toLocaleDateString()}</span>
+          </div>
+          <div class="row">
+            <span>Customer:</span>
+            <span class="font-bold">${customer.name}</span>
+          </div>
+          <div class="row">
+            <span>Mobile:</span>
+            <span>${customer.mobile || '—'}</span>
+          </div>
+          ${customer.city ? `
+          <div class="row">
+            <span>City:</span>
+            <span>${customer.city}</span>
+          </div>` : ''}
+          
+          <div class="divider"></div>
+          
+          <div class="amount-box">
+            <div style="font-size: 10px; font-weight: bold; text-transform: uppercase;">Amount Received</div>
+            <div class="amount-val font-mono">PKR ${(payment.paidAmount || 0).toFixed(2)}</div>
+            <div style="font-size: 9px;">Mode: ${payment.paymentMode || 'Cash'} ${payment.bankName ? `(${payment.bankName})` : ''}</div>
+          </div>
+
+          <div class="row">
+            <span>Remaining Balance:</span>
+            <span class="font-mono font-bold">PKR ${(payment.pendingAmount !== undefined ? payment.pendingAmount : (customer.balance || 0)).toFixed(2)}</span>
+          </div>
+          ${payment.notes ? `
+          <div style="margin-top: 4px; font-size: 9.5px;">
+            <span class="font-bold">Remarks:</span> ${payment.notes}
+          </div>` : ''}
+
+          <div class="sig-line">
+            Received by Authorized Representative
+          </div>
+
+          <div class="footer">
+            Thank you for your business!<br/>
+            Printed on: ${new Date().toLocaleString()}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(() => window.close(), 800);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
+  };
+
   // Handle recording manual payment from customer
   const handleReceivePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!storeId || !customer) return;
+    if (!customer?.id) {
+      toast.error('Customer information is missing.');
+      return;
+    }
+
+    const effectiveStoreId = activeStoreId;
+    if (!effectiveStoreId) {
+      toast.error('Store ID could not be determined. Please refresh the page and try again.');
+      return;
+    }
 
     const amount = parseFloat(receivingAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -258,72 +409,153 @@ export default function CustomerLedgerView({
         ? bankAccounts.find(b => b.accountNumber === selectedBankAcc)
         : null;
 
-      // 1. Update customer balance
+      // 1. Determine customer balance safely
       const customerRef = doc(db, 'customers', customer.id);
-      const custSnap = await getDoc(customerRef);
-      const currentCustBal = custSnap.exists() ? (custSnap.data().balance || 0) : customer.balance;
+      let currentCustBal = (typeof customer.balance === 'number' && !isNaN(customer.balance)) 
+        ? customer.balance 
+        : (parseFloat(customer.balance as any) || 0);
+
+      try {
+        const custSnap = await getDoc(customerRef);
+        if (custSnap.exists()) {
+          const raw = custSnap.data().balance;
+          if (typeof raw === 'number' && !isNaN(raw)) {
+            currentCustBal = raw;
+          } else if (raw !== undefined && raw !== null) {
+            currentCustBal = parseFloat(raw) || 0;
+          }
+        }
+      } catch (custReadErr) {
+        console.warn('Could not re-fetch customer balance, using local state:', custReadErr);
+      }
+
+      if (currentCustBal === 0 && financialTotals.totalPending > 0) {
+        currentCustBal = financialTotals.totalPending;
+      }
+
       const newBalance = Number(Math.max(0, currentCustBal - amount).toFixed(2));
 
-      batch.update(customerRef, {
+      // Update customer document safely with merge: true to avoid missing doc failure
+      batch.set(customerRef, cleanDataForFirestore({
         balance: newBalance,
+        storeId: effectiveStoreId,
         updatedAt: serverTimestamp()
-      });
+      }), { merge: true });
 
       // 2. Add customerPayments entry
       const paymentRecordId = doc(collection(db, 'customerPayments')).id;
       const paymentRef = doc(db, 'customerPayments', paymentRecordId);
-      batch.set(paymentRef, {
+      const receiptNo = `RCPT-${Date.now().toString(36).toUpperCase()}`;
+
+      const paymentRecordPayload = cleanDataForFirestore({
         id: paymentRecordId,
-        storeId,
+        storeId: effectiveStoreId,
         customerId: customer.id,
-        customerName: customer.name,
+        customerName: customer.name || 'Customer',
         totalAmount: 0,
         paidAmount: amount,
         pendingAmount: newBalance,
-        paymentMode,
-        bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
-        bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
-        paymentDate,
+        paymentMode: paymentMode || 'Cash',
+        bankAccountNumber: paymentMode === 'Online' && matchedBank ? (matchedBank.accountNumber || null) : null,
+        bankName: paymentMode === 'Online' && matchedBank ? (matchedBank.bankName || null) : null,
+        paymentDate: paymentDate || new Date().toISOString().split('T')[0],
         type: 'PaymentReceived',
-        notes: paymentNotes.trim() || `Received PKR ${amount.toFixed(2)} payment against outstanding customer ledger balance`,
+        referenceNo: receiptNo,
+        notes: paymentNotes.trim() || `Received PKR ${amount.toFixed(2)} payment against customer balance`,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
 
-      // 3. If online payment, deposit into store bank account
+      batch.set(paymentRef, paymentRecordPayload);
+
+      // 3. Reconcile / allocate payment across pending customer invoices (FIFO)
+      let remainingToAllocate = amount;
+      const pendingSales = [...sales]
+        .filter(s => {
+          const pending = s.pendingAmount !== undefined 
+            ? s.pendingAmount 
+            : (s.status === 'Pending' ? s.total : 0);
+          return (pending > 0) || s.status === 'Pending' || s.status === 'Partial';
+        })
+        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+        .slice(0, 50);
+
+      for (const pendingSale of pendingSales) {
+        if (remainingToAllocate <= 0) break;
+        const currentPending = pendingSale.pendingAmount !== undefined 
+          ? pendingSale.pendingAmount 
+          : (pendingSale.status === 'Pending' ? pendingSale.total : 0);
+        const currentPaid = pendingSale.paidAmount !== undefined 
+          ? pendingSale.paidAmount 
+          : (pendingSale.status === 'Paid' ? pendingSale.total : 0);
+
+        if (currentPending <= 0) continue;
+
+        const allocation = Math.min(remainingToAllocate, currentPending);
+        const newSalePaid = Number((currentPaid + allocation).toFixed(2));
+        const newSalePending = Number(Math.max(0, currentPending - allocation).toFixed(2));
+        const newSaleStatus = newSalePending === 0 ? 'Paid' : 'Partial';
+
+        const saleRef = doc(db, 'sales', pendingSale.id);
+        batch.set(saleRef, cleanDataForFirestore({
+          paidAmount: newSalePaid,
+          pendingAmount: newSalePending,
+          status: newSaleStatus,
+          updatedAt: serverTimestamp()
+        }), { merge: true });
+
+        remainingToAllocate = Number((remainingToAllocate - allocation).toFixed(2));
+      }
+
+      // 4. Update store bank account balance if Online payment
       if (paymentMode === 'Online' && selectedBankAcc) {
-        const storeRef = doc(db, 'stores', storeId);
-        const storeSnap = await getDoc(storeRef);
-        if (storeSnap.exists()) {
-          const storeData = storeSnap.data();
-          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
-          currentAccounts = currentAccounts.map((acc: any) => {
-            const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
-            const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
-            if (acc.accountNumber === selectedBankAcc) {
-              return {
-                ...acc,
-                balance: Number((curBal + amount).toFixed(2))
-              };
+        try {
+          const storeRef = doc(db, 'stores', effectiveStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let bankFound = false;
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (typeof acc === 'string') {
+                return { bankName: 'Bank', accountNumber: acc, openingBalance: 0, balance: 0 };
+              }
+              const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
+              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
+              if (acc.accountNumber === selectedBankAcc) {
+                bankFound = true;
+                return {
+                  ...acc,
+                  bankName: acc.bankName || 'Bank',
+                  accountNumber: acc.accountNumber,
+                  balance: Number((curBal + amount).toFixed(2))
+                };
+              }
+              return acc;
+            });
+
+            if (bankFound) {
+              batch.set(storeRef, cleanDataForFirestore({
+                bankAccounts: currentAccounts,
+                updatedAt: serverTimestamp()
+              }), { merge: true });
             }
-            return acc;
-          });
-          batch.update(storeRef, {
-            bankAccounts: currentAccounts,
-            updatedAt: serverTimestamp()
-          });
+          }
+        } catch (bankErr) {
+          console.warn('Could not stage store bank account balance update:', bankErr);
         }
       }
 
       await batch.commit();
 
-      toast.success(`Successfully recorded payment of PKR ${amount.toFixed(2)} for ${customer.name}!`);
+      toast.success(`Successfully recorded payment receipt of PKR ${amount.toFixed(2)} for ${customer.name}!`);
       setReceivingAmount('');
       setPaymentNotes('');
       setShowReceiveForm(false);
     } catch (err: any) {
       console.error('Error recording payment:', err);
-      toast.error('Failed to record payment. Please try again.');
+      const errorDetail = err?.message ? `: ${err.message}` : '. Please try again.';
+      toast.error(`Failed to record payment${errorDetail}`);
     } finally {
       setSubmittingPayment(false);
     }
@@ -607,7 +839,7 @@ export default function CustomerLedgerView({
             <div className="text-right">
               <span className="text-xs text-slate-500 font-medium">Current Balance:</span>
               <div className="text-base font-black text-amber-800">
-                PKR {(customer.balance || 0).toFixed(2)}
+                PKR {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toFixed(2)}
               </div>
             </div>
           </div>
@@ -635,18 +867,18 @@ export default function CustomerLedgerView({
                   />
                 </div>
                 {/* Quick Presets */}
-                {(customer.balance || 0) > 0 && (
+                {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0) > 0 && (
                   <div className="flex gap-1.5 mt-2">
                     <button
                       type="button"
-                      onClick={() => setReceivingAmount(customer.balance.toString())}
+                      onClick={() => setReceivingAmount(((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toString())}
                       className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                     >
-                      Full Balance (PKR {customer.balance.toFixed(2)})
+                      Full (PKR {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toFixed(2)})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setReceivingAmount((customer.balance / 2).toFixed(2))}
+                      onClick={() => setReceivingAmount(((((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0)) / 2).toFixed(2))}
                       className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                     >
                       50%
@@ -1031,13 +1263,14 @@ export default function CustomerLedgerView({
                       <th className="py-4 px-5 text-right whitespace-nowrap">Paid / Received</th>
                       <th className="py-4 px-5 text-right whitespace-nowrap">Remaining Balance</th>
                       <th className="py-4 px-5 text-center whitespace-nowrap">Payment Method</th>
-                      <th className="py-4 px-5 min-w-[220px]">Notes & Remarks</th>
+                      <th className="py-4 px-5 min-w-[200px]">Notes & Remarks</th>
+                      <th className="py-4 px-5 text-center whitespace-nowrap">Receipt</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     {filteredPayments.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-16 text-center text-slate-400 italic">
+                        <td colSpan={9} className="py-16 text-center text-slate-400 italic">
                           No payment records found for this customer.
                         </td>
                       </tr>
@@ -1127,6 +1360,19 @@ export default function CustomerLedgerView({
                             {/* Notes */}
                             <td className="py-4 px-5 text-slate-700 text-xs font-medium max-w-xs">
                               {p.notes || '—'}
+                            </td>
+
+                            {/* Receipt Print */}
+                            <td className="py-4 px-5 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => printPaymentReceipt(p)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-[#0a382c] hover:bg-emerald-50 text-slate-700 hover:text-[#0a382c] text-xs font-semibold transition-colors cursor-pointer"
+                                title="Print Payment Voucher / Slip"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>Receipt</span>
+                              </button>
                             </td>
                           </tr>
                         );
