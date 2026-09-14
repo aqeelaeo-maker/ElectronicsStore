@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Users } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Users, Receipt } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import CustomerLedgerModal from '../components/CustomerLedgerModal';
 
 interface Customer {
   id: string;
@@ -21,6 +22,7 @@ export default function Customers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -267,18 +269,37 @@ export default function Customers() {
                       {customer.city || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-900">
-                      ${customer.balance?.toFixed(2)}
+                      <div>PKR {(customer.balance || 0).toFixed(2)}</div>
+                      {(customer.balance || 0) > 0 ? (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-md">
+                          Cleared
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                       <button 
+                        onClick={() => setLedgerCustomer(customer)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200"
+                        title="View Customer Invoices & Payment Ledger"
+                      >
+                        <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                        Ledger
+                      </button>
+                      <button 
                         onClick={() => setEditingCustomer(customer)}
-                        className="text-slate-400 hover:text-slate-800 mr-4 transition-colors"
+                        className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5"
+                        title="Edit Customer"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleDeleteCustomer(customer.id)}
-                        className="text-red-400 hover:text-red-600 transition-colors"
+                        className="text-red-400 hover:text-red-600 transition-colors p-1.5"
+                        title="Delete Customer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -290,6 +311,13 @@ export default function Customers() {
           </table>
         </div>
       </div>
+
+      <CustomerLedgerModal
+        isOpen={!!ledgerCustomer}
+        onClose={() => setLedgerCustomer(null)}
+        customer={ledgerCustomer}
+        storeId={storeId || ''}
+      />
     </div>
   );
 }

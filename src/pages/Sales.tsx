@@ -96,6 +96,8 @@ interface Sale {
   customerId?: string | null;
   customerName: string;
   total: number;
+  paidAmount?: number;
+  pendingAmount?: number;
   date: string;
   status: string;
   items?: SaleItem[];
@@ -192,7 +194,7 @@ export default function Sales() {
   
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Pending' | 'Returns'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Partial' | 'Pending' | 'Returns'>('All');
   const [showModal, setShowModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -212,7 +214,9 @@ export default function Sales() {
 
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [selectedBankAccNumber, setSelectedBankAccNumber] = useState('');
-  const [invoiceStatus, setInvoiceStatus] = useState<'Paid' | 'Pending'>('Paid');
+  const [invoiceStatus, setInvoiceStatus] = useState<'Paid' | 'Pending' | 'Partial'>('Paid');
+  const [paidAmountInput, setPaidAmountInput] = useState('');
+  const [isPaidAmountCustom, setIsPaidAmountCustom] = useState(false);
   const [invoiceItems, setInvoiceItems] = useState<Array<{
     productId: string;
     quantity: number;
@@ -583,6 +587,57 @@ export default function Sales() {
     return invoiceItems.reduce((sum, item) => sum + Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)), 0);
   };
 
+  const getInvoicePaidAndPending = (total: number) => {
+    let paid = 0;
+    if (isPaidAmountCustom) {
+      if (paidAmountInput === '') {
+        paid = 0;
+      } else {
+        paid = Math.max(0, parseFloat(paidAmountInput) || 0);
+      }
+    } else {
+      if (invoiceStatus === 'Paid') {
+        paid = total;
+      } else if (invoiceStatus === 'Pending') {
+        paid = 0;
+      } else {
+        paid = total > 0 ? Number((total / 2).toFixed(2)) : 0;
+      }
+    }
+    const pending = Math.max(0, Number((total - paid).toFixed(2)));
+    return { paid, pending };
+  };
+
+  const handlePaidAmountChange = (valStr: string) => {
+    setIsPaidAmountCustom(true);
+    setPaidAmountInput(valStr);
+    const num = parseFloat(valStr);
+    const total = calculateInvoiceTotal();
+    if (valStr === '' || isNaN(num) || num <= 0) {
+      setInvoiceStatus('Pending');
+    } else if (num >= total && total > 0) {
+      setInvoiceStatus('Paid');
+    } else {
+      setInvoiceStatus('Partial');
+    }
+  };
+
+  const handleInvoiceStatusChange = (newStatus: 'Paid' | 'Pending' | 'Partial') => {
+    setInvoiceStatus(newStatus);
+    const total = calculateInvoiceTotal();
+    if (newStatus === 'Paid') {
+      setIsPaidAmountCustom(false);
+      setPaidAmountInput(total.toString());
+    } else if (newStatus === 'Pending') {
+      setIsPaidAmountCustom(false);
+      setPaidAmountInput('0');
+    } else {
+      setIsPaidAmountCustom(true);
+      const half = total > 0 ? Number((total / 2).toFixed(2)) : 0;
+      setPaidAmountInput(half.toString());
+    }
+  };
+
   // Add a product WITHOUT serial number to the invoice
   const addProductWithoutSerialToInvoice = (product: Product): boolean => {
     const previousQty = editingSale?.items?.find(pi => pi.productId === product.id)?.quantity || 0;
@@ -886,7 +941,13 @@ export default function Sales() {
     setCustomerSearchInput(sale.customerName || (sale.customerId && customers.find(c => c.id === sale.customerId)?.name) || 'Walk In Customer');
     setPaymentMode(sale.paymentMode || 'Cash');
     setSelectedBankAccNumber(sale.bankAccountNumber || '');
-    setInvoiceStatus((sale.status as 'Paid' | 'Pending') || 'Paid');
+    const currentStatus = (sale.status as 'Paid' | 'Pending' | 'Partial') || 'Paid';
+    setInvoiceStatus(currentStatus);
+    const existingPaid = sale.paidAmount !== undefined 
+      ? sale.paidAmount 
+      : (sale.status === 'Paid' ? (sale.total || 0) : 0);
+    setPaidAmountInput(existingPaid.toString());
+    setIsPaidAmountCustom(true);
     setSerialSearchInput('');
     setIsSerialDropdownOpen(false);
     setProductSearchInput('');
@@ -938,8 +999,12 @@ export default function Sales() {
     try {
       const batch = writeBatch(db);
       
-      // If deleted invoice was paid online and status was not Pending, revert the bank account balance
-      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && sale.status !== 'Pending' && storeId) {
+      // If deleted invoice was paid online, revert the bank account balance by the actual paid amount
+      const salePaidAmount = sale.paidAmount !== undefined 
+        ? sale.paidAmount 
+        : (sale.status === 'Paid' ? sale.total : 0);
+
+      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && salePaidAmount > 0 && storeId) {
         try {
           const storeRef = doc(db, 'stores', storeId);
           const storeSnap = await getDoc(storeRef);
@@ -952,7 +1017,7 @@ export default function Sales() {
               if (acc.accountNumber === sale.bankAccountNumber) {
                 return {
                   ...acc,
-                  balance: Number((curBal - sale.total).toFixed(2))
+                  balance: Number((curBal - salePaidAmount).toFixed(2))
                 };
               }
               return {
@@ -967,6 +1032,28 @@ export default function Sales() {
           }
         } catch (storeErr) {
           console.warn('Could not revert store bank balance on deletion:', storeErr);
+        }
+      }
+
+      // Revert customer pending balance if invoice had an outstanding amount
+      const salePendingAmount = sale.pendingAmount !== undefined 
+        ? sale.pendingAmount 
+        : (sale.status === 'Pending' ? sale.total : 0);
+
+      if (salePendingAmount > 0 && sale.customerId && sale.customerId !== 'walk-in') {
+        try {
+          const customerRef = doc(db, 'customers', sale.customerId);
+          const custSnap = await getDoc(customerRef);
+          if (custSnap.exists()) {
+            const currentCustBal = custSnap.data().balance || 0;
+            const newCustBal = Math.max(0, Number((currentCustBal - salePendingAmount).toFixed(2)));
+            batch.update(customerRef, {
+              balance: newCustBal,
+              updatedAt: serverTimestamp()
+            });
+          }
+        } catch (custErr) {
+          console.warn('Could not revert customer balance on deletion:', custErr);
         }
       }
 
@@ -1103,6 +1190,9 @@ export default function Sales() {
     const itemsToSave: SaleItem[] = groupSaleItemsForPrint(rawItemsToSave);
 
     const totalAmount = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
+    const { paid: calcPaid, pending: calcPending } = getInvoicePaidAndPending(totalAmount);
+    const paidAmount = Number(calcPaid.toFixed(2));
+    const pendingAmount = Number(calcPending.toFixed(2));
     const saleId = editingSale ? editingSale.id : doc(collection(db, 'sales')).id;
 
     const matchedBank = paymentMode === 'Online'
@@ -1116,6 +1206,8 @@ export default function Sales() {
       customerName,
       items: itemsToSave,
       total: totalAmount,
+      paidAmount,
+      pendingAmount,
       status: invoiceStatus,
       paymentMode,
       bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
@@ -1225,7 +1317,96 @@ export default function Sales() {
         });
       }
 
-      // 4. Update Bank Account Balance in Store document if online payment is involved
+      // 4. Update Customer Outstanding Balance & Payment Record
+      if (customerId && customerId !== 'walk-in') {
+        const customerRef = doc(db, 'customers', customerId);
+        const custSnap = await getDoc(customerRef);
+        if (custSnap.exists()) {
+          const currentCustBalance = custSnap.data().balance || 0;
+          let netBalanceDiff = pendingAmount;
+
+          if (editingSale) {
+            const oldPending = editingSale.pendingAmount !== undefined 
+              ? editingSale.pendingAmount 
+              : (editingSale.status === 'Pending' ? editingSale.total : 0);
+            
+            if (editingSale.customerId === customerId) {
+              netBalanceDiff = pendingAmount - oldPending;
+            } else {
+              // Revert old customer's balance if customer changed
+              if (editingSale.customerId && editingSale.customerId !== 'walk-in') {
+                try {
+                  const oldCustRef = doc(db, 'customers', editingSale.customerId);
+                  const oldCustSnap = await getDoc(oldCustRef);
+                  if (oldCustSnap.exists()) {
+                    const oldCustBal = oldCustSnap.data().balance || 0;
+                    batch.update(oldCustRef, {
+                      balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
+                      updatedAt: serverTimestamp()
+                    });
+                  }
+                } catch (oldErr) {
+                  console.warn('Could not revert old customer balance:', oldErr);
+                }
+              }
+              netBalanceDiff = pendingAmount;
+            }
+          }
+
+          const newCustBalance = Number((currentCustBalance + netBalanceDiff).toFixed(2));
+          batch.update(customerRef, {
+            balance: newCustBalance,
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        // Add / Record transaction to customerPayments
+        const paymentRecordId = doc(collection(db, 'customerPayments')).id;
+        const paymentRef = doc(db, 'customerPayments', paymentRecordId);
+        batch.set(paymentRef, {
+          id: paymentRecordId,
+          storeId,
+          customerId,
+          customerName,
+          saleId,
+          invoiceNo,
+          totalAmount,
+          paidAmount,
+          pendingAmount,
+          paymentMode,
+          bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
+          bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
+          paymentDate: saleDate,
+          type: 'InvoicePayment',
+          notes: pendingAmount > 0 
+            ? `Invoice ${invoiceNo}: Paid PKR ${paidAmount.toFixed(2)}, Pending PKR ${pendingAmount.toFixed(2)}` 
+            : `Invoice ${invoiceNo}: Full payment received`,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } else if (editingSale && editingSale.customerId && editingSale.customerId !== 'walk-in') {
+        // If changed from a registered customer to walk-in, revert old customer pending balance
+        const oldPending = editingSale.pendingAmount !== undefined 
+          ? editingSale.pendingAmount 
+          : (editingSale.status === 'Pending' ? editingSale.total : 0);
+        if (oldPending > 0) {
+          try {
+            const oldCustRef = doc(db, 'customers', editingSale.customerId);
+            const oldCustSnap = await getDoc(oldCustRef);
+            if (oldCustSnap.exists()) {
+              const oldCustBal = oldCustSnap.data().balance || 0;
+              batch.update(oldCustRef, {
+                balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
+                updatedAt: serverTimestamp()
+              });
+            }
+          } catch (oldErr) {
+            console.warn('Could not revert old customer balance:', oldErr);
+          }
+        }
+      }
+
+      // 5. Update Bank Account Balance in Store document if online payment is involved
       if (storeId) {
         const storeRef = doc(db, 'stores', storeId);
         const storeSnap = await getDoc(storeRef);
@@ -1251,28 +1432,34 @@ export default function Sales() {
             };
           });
 
-          // If editing an existing sale that was paid Online and was Paid, revert its previous payment
-          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber && editingSale.status !== 'Pending') {
-            currentAccounts = currentAccounts.map((acc: any) => {
-              if (acc.accountNumber === editingSale.bankAccountNumber) {
-                bankChanged = true;
-                return {
-                  ...acc,
-                  balance: Number(((acc.balance || 0) - editingSale.total).toFixed(2))
-                };
-              }
-              return acc;
-            });
+          // If editing an existing sale that was paid Online, revert its previous online paid amount
+          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber) {
+            const prevOnlinePaid = editingSale.paidAmount !== undefined 
+              ? editingSale.paidAmount 
+              : (editingSale.status === 'Paid' ? editingSale.total : 0);
+
+            if (prevOnlinePaid > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === editingSale.bankAccountNumber) {
+                  bankChanged = true;
+                  return {
+                    ...acc,
+                    balance: Number(((acc.balance || 0) - prevOnlinePaid).toFixed(2))
+                  };
+                }
+                return acc;
+              });
+            }
           }
 
-          // If current invoice is Online and marked Paid, add totalAmount to selected bank account
-          if (paymentMode === 'Online' && selectedBankAccNumber && invoiceStatus === 'Paid') {
+          // If current invoice is Online and has a positive paidAmount, add paidAmount to selected bank account
+          if (paymentMode === 'Online' && selectedBankAccNumber && paidAmount > 0) {
             currentAccounts = currentAccounts.map((acc: any) => {
               if (acc.accountNumber === selectedBankAccNumber) {
                 bankChanged = true;
                 return {
                   ...acc,
-                  balance: Number(((acc.balance || 0) + totalAmount).toFixed(2))
+                  balance: Number(((acc.balance || 0) + paidAmount).toFixed(2))
                 };
               }
               return acc;
@@ -1302,6 +1489,8 @@ export default function Sales() {
           customerName,
           items: itemsToSave,
           total: totalAmount,
+          paidAmount,
+          pendingAmount,
           status: invoiceStatus,
           date: newSaleDoc.date,
           paymentMode,
@@ -1325,6 +1514,8 @@ export default function Sales() {
       setPaymentMode('Cash');
       setSelectedBankAccNumber('');
       setInvoiceStatus('Paid');
+      setPaidAmountInput('');
+      setIsPaidAmountCustom(false);
       setInvoiceNumber('');
       setInvoiceDate(new Date().toISOString().split('T')[0]);
     } catch (error) {
@@ -1403,6 +1594,13 @@ export default function Sales() {
     const subtotal = sale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0) || sale.total;
     const totalDiscount = sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0;
     const matchedCust = customers.find(c => c.id === sale.customerId || c.name.toLowerCase() === sale.customerName.toLowerCase());
+
+    const salePaidDisplay = sale.paidAmount !== undefined 
+      ? sale.paidAmount 
+      : (sale.status === 'Paid' ? (sale.total || 0) : 0);
+    const salePendingDisplay = sale.pendingAmount !== undefined 
+      ? sale.pendingAmount 
+      : Math.max(0, Number(((sale.total || 0) - salePaidDisplay).toFixed(2)));
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -1700,6 +1898,10 @@ export default function Sales() {
                       <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Payment Mode:</td>
                       <td style="padding: 1px 0; font-weight: 600; color: #000000; vertical-align: top;">${sale.paymentMode || 'Cash'}${sale.paymentMode === 'Online' && sale.bankName ? ` <span style="font-size: 11px; color: #000000; font-weight: bold;">(${sale.bankName} - ${sale.bankAccountNumber})</span>` : ''}</td>
                     </tr>
+                    <tr>
+                      <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Payment Status:</td>
+                      <td style="padding: 1px 0; font-weight: 700; color: #000000; vertical-align: top;">${sale.status || 'Paid'}</td>
+                    </tr>
                   </table>
                 </td>
                 <td style="width: 50%; vertical-align: top; text-align: right;">
@@ -1745,8 +1947,16 @@ export default function Sales() {
                 <td style="text-align: right; font-weight: bold; color: #000000; font-size: 18px; padding: 6px 0;">PKR ${totalDiscount.toFixed(2)}</td>
               </tr>
               <tr class="total-row">
-                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 20px;">Total Amount Paid:</td>
+                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 20px;">Total Amount:</td>
                 <td style="text-align: right; padding-top: 8px; color: #000000; font-weight: 900; font-size: 20px;">PKR ${sale.total?.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td style="color: #000000; font-weight: bold; font-size: 18px; padding: 6px 0;">Paid Amount:</td>
+                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 18px; padding: 6px 0;">PKR ${salePaidDisplay.toFixed(2)}</td>
+              </tr>
+              <tr style="border-top: 1.5px dashed #000000;">
+                <td style="padding-top: 6px; color: #000000; font-weight: 900; font-size: 18px;">Amount Pending:</td>
+                <td style="text-align: right; padding-top: 6px; color: #000000; font-weight: 900; font-size: 18px;">PKR ${salePendingDisplay.toFixed(2)}</td>
               </tr>
             </table>
 
@@ -2080,6 +2290,14 @@ export default function Sales() {
                               Address: <span className="font-medium text-slate-700">{[selectedCust.address, selectedCust.city].filter(Boolean).join(', ')}</span>
                             </div>
                           )}
+                          {selectedCust.balance !== undefined && (
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
+                              <span className="text-slate-500 font-medium">Customer Balance:</span>
+                              <span className={`font-mono font-bold ${selectedCust.balance > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                                PKR {Number(selectedCust.balance).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -2179,6 +2397,7 @@ export default function Sales() {
                           const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
                           if (!chosenAcc) return null;
                           const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
+                          const currentPaid = getInvoicePaidAndPending(calculateInvoiceTotal()).paid;
                           return (
                             <div className="p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[10px] space-y-0.5">
                               <div className="flex items-center justify-between">
@@ -2187,11 +2406,11 @@ export default function Sales() {
                                   PKR {currentBal.toFixed(2)}
                                 </span>
                               </div>
-                              {calculateInvoiceTotal() > 0 && (
+                              {currentPaid > 0 && (
                                 <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 font-semibold">
-                                  <span>{invoiceStatus === 'Paid' ? 'After Sale:' : 'If Paid:'}</span>
+                                  <span>After Deposit:</span>
                                   <span className="font-mono font-bold">
-                                    PKR {(currentBal + calculateInvoiceTotal()).toFixed(2)}
+                                    PKR {(currentBal + currentPaid).toFixed(2)}
                                   </span>
                                 </div>
                               )}
@@ -2201,21 +2420,130 @@ export default function Sales() {
                       </div>
                     )}
 
-                    {/* 4. Status */}
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <label htmlFor="statusSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        Status:
-                      </label>
-                      <div className="col-span-7">
-                        <select
-                          id="statusSelect"
-                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                          value={invoiceStatus}
-                          onChange={(e) => setInvoiceStatus(e.target.value as 'Paid' | 'Pending')}
+                    {/* 4. Payment Record & Customer Ledger */}
+                    <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Payment Record
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          invoiceStatus === 'Paid'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : invoiceStatus === 'Partial'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {invoiceStatus}
+                        </span>
+                      </div>
+
+                      {/* Payment Status Dropdown */}
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <label htmlFor="statusSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                          Payment Status:
+                        </label>
+                        <div className="col-span-7">
+                          <select
+                            id="statusSelect"
+                            className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                            value={invoiceStatus}
+                            onChange={(e) => handleInvoiceStatusChange(e.target.value as 'Paid' | 'Partial' | 'Pending')}
+                          >
+                            <option value="Paid">Paid (Full)</option>
+                            <option value="Partial">Partial Payment</option>
+                            <option value="Pending">Pending (Unpaid)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Total Amount Summary */}
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <span className="col-span-5 text-xs font-bold text-slate-600 whitespace-nowrap">
+                          Total Amount:
+                        </span>
+                        <div className="col-span-7 font-mono font-bold text-xs text-slate-900 bg-slate-100/90 py-1.5 px-2.5 rounded-lg border border-slate-200">
+                          PKR {calculateInvoiceTotal().toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* Paid Amount Input */}
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <label htmlFor="paidAmountInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                          Paid Amount:
+                        </label>
+                        <div className="col-span-7">
+                          <input
+                            id="paidAmountInput"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            max={calculateInvoiceTotal()}
+                            className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold text-emerald-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                            value={isPaidAmountCustom ? paidAmountInput : getInvoicePaidAndPending(calculateInvoiceTotal()).paid}
+                            onChange={(e) => handlePaidAmountChange(e.target.value)}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quick Presets for Paid Amount */}
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tot = calculateInvoiceTotal();
+                            setPaidAmountInput(String(tot));
+                            setIsPaidAmountCustom(true);
+                            setInvoiceStatus('Paid');
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-[#0a382c] border border-emerald-200 hover:bg-emerald-100 transition-colors"
                         >
-                          <option value="Paid">Paid</option>
-                          <option value="Pending">Pending</option>
-                        </select>
+                          100% Paid
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const half = Number((calculateInvoiceTotal() / 2).toFixed(2));
+                            setPaidAmountInput(String(half));
+                            setIsPaidAmountCustom(true);
+                            setInvoiceStatus(half > 0 ? 'Partial' : 'Pending');
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors"
+                        >
+                          50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaidAmountInput('0');
+                            setIsPaidAmountCustom(true);
+                            setInvoiceStatus('Pending');
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition-colors"
+                        >
+                          0 (Credit)
+                        </button>
+                      </div>
+
+                      {/* Amount Pending Display */}
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-700">Amount Pending:</span>
+                          <span className={`font-mono font-black ${
+                            getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 
+                              ? 'text-rose-700' 
+                              : 'text-slate-700'
+                          }`}>
+                            PKR {getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)}
+                          </span>
+                        </div>
+                        {getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 && (
+                          <p className="text-[10px] text-amber-700 leading-tight">
+                            {selectedCustomerId && selectedCustomerId !== 'walk-in'
+                              ? `* PKR ${getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)} will be added to ${customerSearchInput}'s customer balance.`
+                              : '* Pending amount will not be added to customer ledger for Walk-in customer.'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2874,6 +3202,10 @@ export default function Sales() {
                             )}
                           </span>
                         </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-black min-w-[90px]">Payment Status:</span>
+                          <span className="font-bold text-black">{invoiceStatus}</span>
+                        </div>
                       </div>
 
                       {/* Invoice Details (in right corner of page, aligned vertically from left side, without 'Invoice Details' title) */}
@@ -2943,7 +3275,7 @@ export default function Sales() {
                   <div className="mt-auto pt-6 space-y-3">
                     {/* Totals Summary */}
                     <div className="flex justify-end pt-3">
-                      <div className="w-80 sm:w-96 space-y-2.5 text-black">
+                      <div className="w-80 sm:w-96 space-y-2 text-black">
                         <div className="flex justify-between font-bold text-black text-base sm:text-lg">
                           <span>Subtotal (Pre-discount):</span>
                           <span className="font-mono font-bold">PKR {draftSubtotal.toFixed(2)}</span>
@@ -2954,10 +3286,22 @@ export default function Sales() {
                         </div>
                         <div className="flex justify-between items-center pt-2.5 border-t-2 border-black text-lg sm:text-xl">
                           <span className="font-black text-black">
-                            {invoiceStatus === 'Pending' ? 'Total Amount Due:' : 'Total Amount Paid:'}
+                            Total Amount:
                           </span>
                           <span className="font-black font-mono text-lg sm:text-xl text-black">
                             PKR {draftTotal.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-bold text-black text-base sm:text-lg">
+                          <span>Paid Amount:</span>
+                          <span className="font-mono font-bold">
+                            PKR {getInvoicePaidAndPending(draftTotal).paid.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-black font-black text-base sm:text-lg">
+                          <span>Amount Pending:</span>
+                          <span className="font-mono font-black">
+                            PKR {getInvoicePaidAndPending(draftTotal).pending.toFixed(2)}
                           </span>
                         </div>
                       </div>
@@ -3203,8 +3547,16 @@ export default function Sales() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
                       {sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-950">
-                      <div>PKR {sale.total?.toFixed(2)}</div>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-950">
+                      <div className="font-extrabold text-slate-900">PKR {sale.total?.toFixed(2)}</div>
+                      <div className="text-[11px] font-semibold text-emerald-700">
+                        Paid: PKR {(sale.paidAmount !== undefined ? sale.paidAmount : (sale.status === 'Paid' ? sale.total : 0)).toFixed(2)}
+                      </div>
+                      {(sale.pendingAmount !== undefined ? sale.pendingAmount : (sale.status === 'Pending' ? sale.total : 0)) > 0 && (
+                        <div className="text-[11px] font-bold text-amber-700">
+                          Pending: PKR {(sale.pendingAmount !== undefined ? sale.pendingAmount : (sale.status === 'Pending' ? sale.total : 0)).toFixed(2)}
+                        </div>
+                      )}
                       {sale.totalRefunded && sale.totalRefunded > 0 ? (
                         <div className="text-[10px] font-bold text-purple-700">
                           Refunded: PKR {sale.totalRefunded.toFixed(2)}
@@ -3487,8 +3839,20 @@ export default function Sales() {
                       </span>
                     </div>
                     <div className="flex justify-between text-lg sm:text-xl font-black text-black border-t-2 border-black pt-2.5">
-                      <span>Total Invoice Amount:</span>
+                      <span>Total Amount:</span>
                       <span className="font-mono">PKR {selectedSale.total?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-black text-base sm:text-lg">
+                      <span>Paid Amount:</span>
+                      <span className="font-mono font-bold text-emerald-800">
+                        PKR {(selectedSale.paidAmount !== undefined ? selectedSale.paidAmount : (selectedSale.status === 'Paid' ? selectedSale.total : 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center font-black text-black text-base sm:text-lg border-t border-dashed border-black pt-1.5">
+                      <span>Amount Pending:</span>
+                      <span className={`font-mono font-black ${(selectedSale.pendingAmount !== undefined ? selectedSale.pendingAmount : (selectedSale.status === 'Pending' ? selectedSale.total : 0)) > 0 ? 'text-amber-900' : 'text-slate-900'}`}>
+                        PKR {(selectedSale.pendingAmount !== undefined ? selectedSale.pendingAmount : (selectedSale.status === 'Pending' ? selectedSale.total : 0)).toFixed(2)}
+                      </span>
                     </div>
                     {selectedSale.totalRefunded && selectedSale.totalRefunded > 0 ? (
                       <>
@@ -3497,7 +3861,7 @@ export default function Sales() {
                           <span className="font-mono font-bold">- PKR {selectedSale.totalRefunded.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between font-black text-black text-base sm:text-lg">
-                          <span>Net Paid:</span>
+                          <span>Net Adjusted:</span>
                           <span className="font-mono">PKR {Math.max(0, (selectedSale.total || 0) - (selectedSale.totalRefunded || 0)).toFixed(2)}</span>
                         </div>
                       </>

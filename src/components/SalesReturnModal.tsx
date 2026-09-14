@@ -102,10 +102,13 @@ interface SaleItem {
 
 interface Sale {
   id: string;
+  storeId?: string;
   invoiceNo: string;
   customerId?: string | null;
   customerName: string;
   total: number;
+  paidAmount?: number;
+  pendingAmount?: number;
   date: string;
   status: string;
   items?: SaleItem[];
@@ -581,6 +584,37 @@ export default function SalesReturnModal({
 
     setSubmitting(true);
     try {
+      const activeStoreId = storeId || sale.storeId || '';
+      if (!activeStoreId) {
+        toast.error('Store ID is missing. Please refresh and try again.');
+        setSubmitting(false);
+        return;
+      }
+
+      // Helper to strip any undefined values and prevent Firestore rejection
+      const cleanDataForFirestore = (obj: any): any => {
+        if (obj === undefined) return null;
+        if (obj === null || typeof obj !== 'object') return obj;
+        if (obj instanceof Date) return obj;
+        if (
+          ('_methodName' in obj) ||
+          (obj.constructor && obj.constructor.name === 'FieldValue') ||
+          (typeof (obj as any).isEqual === 'function' && '_delegate' in obj)
+        ) {
+          return obj;
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(cleanDataForFirestore);
+        }
+        const clean: Record<string, any> = {};
+        for (const [key, value] of Object.entries(obj)) {
+          if (value !== undefined) {
+            clean[key] = cleanDataForFirestore(value);
+          }
+        }
+        return clean;
+      };
+
       const batch = writeBatch(db);
       const returnId = `RET-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-5)}`;
 
@@ -589,30 +623,54 @@ export default function SalesReturnModal({
       const updatedSaleItems: SaleItem[] = (sale.items || []).map(originalItem => {
         const matchingReturn = returnItems.find(r => r.productId === originalItem.productId);
         if (!matchingReturn || matchingReturn.returnQuantity <= 0) {
-          return originalItem;
+          return {
+            productId: originalItem.productId || '',
+            productName: originalItem.productName || 'Product',
+            brand: originalItem.brand || '',
+            modelNumber: originalItem.modelNumber || '',
+            category: originalItem.category || '',
+            quantity: originalItem.quantity || 1,
+            salePrice: originalItem.salePrice || 0,
+            discount: originalItem.discount || 0,
+            warranty: originalItem.warranty || 'No Warranty',
+            subtotal: originalItem.subtotal || 0,
+            selectedSerials: originalItem.selectedSerials || [],
+            returnedQuantity: originalItem.returnedQuantity || 0,
+            returnedSerials: originalItem.returnedSerials || []
+          };
         }
 
         const currentReturnedQty = originalItem.returnedQuantity || 0;
         const newReturnedQty = currentReturnedQty + matchingReturn.returnQuantity;
         const currentReturnedSerials = originalItem.returnedSerials || [];
-        const newReturnedSerials = Array.from(new Set([...currentReturnedSerials, ...matchingReturn.selectedSerials]));
+        const newReturnedSerials = Array.from(new Set([...currentReturnedSerials, ...(matchingReturn.selectedSerials || [])]));
 
         const refundAmountForItem = Number((matchingReturn.returnQuantity * matchingReturn.effectiveUnitPrice).toFixed(2));
 
         returnedItemsList.push({
-          productId: matchingReturn.productId,
-          productName: matchingReturn.productName,
-          brand: matchingReturn.brand,
-          modelNumber: matchingReturn.modelNumber,
-          category: matchingReturn.category,
+          productId: matchingReturn.productId || '',
+          productName: matchingReturn.productName || 'Product',
+          brand: matchingReturn.brand || '',
+          modelNumber: matchingReturn.modelNumber || '',
+          category: matchingReturn.category || '',
           quantity: matchingReturn.returnQuantity,
-          unitPrice: matchingReturn.unitPrice,
+          unitPrice: matchingReturn.unitPrice || 0,
           refundAmount: refundAmountForItem,
-          returnedSerials: matchingReturn.selectedSerials
+          returnedSerials: matchingReturn.selectedSerials || []
         });
 
         return {
-          ...originalItem,
+          productId: originalItem.productId || '',
+          productName: originalItem.productName || 'Product',
+          brand: originalItem.brand || '',
+          modelNumber: originalItem.modelNumber || '',
+          category: originalItem.category || '',
+          quantity: originalItem.quantity || 1,
+          salePrice: originalItem.salePrice || 0,
+          discount: originalItem.discount || 0,
+          warranty: originalItem.warranty || 'No Warranty',
+          subtotal: originalItem.subtotal || 0,
+          selectedSerials: originalItem.selectedSerials || [],
           returnedQuantity: newReturnedQty,
           returnedSerials: newReturnedSerials
         };
@@ -624,43 +682,46 @@ export default function SalesReturnModal({
           if (item.returnQuantity <= 0) continue;
 
           const prod = products.find(p => p.id === item.productId);
-          const currentStock = prod ? (prod.stock || 0) : 0;
+          const currentStock = prod && typeof prod.stock === 'number' ? prod.stock : 0;
           const newStock = currentStock + item.returnQuantity;
 
-          // Update product stock
-          const prodRef = doc(db, 'products', item.productId);
-          batch.update(prodRef, {
-            stock: newStock,
-            updatedAt: serverTimestamp()
-          });
+          // Update product stock safely
+          if (item.productId) {
+            const prodRef = doc(db, 'products', item.productId);
+            batch.set(prodRef, {
+              stock: newStock,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+          }
 
           // Create inventory log entry
           const logRef = doc(collection(db, 'inventoryLogs'));
-          batch.set(logRef, {
-            storeId,
-            productId: item.productId,
-            productName: item.productName,
-            productBrand: item.brand,
-            productModelNumber: item.modelNumber,
+          const logData = cleanDataForFirestore({
+            storeId: activeStoreId,
+            productId: item.productId || '',
+            productName: item.productName || (prod ? prod.name : 'Product') || 'Product',
+            productBrand: item.brand || (prod ? prod.brand : '') || '',
+            productModelNumber: item.modelNumber || (prod ? prod.modelNumber : '') || '',
             quantityAdded: item.returnQuantity,
             previousStock: currentStock,
             newStock,
             referenceNumber: `RET-${sale.invoiceNo}`,
-            notes: `Sales Return from Invoice ${sale.invoiceNo} (${returnReason}${returnNotes ? ': ' + returnNotes : ''})`,
+            notes: `Sales Return from Invoice ${sale.invoiceNo} (${returnReason}${returnNotes.trim() ? ': ' + returnNotes.trim() : ''})`,
             createdAt: serverTimestamp()
           });
+          batch.set(logRef, logData);
 
           // Revert returned serial numbers back to 'Available'
-          for (const sn of item.selectedSerials) {
+          for (const sn of (item.selectedSerials || [])) {
             const matchedSerial = allSerials.find(s => s.serialNumber === sn && s.productId === item.productId)
               || allSerials.find(s => s.serialNumber === sn);
             
-            if (matchedSerial) {
+            if (matchedSerial && matchedSerial.id) {
               const serialRef = doc(db, 'serialNumbers', matchedSerial.id);
-              batch.update(serialRef, {
+              batch.set(serialRef, {
                 status: 'Available',
                 updatedAt: serverTimestamp()
-              });
+              }, { merge: true });
             }
           }
         }
@@ -671,7 +732,7 @@ export default function SalesReturnModal({
       if (refundMode === 'Online' && selectedBankAccNumber) {
         matchedBank = storeDetails.bankAccounts?.find(b => b.accountNumber === selectedBankAccNumber);
         try {
-          const storeRef = doc(db, 'stores', storeId);
+          const storeRef = doc(db, 'stores', activeStoreId);
           const storeSnap = await getDoc(storeRef);
           if (storeSnap.exists()) {
             const storeData = storeSnap.data();
@@ -681,19 +742,25 @@ export default function SalesReturnModal({
               const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
               if (acc.accountNumber === selectedBankAccNumber) {
                 return {
-                  ...acc,
+                  bankName: acc.bankName || 'Bank',
+                  accountNumber: acc.accountNumber || '',
+                  accountTitle: acc.accountTitle || '',
+                  openingBalance: opBal,
                   balance: Number((curBal - activeRefundAmount).toFixed(2))
                 };
               }
               return {
-                ...acc,
+                bankName: acc.bankName || 'Bank',
+                accountNumber: acc.accountNumber || '',
+                accountTitle: acc.accountTitle || '',
+                openingBalance: opBal,
                 balance: curBal
               };
             });
-            batch.update(storeRef, {
+            batch.set(storeRef, cleanDataForFirestore({
               bankAccounts: currentAccounts,
               updatedAt: serverTimestamp()
-            });
+            }), { merge: true });
           }
         } catch (err) {
           console.warn('Could not update store bank account on return:', err);
@@ -701,36 +768,60 @@ export default function SalesReturnModal({
       }
 
       // 3. Process Customer Credit if refund mode is Customer Credit
-      if (refundMode === 'Customer Credit' && sale.customerId) {
+      if (refundMode === 'Customer Credit' && sale.customerId && sale.customerId !== 'walk-in') {
         try {
           const custRef = doc(db, 'customers', sale.customerId);
           const custSnap = await getDoc(custRef);
           if (custSnap.exists()) {
             const custData = custSnap.data();
             const curBal = typeof custData.balance === 'number' ? custData.balance : (parseFloat(custData.balance) || 0);
-            // Deduct from outstanding balance (or increase store credit)
-            batch.update(custRef, {
-              balance: Number((curBal - activeRefundAmount).toFixed(2)),
+            // Deduct from outstanding balance (or credit customer account)
+            const updatedCustBal = Number((curBal - activeRefundAmount).toFixed(2));
+            batch.set(custRef, {
+              balance: updatedCustBal,
               updatedAt: serverTimestamp()
-            });
+            }, { merge: true });
+
+            // Record a ledger transaction in customerPayments
+            const paymentRecordId = doc(collection(db, 'customerPayments')).id;
+            const paymentRef = doc(db, 'customerPayments', paymentRecordId);
+            batch.set(paymentRef, cleanDataForFirestore({
+              id: paymentRecordId,
+              storeId: activeStoreId,
+              customerId: sale.customerId,
+              customerName: sale.customerName || 'Customer',
+              saleId: sale.id,
+              invoiceNo: sale.invoiceNo,
+              totalAmount: 0,
+              paidAmount: 0,
+              pendingAmount: 0,
+              refundAmount: activeRefundAmount,
+              paymentMode: 'Customer Credit',
+              type: 'ReturnCredit',
+              referenceNo: returnId,
+              notes: `Sales Return Credit for Invoice ${sale.invoiceNo} (${returnReason})`,
+              paymentDate: returnDate || new Date().toISOString(),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }));
           }
         } catch (err) {
           console.warn('Could not update customer balance on return:', err);
         }
       }
 
-      // 4. Create the return record
+      // 4. Create the return record (guaranteeing no undefined fields)
       const returnRecord: SaleReturnRecord = {
         id: returnId,
-        returnDate,
+        returnDate: returnDate || new Date().toISOString().split('T')[0],
         items: returnedItemsList,
         totalRefund: activeRefundAmount,
         refundMode,
-        bankAccountNumber: refundMode === 'Online' && matchedBank ? matchedBank.accountNumber : null,
-        bankName: refundMode === 'Online' && matchedBank ? matchedBank.bankName : null,
-        reason: returnReason,
-        notes: returnNotes.trim() || undefined,
-        restocked: restockToInventory,
+        bankAccountNumber: refundMode === 'Online' && matchedBank ? (matchedBank.accountNumber || null) : null,
+        bankName: refundMode === 'Online' && matchedBank ? (matchedBank.bankName || null) : null,
+        reason: returnReason || 'Customer Return',
+        notes: returnNotes.trim() || '',
+        restocked: Boolean(restockToInventory),
         createdAt: new Date().toISOString()
       };
 
@@ -739,19 +830,46 @@ export default function SalesReturnModal({
       const totalNewReturnedQty = updatedSaleItems.reduce((sum, it) => sum + (it.returnedQuantity || 0), 0);
       const isFullyReturned = totalNewReturnedQty >= totalOriginalQty;
 
-      const previousRefunds = sale.totalRefunded || 0;
+      const previousRefunds = typeof sale.totalRefunded === 'number' ? sale.totalRefunded : 0;
       const newTotalRefunded = Number((previousRefunds + activeRefundAmount).toFixed(2));
 
-      // 5. Update Sale document
+      // 5. Clean existing returns from sale
+      const cleanExistingReturns = (sale.returns || []).map(r => cleanDataForFirestore({
+        id: r.id || '',
+        returnDate: r.returnDate || '',
+        items: (r.items || []).map(it => ({
+          productId: it.productId || '',
+          productName: it.productName || 'Product',
+          brand: it.brand || '',
+          modelNumber: it.modelNumber || '',
+          category: it.category || '',
+          quantity: it.quantity || 0,
+          unitPrice: it.unitPrice || 0,
+          refundAmount: it.refundAmount || 0,
+          returnedSerials: it.returnedSerials || []
+        })),
+        totalRefund: r.totalRefund || 0,
+        refundMode: r.refundMode || 'Cash',
+        bankAccountNumber: r.bankAccountNumber || null,
+        bankName: r.bankName || null,
+        reason: r.reason || 'Customer Return',
+        notes: r.notes || '',
+        restocked: Boolean(r.restocked),
+        createdAt: r.createdAt || new Date().toISOString()
+      }));
+
+      // 6. Update Sale document with clean merged data
       const saleRef = doc(db, 'sales', sale.id);
-      batch.update(saleRef, {
+      const saleUpdatePayload = cleanDataForFirestore({
         items: updatedSaleItems,
-        returns: [...(sale.returns || []), returnRecord],
+        returns: [...cleanExistingReturns, returnRecord],
         returnStatus: isFullyReturned ? 'Fully Returned' : 'Partially Returned',
         totalRefunded: newTotalRefunded,
         status: isFullyReturned ? 'Returned' : sale.status,
         updatedAt: serverTimestamp()
       });
+
+      batch.set(saleRef, saleUpdatePayload, { merge: true });
 
       await batch.commit();
 
@@ -765,9 +883,10 @@ export default function SalesReturnModal({
         onSuccess();
       }
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing sales return:', error);
-      toast.error('Failed to process sales return. Please try again.');
+      const errorMsg = error?.message ? `: ${error.message}` : '. Please check details and try again.';
+      toast.error(`Failed to process sales return${errorMsg}`);
     } finally {
       setSubmitting(false);
     }
