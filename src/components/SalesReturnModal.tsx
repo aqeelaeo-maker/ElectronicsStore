@@ -23,9 +23,11 @@ import {
   doc, 
   writeBatch, 
   serverTimestamp, 
-  getDoc 
+  getDoc,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
 
 export interface ReturnItemRecord {
@@ -584,7 +586,7 @@ export default function SalesReturnModal({
 
     setSubmitting(true);
     try {
-      const activeStoreId = storeId || sale.storeId || '';
+      const activeStoreId = storeId || auth.currentUser?.uid || (sale as any)?.storeId || '';
       if (!activeStoreId) {
         toast.error('Store ID is missing. Please refresh and try again.');
         setSubmitting(false);
@@ -615,7 +617,6 @@ export default function SalesReturnModal({
         return clean;
       };
 
-      const batch = writeBatch(db);
       const returnId = `RET-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-5)}`;
 
       // Prepare items for this return
@@ -676,154 +677,11 @@ export default function SalesReturnModal({
         };
       });
 
-      // 1. If restockToInventory is true: update product stock, create inventoryLogs, and update serials to Available
-      if (restockToInventory) {
-        for (const item of returnItems) {
-          if (item.returnQuantity <= 0) continue;
-
-          const prod = products.find(p => p.id === item.productId);
-          const currentStock = prod && typeof prod.stock === 'number' ? prod.stock : 0;
-          const newStock = currentStock + item.returnQuantity;
-
-          // Update product stock safely
-          if (item.productId) {
-            const prodRef = doc(db, 'products', item.productId);
-            batch.set(prodRef, {
-              stock: newStock,
-              updatedAt: serverTimestamp()
-            }, { merge: true });
-          }
-
-          // Create inventory log entry
-          const logRef = doc(collection(db, 'inventoryLogs'));
-          const logData = cleanDataForFirestore({
-            storeId: activeStoreId,
-            productId: item.productId || '',
-            productName: item.productName || (prod ? prod.name : 'Product') || 'Product',
-            productBrand: item.brand || (prod ? prod.brand : '') || '',
-            productModelNumber: item.modelNumber || (prod ? prod.modelNumber : '') || '',
-            quantityAdded: item.returnQuantity,
-            previousStock: currentStock,
-            newStock,
-            referenceNumber: `RET-${sale.invoiceNo}`,
-            notes: `Sales Return from Invoice ${sale.invoiceNo} (${returnReason}${returnNotes.trim() ? ': ' + returnNotes.trim() : ''})`,
-            createdAt: serverTimestamp()
-          });
-          batch.set(logRef, logData);
-
-          // Revert returned serial numbers back to 'Available'
-          for (const sn of (item.selectedSerials || [])) {
-            const matchedSerial = allSerials.find(s => s.serialNumber === sn && s.productId === item.productId)
-              || allSerials.find(s => s.serialNumber === sn);
-            
-            if (matchedSerial && matchedSerial.id) {
-              const serialRef = doc(db, 'serialNumbers', matchedSerial.id);
-              batch.set(serialRef, {
-                status: 'Available',
-                updatedAt: serverTimestamp()
-              }, { merge: true });
-            }
-          }
-        }
-      }
-
-      // 2. Process Bank Balance deduction if refund mode is Online
-      let matchedBank = null;
+      // Find matched bank if online
+      let matchedBank: any = null;
       if (refundMode === 'Online' && selectedBankAccNumber) {
         matchedBank = storeDetails.bankAccounts?.find(b => b.accountNumber === selectedBankAccNumber);
-        try {
-          const storeRef = doc(db, 'stores', activeStoreId);
-          const storeSnap = await getDoc(storeRef);
-          if (storeSnap.exists()) {
-            const storeData = storeSnap.data();
-            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
-            currentAccounts = currentAccounts.map((acc: any) => {
-              const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
-              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
-              if (acc.accountNumber === selectedBankAccNumber) {
-                return {
-                  bankName: acc.bankName || 'Bank',
-                  accountNumber: acc.accountNumber || '',
-                  accountTitle: acc.accountTitle || '',
-                  openingBalance: opBal,
-                  balance: Number((curBal - activeRefundAmount).toFixed(2))
-                };
-              }
-              return {
-                bankName: acc.bankName || 'Bank',
-                accountNumber: acc.accountNumber || '',
-                accountTitle: acc.accountTitle || '',
-                openingBalance: opBal,
-                balance: curBal
-              };
-            });
-            batch.set(storeRef, cleanDataForFirestore({
-              bankAccounts: currentAccounts,
-              updatedAt: serverTimestamp()
-            }), { merge: true });
-          }
-        } catch (err) {
-          console.warn('Could not update store bank account on return:', err);
-        }
       }
-
-      // 3. Process Customer Credit if refund mode is Customer Credit
-      if (refundMode === 'Customer Credit' && sale.customerId && sale.customerId !== 'walk-in') {
-        try {
-          const custRef = doc(db, 'customers', sale.customerId);
-          const custSnap = await getDoc(custRef);
-          if (custSnap.exists()) {
-            const custData = custSnap.data();
-            const curBal = typeof custData.balance === 'number' ? custData.balance : (parseFloat(custData.balance) || 0);
-            // Deduct from outstanding balance (or credit customer account)
-            const updatedCustBal = Number((curBal - activeRefundAmount).toFixed(2));
-            batch.set(custRef, {
-              balance: updatedCustBal,
-              updatedAt: serverTimestamp()
-            }, { merge: true });
-
-            // Record a ledger transaction in customerPayments
-            const paymentRecordId = doc(collection(db, 'customerPayments')).id;
-            const paymentRef = doc(db, 'customerPayments', paymentRecordId);
-            batch.set(paymentRef, cleanDataForFirestore({
-              id: paymentRecordId,
-              storeId: activeStoreId,
-              customerId: sale.customerId,
-              customerName: sale.customerName || 'Customer',
-              saleId: sale.id,
-              invoiceNo: sale.invoiceNo,
-              totalAmount: 0,
-              paidAmount: 0,
-              pendingAmount: 0,
-              refundAmount: activeRefundAmount,
-              paymentMode: 'Customer Credit',
-              type: 'ReturnCredit',
-              referenceNo: returnId,
-              notes: `Sales Return Credit for Invoice ${sale.invoiceNo} (${returnReason})`,
-              paymentDate: returnDate || new Date().toISOString(),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            }));
-          }
-        } catch (err) {
-          console.warn('Could not update customer balance on return:', err);
-        }
-      }
-
-      // 4. Create the return record (guaranteeing no undefined fields)
-      const returnRecord: SaleReturnRecord = {
-        id: returnId,
-        returnDate: returnDate || new Date().toISOString().split('T')[0],
-        items: returnedItemsList,
-        totalRefund: activeRefundAmount,
-        refundMode,
-        bankAccountNumber: refundMode === 'Online' && matchedBank ? (matchedBank.accountNumber || null) : null,
-        bankName: refundMode === 'Online' && matchedBank ? (matchedBank.bankName || null) : null,
-        reason: returnReason || 'Customer Return',
-        notes: returnNotes.trim() || '',
-        restocked: Boolean(restockToInventory),
-        createdAt: new Date().toISOString()
-      };
 
       // Check if all items in the invoice are now fully returned
       const totalOriginalQty = (sale.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
@@ -833,7 +691,7 @@ export default function SalesReturnModal({
       const previousRefunds = typeof sale.totalRefunded === 'number' ? sale.totalRefunded : 0;
       const newTotalRefunded = Number((previousRefunds + activeRefundAmount).toFixed(2));
 
-      // 5. Clean existing returns from sale
+      // Clean existing returns from sale
       const cleanExistingReturns = (sale.returns || []).map(r => cleanDataForFirestore({
         id: r.id || '',
         returnDate: r.returnDate || '',
@@ -858,7 +716,22 @@ export default function SalesReturnModal({
         createdAt: r.createdAt || new Date().toISOString()
       }));
 
-      // 6. Update Sale document with clean merged data
+      // Create return record
+      const returnRecord: SaleReturnRecord = {
+        id: returnId,
+        returnDate: returnDate || new Date().toISOString().split('T')[0],
+        items: returnedItemsList,
+        totalRefund: activeRefundAmount,
+        refundMode,
+        bankAccountNumber: refundMode === 'Online' && matchedBank ? (matchedBank.accountNumber || null) : null,
+        bankName: refundMode === 'Online' && matchedBank ? (matchedBank.bankName || null) : null,
+        reason: returnReason || 'Customer Return',
+        notes: returnNotes.trim() || '',
+        restocked: Boolean(restockToInventory),
+        createdAt: new Date().toISOString()
+      };
+
+      // 1. Primary: Update Sale document directly
       const saleRef = doc(db, 'sales', sale.id);
       const saleUpdatePayload = cleanDataForFirestore({
         items: updatedSaleItems,
@@ -869,9 +742,172 @@ export default function SalesReturnModal({
         updatedAt: serverTimestamp()
       });
 
-      batch.set(saleRef, saleUpdatePayload, { merge: true });
+      try {
+        await updateDoc(saleRef, saleUpdatePayload);
+      } catch (saleErr) {
+        console.warn('updateDoc failed on sale, attempting merge setDoc:', saleErr);
+        await setDoc(saleRef, {
+          ...saleUpdatePayload,
+          storeId: sale.storeId || activeStoreId
+        }, { merge: true });
+      }
 
-      await batch.commit();
+      // 2. Restock inventory and serials if requested
+      if (restockToInventory) {
+        for (const item of returnItems) {
+          if (item.returnQuantity <= 0) continue;
+
+          const prod = products.find(p => p.id === item.productId);
+          const currentStock = prod && typeof prod.stock === 'number' ? prod.stock : 0;
+          const newStock = currentStock + item.returnQuantity;
+
+          // Update product stock
+          if (item.productId) {
+            try {
+              const prodRef = doc(db, 'products', item.productId);
+              await updateDoc(prodRef, {
+                stock: newStock,
+                updatedAt: serverTimestamp()
+              });
+            } catch (prodErr) {
+              try {
+                const prodRef = doc(db, 'products', item.productId);
+                await setDoc(prodRef, { stock: newStock, updatedAt: serverTimestamp() }, { merge: true });
+              } catch (pErr) {
+                console.warn(`Could not update product stock for ${item.productId}:`, pErr);
+              }
+            }
+          }
+
+          // Create inventory log entry
+          try {
+            const logRef = doc(collection(db, 'inventoryLogs'));
+            const logData = cleanDataForFirestore({
+              storeId: activeStoreId,
+              productId: item.productId || '',
+              productName: item.productName || (prod ? prod.name : 'Product') || 'Product',
+              productBrand: item.brand || (prod ? prod.brand : '') || '',
+              productModelNumber: item.modelNumber || (prod ? prod.modelNumber : '') || '',
+              quantityAdded: item.returnQuantity,
+              previousStock: currentStock,
+              newStock,
+              referenceNumber: `RET-${sale.invoiceNo}`,
+              notes: `Sales Return from Invoice ${sale.invoiceNo} (${returnReason}${returnNotes.trim() ? ': ' + returnNotes.trim() : ''})`,
+              createdAt: serverTimestamp()
+            });
+            await setDoc(logRef, logData);
+          } catch (logErr) {
+            console.warn('Could not record inventory log on return:', logErr);
+          }
+
+          // Revert returned serial numbers to 'Available'
+          for (const sn of (item.selectedSerials || [])) {
+            const matchedSerial = allSerials.find(s => s.serialNumber === sn && s.productId === item.productId)
+              || allSerials.find(s => s.serialNumber === sn);
+            
+            if (matchedSerial && matchedSerial.id) {
+              try {
+                const serialRef = doc(db, 'serialNumbers', matchedSerial.id);
+                await updateDoc(serialRef, {
+                  status: 'Available',
+                  updatedAt: serverTimestamp()
+                });
+              } catch (snErr) {
+                console.warn(`Could not update serial number ${sn}:`, snErr);
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Process Bank Balance deduction if refund mode is Online
+      if (refundMode === 'Online' && selectedBankAccNumber && activeStoreId) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let bankFound = false;
+            currentAccounts = currentAccounts.map((acc: any) => {
+              const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
+              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
+              if (acc.accountNumber === selectedBankAccNumber) {
+                bankFound = true;
+                return {
+                  bankName: acc.bankName || 'Bank',
+                  accountNumber: acc.accountNumber || '',
+                  accountTitle: acc.accountTitle || '',
+                  openingBalance: opBal,
+                  balance: Number((curBal - activeRefundAmount).toFixed(2))
+                };
+              }
+              return {
+                bankName: acc.bankName || 'Bank',
+                accountNumber: acc.accountNumber || '',
+                accountTitle: acc.accountTitle || '',
+                openingBalance: opBal,
+                balance: curBal
+              };
+            });
+            if (bankFound) {
+              await updateDoc(storeRef, {
+                bankAccounts: currentAccounts,
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Could not update store bank account on return:', err);
+        }
+      }
+
+      // 4. Process Customer Credit if refund mode is Customer Credit
+      if (refundMode === 'Customer Credit' && sale.customerId && sale.customerId !== 'walk-in') {
+        try {
+          const custRef = doc(db, 'customers', sale.customerId);
+          const custSnap = await getDoc(custRef);
+          if (custSnap.exists()) {
+            const custData = custSnap.data();
+            const curBal = typeof custData.balance === 'number' ? custData.balance : (parseFloat(custData.balance) || 0);
+            const updatedCustBal = Number((curBal - activeRefundAmount).toFixed(2));
+            
+            try {
+              await updateDoc(custRef, {
+                balance: updatedCustBal,
+                updatedAt: serverTimestamp()
+              });
+            } catch (custUpErr) {
+              await setDoc(custRef, { balance: updatedCustBal, updatedAt: serverTimestamp() }, { merge: true });
+            }
+
+            // Record a ledger transaction in customerPayments
+            const paymentRecordId = doc(collection(db, 'customerPayments')).id;
+            const paymentRef = doc(db, 'customerPayments', paymentRecordId);
+            await setDoc(paymentRef, cleanDataForFirestore({
+              id: paymentRecordId,
+              storeId: activeStoreId || sale.storeId,
+              customerId: sale.customerId,
+              customerName: sale.customerName || 'Customer',
+              saleId: sale.id,
+              invoiceNo: sale.invoiceNo,
+              totalAmount: 0,
+              paidAmount: 0,
+              pendingAmount: 0,
+              refundAmount: activeRefundAmount,
+              paymentMode: 'Customer Credit',
+              type: 'ReturnCredit',
+              referenceNo: returnId,
+              notes: `Sales Return Credit for Invoice ${sale.invoiceNo} (${returnReason})`,
+              paymentDate: returnDate || new Date().toISOString(),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }));
+          }
+        } catch (err) {
+          console.warn('Could not update customer balance on return:', err);
+        }
+      }
 
       toast.success(`Successfully processed return of ${totalUnitsSelectedForReturn} item(s) for Invoice ${sale.invoiceNo}!`);
 

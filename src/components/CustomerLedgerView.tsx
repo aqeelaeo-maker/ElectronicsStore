@@ -21,7 +21,9 @@ import {
   Eye,
   X,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { 
   collection, 
@@ -31,9 +33,11 @@ import {
   doc, 
   writeBatch, 
   serverTimestamp, 
-  getDoc 
+  getDoc,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -147,8 +151,9 @@ export default function CustomerLedgerView({
   onBack
 }: CustomerLedgerViewProps) {
   const { storeId: authStoreId, user } = useAuth();
-  const activeStoreId = storeId || authStoreId || (customer as any)?.storeId || user?.uid || '';
+  const activeStoreId = authStoreId || auth.currentUser?.uid || storeId || (customer as any)?.storeId || user?.uid || '';
 
+  const [isFullPage, setIsFullPage] = useState(true);
   const [sales, setSales] = useState<CustomerSaleRecord[]>([]);
   const [payments, setPayments] = useState<CustomerPaymentRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -404,7 +409,6 @@ export default function CustomerLedgerView({
 
     setSubmittingPayment(true);
     try {
-      const batch = writeBatch(db);
       const matchedBank = paymentMode === 'Online'
         ? bankAccounts.find(b => b.accountNumber === selectedBankAcc)
         : null;
@@ -435,21 +439,17 @@ export default function CustomerLedgerView({
 
       const newBalance = Number(Math.max(0, currentCustBal - amount).toFixed(2));
 
-      // Update customer document safely with merge: true to avoid missing doc failure
-      batch.set(customerRef, cleanDataForFirestore({
-        balance: newBalance,
-        storeId: effectiveStoreId,
-        updatedAt: serverTimestamp()
-      }), { merge: true });
-
-      // 2. Add customerPayments entry
+      // 2. Prepare customerPayments entry
       const paymentRecordId = doc(collection(db, 'customerPayments')).id;
       const paymentRef = doc(db, 'customerPayments', paymentRecordId);
       const receiptNo = `RCPT-${Date.now().toString(36).toUpperCase()}`;
 
+      // Resolve storeId ensuring isStoreOwner match
+      const safeStoreId = effectiveStoreId || auth.currentUser?.uid || user?.uid || customer?.storeId || '';
+
       const paymentRecordPayload = cleanDataForFirestore({
         id: paymentRecordId,
-        storeId: effectiveStoreId,
+        storeId: safeStoreId,
         customerId: customer.id,
         customerName: customer.name || 'Customer',
         totalAmount: 0,
@@ -466,51 +466,74 @@ export default function CustomerLedgerView({
         updatedAt: serverTimestamp()
       });
 
-      batch.set(paymentRef, paymentRecordPayload);
+      // Write payment record directly
+      await setDoc(paymentRef, paymentRecordPayload);
 
-      // 3. Reconcile / allocate payment across pending customer invoices (FIFO)
-      let remainingToAllocate = amount;
-      const pendingSales = [...sales]
-        .filter(s => {
-          const pending = s.pendingAmount !== undefined 
-            ? s.pendingAmount 
-            : (s.status === 'Pending' ? s.total : 0);
-          return (pending > 0) || s.status === 'Pending' || s.status === 'Partial';
-        })
-        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
-        .slice(0, 50);
-
-      for (const pendingSale of pendingSales) {
-        if (remainingToAllocate <= 0) break;
-        const currentPending = pendingSale.pendingAmount !== undefined 
-          ? pendingSale.pendingAmount 
-          : (pendingSale.status === 'Pending' ? pendingSale.total : 0);
-        const currentPaid = pendingSale.paidAmount !== undefined 
-          ? pendingSale.paidAmount 
-          : (pendingSale.status === 'Paid' ? pendingSale.total : 0);
-
-        if (currentPending <= 0) continue;
-
-        const allocation = Math.min(remainingToAllocate, currentPending);
-        const newSalePaid = Number((currentPaid + allocation).toFixed(2));
-        const newSalePending = Number(Math.max(0, currentPending - allocation).toFixed(2));
-        const newSaleStatus = newSalePending === 0 ? 'Paid' : 'Partial';
-
-        const saleRef = doc(db, 'sales', pendingSale.id);
-        batch.set(saleRef, cleanDataForFirestore({
-          paidAmount: newSalePaid,
-          pendingAmount: newSalePending,
-          status: newSaleStatus,
+      // Update customer balance safely without touching storeId or overwriting other customer fields
+      try {
+        await updateDoc(customerRef, {
+          balance: newBalance,
           updatedAt: serverTimestamp()
-        }), { merge: true });
-
-        remainingToAllocate = Number((remainingToAllocate - allocation).toFixed(2));
+        });
+      } catch (custUpdateErr) {
+        console.warn('updateDoc on customer failed, attempting merge setDoc:', custUpdateErr);
+        await setDoc(customerRef, {
+          balance: newBalance,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
       }
 
-      // 4. Update store bank account balance if Online payment
-      if (paymentMode === 'Online' && selectedBankAcc) {
+      // 3. Reconcile / allocate payment across pending customer invoices (FIFO) in isolated try/catch
+      try {
+        let remainingToAllocate = amount;
+        const pendingSales = [...sales]
+          .filter(s => {
+            const pending = s.pendingAmount !== undefined 
+              ? s.pendingAmount 
+              : (s.status === 'Pending' ? s.total : 0);
+            return (pending > 0) || s.status === 'Pending' || s.status === 'Partial';
+          })
+          .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+          .slice(0, 50);
+
+        for (const pendingSale of pendingSales) {
+          if (remainingToAllocate <= 0) break;
+          const currentPending = pendingSale.pendingAmount !== undefined 
+            ? pendingSale.pendingAmount 
+            : (pendingSale.status === 'Pending' ? pendingSale.total : 0);
+          const currentPaid = pendingSale.paidAmount !== undefined 
+            ? pendingSale.paidAmount 
+            : (pendingSale.status === 'Paid' ? pendingSale.total : 0);
+
+          if (currentPending <= 0) continue;
+
+          const allocation = Math.min(remainingToAllocate, currentPending);
+          const newSalePaid = Number((currentPaid + allocation).toFixed(2));
+          const newSalePending = Number(Math.max(0, currentPending - allocation).toFixed(2));
+          const newSaleStatus = newSalePending === 0 ? 'Paid' : 'Partial';
+
+          const saleRef = doc(db, 'sales', pendingSale.id);
+          try {
+            await updateDoc(saleRef, {
+              paidAmount: newSalePaid,
+              pendingAmount: newSalePending,
+              status: newSaleStatus,
+              updatedAt: serverTimestamp()
+            });
+          } catch (saleUpErr) {
+            console.warn(`Could not update sales invoice ${pendingSale.id} status:`, saleUpErr);
+          }
+
+          remainingToAllocate = Number((remainingToAllocate - allocation).toFixed(2));
+        }
+      } catch (allocErr) {
+        console.warn('Could not complete sales invoice allocation (payment was still recorded successfully):', allocErr);
+      }
+
+      // 4. Update store bank account balance if Online payment in isolated try/catch
+      if (paymentMode === 'Online' && selectedBankAcc && safeStoreId) {
         try {
-          const storeRef = doc(db, 'stores', effectiveStoreId);
+          const storeRef = doc(db, 'stores', safeStoreId);
           const storeSnap = await getDoc(storeRef);
           if (storeSnap.exists()) {
             const storeData = storeSnap.data();
@@ -535,18 +558,16 @@ export default function CustomerLedgerView({
             });
 
             if (bankFound) {
-              batch.set(storeRef, cleanDataForFirestore({
+              await updateDoc(storeRef, {
                 bankAccounts: currentAccounts,
                 updatedAt: serverTimestamp()
-              }), { merge: true });
+              });
             }
           }
         } catch (bankErr) {
-          console.warn('Could not stage store bank account balance update:', bankErr);
+          console.warn('Could not update store bank account balance (payment was still recorded):', bankErr);
         }
       }
-
-      await batch.commit();
 
       toast.success(`Successfully recorded payment receipt of PKR ${amount.toFixed(2)} for ${customer.name}!`);
       setReceivingAmount('');
@@ -682,7 +703,14 @@ export default function CustomerLedgerView({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div 
+      id="customer-ledger-view-container"
+      className={
+        isFullPage
+          ? "fixed inset-0 z-50 bg-[#f8faf9] overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col space-y-6 animate-in fade-in duration-200"
+          : "w-full max-w-full space-y-6 animate-in fade-in duration-200"
+      }
+    >
       {/* Top Navigation & Action Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-4">
@@ -739,7 +767,7 @@ export default function CustomerLedgerView({
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-3 w-full lg:w-auto">
+        <div className="flex items-center gap-3 w-full lg:w-auto flex-wrap sm:flex-nowrap">
           <button
             type="button"
             onClick={() => setShowReceiveForm(!showReceiveForm)}
@@ -750,12 +778,25 @@ export default function CustomerLedgerView({
           </button>
           <button
             type="button"
+            onClick={() => setIsFullPage(!isFullPage)}
+            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
+              isFullPage
+                ? 'bg-emerald-50 text-[#0a382c] border-emerald-200 hover:bg-emerald-100'
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+            }`}
+            title={isFullPage ? "Exit Fullscreen (Fit in window)" : "Full Page Mode (Maximize across screen to view all fields)"}
+          >
+            {isFullPage ? <Minimize2 className="w-4 h-4 text-[#0a382c]" /> : <Maximize2 className="w-4 h-4 text-slate-600" />}
+            <span className="whitespace-nowrap">{isFullPage ? 'Exit Full Page' : 'Full Page Mode'}</span>
+          </button>
+          <button
+            type="button"
             onClick={handlePrint}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors cursor-pointer"
             title="Print Full Customer Ledger Statement"
           >
             <Printer className="w-4 h-4 text-slate-600" />
-            Print Statement
+            <span className="hidden sm:inline">Print Statement</span>
           </button>
         </div>
       </div>
@@ -1100,7 +1141,7 @@ export default function CustomerLedgerView({
             {/* TAB 1: Invoices & Sales Billing */}
             {activeTab === 'invoices' && (
               <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-slate-100 text-left text-xs">
+                <table className="w-full min-w-[1050px] divide-y divide-slate-100 text-left text-xs">
                   <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
                     <tr>
                       <th className="py-4 px-5">Invoice #</th>
@@ -1253,7 +1294,7 @@ export default function CustomerLedgerView({
             {/* TAB 2: Payment Records & Ledger (customerPayments) */}
             {activeTab === 'payments' && (
               <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-slate-100 text-left text-xs">
+                <table className="w-full min-w-[1050px] divide-y divide-slate-100 text-left text-xs">
                   <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
                     <tr>
                       <th className="py-4 px-5">Date & Time</th>
@@ -1386,7 +1427,7 @@ export default function CustomerLedgerView({
             {/* TAB 3: Running Balance Statement */}
             {activeTab === 'statement' && (
               <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-slate-100 text-left text-xs">
+                <table className="w-full min-w-[1050px] divide-y divide-slate-100 text-left text-xs">
                   <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
                     <tr>
                       <th className="py-4 px-5">Date</th>
