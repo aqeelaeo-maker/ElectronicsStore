@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Building2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Building2, Receipt } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import VendorLedgerView from '../components/VendorLedgerView';
 
 interface Vendor {
   id: string;
@@ -15,11 +16,16 @@ interface Vendor {
   email: string;
   city: string;
   balance: number;
+  openingBalance?: number;
+  initialBalance?: number;
   remainingAmount?: number;
   totalPurchases?: number;
   totalPaid?: number;
   lastPaymentAmount?: number;
   lastPaymentDate?: any;
+  storeId?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export default function Vendors() {
@@ -29,6 +35,7 @@ export default function Vendors() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [ledgerVendor, setLedgerVendor] = useState<Vendor | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -80,6 +87,8 @@ export default function Vendors() {
       email: emailVal,
       city: cityVal,
       balance: balanceVal,
+      openingBalance: balanceVal,
+      initialBalance: balanceVal,
       remainingAmount: balanceVal,
       totalPurchases: 0,
       totalPaid: 0,
@@ -118,6 +127,8 @@ export default function Vendors() {
       email: emailVal,
       city: cityVal,
       balance: balanceVal,
+      openingBalance: editingVendor.openingBalance !== undefined ? editingVendor.openingBalance : (editingVendor.initialBalance !== undefined ? editingVendor.initialBalance : balanceVal),
+      initialBalance: editingVendor.initialBalance !== undefined ? editingVendor.initialBalance : (editingVendor.openingBalance !== undefined ? editingVendor.openingBalance : balanceVal),
       remainingAmount: editingVendor.remainingAmount !== undefined ? editingVendor.remainingAmount : balanceVal,
       updatedAt: serverTimestamp(),
     };
@@ -151,6 +162,17 @@ export default function Vendors() {
     const search = searchTerm.toLowerCase();
     return name.includes(search) || phone.includes(search) || contact.includes(search);
   });
+
+  if (ledgerVendor) {
+    const currentVendor = vendors.find(v => v.id === ledgerVendor.id) || ledgerVendor;
+    return (
+      <VendorLedgerView
+        vendor={currentVendor}
+        storeId={storeId || currentVendor.storeId || ''}
+        onBack={() => setLedgerVendor(null)}
+      />
+    );
+  }
 
   const isFormOpen = showAddForm || !!editingVendor;
 
@@ -356,15 +378,23 @@ export default function Vendors() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
                         <button 
+                          onClick={() => setLedgerVendor(vendor)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200 cursor-pointer"
+                          title="View Vendor Purchases & Payment Ledger"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                          Ledger
+                        </button>
+                        <button 
                           onClick={() => setEditingVendor(vendor)}
-                          className="text-slate-400 hover:text-slate-800 mr-4 transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5 cursor-pointer"
                           title="Edit Vendor"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleDeleteVendor(vendor.id)}
-                          className="text-red-400 hover:text-red-600 transition-colors cursor-pointer"
+                          className="text-red-400 hover:text-red-600 transition-colors p-1.5 cursor-pointer"
                           title="Delete Vendor"
                         >
                           <Trash2 className="w-4 h-4" />

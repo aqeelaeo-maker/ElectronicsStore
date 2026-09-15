@@ -73,6 +73,8 @@ export interface Customer {
   email: string;
   city: string;
   balance: number;
+  openingBalance?: number;
+  initialBalance?: number;
   storeId?: string;
   createdAt?: any;
   updatedAt?: any;
@@ -246,31 +248,61 @@ export default function CustomerLedgerView({
     };
   }, [activeStoreId, customer?.id]);
 
+  // Calculate or derive the Initial / Opening Balance of customer account
+  const initialBalance = useMemo(() => {
+    if (customer.openingBalance !== undefined && customer.openingBalance !== null && !isNaN(Number(customer.openingBalance))) {
+      return Number(customer.openingBalance);
+    }
+    if (customer.initialBalance !== undefined && customer.initialBalance !== null && !isNaN(Number(customer.initialBalance))) {
+      return Number(customer.initialBalance);
+    }
+    
+    // If not explicitly stored, derive mathematically from sales & payments:
+    // currentBalance = initialBalance + totalInvoicedDebits - totalPaidCredits
+    // initialBalance = currentBalance - totalInvoicedDebits + totalPaidCredits
+    const totalInvoiced = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+    const totalPaidOrCredited = payments.reduce((sum, p) => {
+      const isReturn = p.type === 'ReturnCredit' || (p.refundAmount && p.refundAmount > 0);
+      return sum + (isReturn ? (p.refundAmount || 0) : (p.paidAmount || 0));
+    }, 0);
+
+    const derived = Number(((customer.balance || 0) - totalInvoiced + totalPaidOrCredited).toFixed(2));
+    if (derived > 0) return derived;
+    if (sales.length === 0 && (customer.balance || 0) > 0) return customer.balance;
+    return 0;
+  }, [customer, sales, payments]);
+
   // Financial calculations
   const financialTotals = useMemo(() => {
     let totalInvoiced = 0;
-    let totalPaid = 0;
     let totalPending = 0;
 
     sales.forEach(sale => {
       totalInvoiced += sale.total || 0;
-      const paid = sale.paidAmount !== undefined 
-        ? sale.paidAmount 
-        : (sale.status === 'Paid' ? sale.total : 0);
       const pending = sale.pendingAmount !== undefined 
         ? sale.pendingAmount 
-        : (sale.status === 'Pending' ? sale.total : 0);
-      totalPaid += paid;
+        : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
       totalPending += pending;
     });
 
+    let totalPaid = 0;
+    payments.forEach(payment => {
+      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
+      totalPaid += isReturn ? (payment.refundAmount || 0) : (payment.paidAmount || 0);
+    });
+
+    const netAccountBalance = customer?.balance !== undefined 
+      ? customer.balance 
+      : Number((initialBalance + totalInvoiced - totalPaid).toFixed(2));
+
     return {
+      initialBalance,
       totalInvoiced,
       totalPaid,
       totalPending,
-      currentBalance: customer?.balance ?? totalPending
+      currentBalance: netAccountBalance
     };
-  }, [sales, customer]);
+  }, [sales, payments, customer, initialBalance]);
 
   // Thermal voucher / Receipt Print for an individual payment
   const printPaymentReceipt = (payment: CustomerPaymentRecord) => {
@@ -634,38 +666,78 @@ export default function CustomerLedgerView({
     });
   }, [payments, searchTerm, dateFilter]);
 
+  // Statement Row type definition
+  type StatementRowItem = {
+    id: string;
+    date: string;
+    dateObj: Date;
+    sortOrder: number;
+    type: 'Initial Balance' | 'Invoice' | 'Payment' | 'Return';
+    refNo: string;
+    description: string;
+    debit: number;          // Increases amount customer owes
+    credit: number;         // Reduces amount customer owes
+    invoiceBalance: number; // Balance remaining on this specific invoice (or initial balance)
+    runningBalance: number; // Cumulative net account balance
+    mode: string;
+    bankInfo?: string;
+  };
+
   // Combined Running Account Statement
   const statementRows = useMemo(() => {
-    type StatementItem = {
-      id: string;
-      date: string;
-      dateObj: Date;
-      type: 'Invoice' | 'Payment' | 'Return';
-      refNo: string;
-      description: string;
-      debit: number;  // Increases what customer owes (e.g. invoice)
-      credit: number; // Reduces what customer owes (e.g. payment or return)
-      mode: string;
-      bankInfo?: string;
-    };
+    const combined: (Omit<StatementRowItem, 'runningBalance'>)[] = [];
 
-    const combined: StatementItem[] = [];
+    // Earliest date for Initial Balance row
+    let earliestDate: Date;
+    if (customer.createdAt?.toMillis) {
+      earliestDate = new Date(customer.createdAt.toMillis());
+    } else if (sales.length > 0 && sales[sales.length - 1]?.date) {
+      earliestDate = new Date(new Date(sales[sales.length - 1].date).getTime() - 86400000);
+    } else {
+      earliestDate = new Date();
+    }
 
+    // 1. Initial / Opening Balance Row (always included, reflecting starting balance)
+    combined.push({
+      id: 'initial-balance-row',
+      date: earliestDate.toISOString(),
+      dateObj: earliestDate,
+      sortOrder: 0, // Top priority
+      type: 'Initial Balance',
+      refNo: 'INITIAL-BAL',
+      description: 'Account Opening / Initial Balance',
+      debit: initialBalance > 0 ? initialBalance : 0,
+      credit: 0,
+      invoiceBalance: initialBalance,
+      mode: 'Opening',
+    });
+
+    // 2. Sales Invoices (Debit)
     sales.forEach(sale => {
+      const pending = sale.pendingAmount !== undefined 
+        ? sale.pendingAmount 
+        : (sale.status === 'Paid' ? 0 : (sale.total || 0) - (sale.paidAmount || 0));
+      const itemsCount = sale.items?.length || 0;
+      const itemsDesc = sale.items?.slice(0, 2).map((it: any) => it.name).join(', ') + (itemsCount > 2 ? ` +${itemsCount - 2} more` : '');
+
+      const saleDate = sale.date || '';
       combined.push({
         id: `sale-${sale.id}`,
-        date: sale.date || '',
-        dateObj: new Date(sale.date || 0),
+        date: saleDate,
+        dateObj: new Date(saleDate || 0),
+        sortOrder: 1,
         type: 'Invoice',
-        refNo: sale.invoiceNo,
-        description: `Sales Invoice (${sale.items?.length || 0} item${(sale.items?.length || 0) === 1 ? '' : 's'})`,
+        refNo: sale.invoiceNo || `INV-${sale.id.slice(-6).toUpperCase()}`,
+        description: `Sales Invoice (${itemsCount} item${itemsCount === 1 ? '' : 's'}${itemsDesc ? `: ${itemsDesc}` : ''})`,
         debit: sale.total || 0,
         credit: 0,
-        mode: sale.paymentMode || 'Cash',
+        invoiceBalance: pending,
+        mode: sale.paymentMode || 'Credit',
         bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
       });
     });
 
+    // 3. Customer Payments & Returns (Credit)
     payments.forEach(payment => {
       const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
       const amount = isReturn ? (payment.refundAmount || 0) : (payment.paidAmount || 0);
@@ -675,31 +747,317 @@ export default function CustomerLedgerView({
         id: `pay-${payment.id}`,
         date: dateVal,
         dateObj: new Date(dateVal || 0),
+        sortOrder: 2,
         type: isReturn ? 'Return' : 'Payment',
-        refNo: payment.invoiceNo || payment.referenceNo || 'Payment Ref',
-        description: payment.notes || (isReturn ? 'Sales Return Refund Credit' : 'Payment Received'),
+        refNo: payment.invoiceNo || payment.referenceNo || `PAY-${payment.id.slice(-6).toUpperCase()}`,
+        description: payment.notes || (isReturn ? 'Sales Return Refund Credit' : (payment.invoiceNo ? `Payment on Invoice #${payment.invoiceNo}` : 'Account Settlement Payment')),
         debit: 0,
         credit: amount,
+        invoiceBalance: payment.pendingAmount !== undefined ? payment.pendingAmount : (isReturn ? 0 : 0),
         mode: payment.paymentMode || 'Cash',
         bankInfo: payment.bankName ? `${payment.bankName} (${payment.bankAccountNumber})` : undefined
       });
     });
 
     // Sort chronologically ascending to calculate running balance
-    combined.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+    combined.sort((a, b) => {
+      const diff = a.dateObj.getTime() - b.dateObj.getTime();
+      if (diff !== 0) return diff;
+      return a.sortOrder - b.sortOrder;
+    });
 
+    // Calculate running balance starting from Initial Balance
     let running = 0;
     return combined.map(item => {
-      running = running + item.debit - item.credit;
+      running = Number((running + item.debit - item.credit).toFixed(2));
       return {
         ...item,
         runningBalance: running
       };
-    }).reverse(); // Most recent first for table display
-  }, [sales, payments]);
+    });
+  }, [sales, payments, customer, initialBalance]);
 
+  // Handle Print Statement with Full High-Resolution A4 Statement
   const handlePrint = () => {
-    window.print();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const rowsHtml = statementRows.map((r) => `
+      <tr style="border-bottom: 1px solid #cbd5e1; ${r.type === 'Initial Balance' ? 'background-color: #f1f5f3; font-weight: bold;' : ''}">
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">
+          ${r.date ? new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+        </td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0;">
+          <span style="display: inline-block; padding: 2px 6px; font-size: 9px; font-weight: 700; border-radius: 4px; ${
+            r.type === 'Initial Balance' ? 'background-color: #d1e7dd; color: #0a382c;' :
+            r.type === 'Invoice' ? 'background-color: #e2e8f0; color: #1e293b;' :
+            r.type === 'Return' ? 'background-color: #f3e8ff; color: #6b21a8;' :
+            'background-color: #dcfce7; color: #15803d;'
+          }">${r.type}</span>
+        </td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-family: monospace; font-weight: bold; font-size: 10px;">${r.refNo}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">${r.description}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 10px;">${r.debit > 0 ? 'PKR ' + r.debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #15803d; font-size: 10px;">${r.credit > 0 ? 'PKR ' + r.credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 10px; color: ${r.invoiceBalance > 0 ? '#b45309' : '#475569'};">
+          ${r.invoiceBalance !== undefined ? 'PKR ' + r.invoiceBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+        </td>
+        <td style="padding: 6px 8px; text-align: right; font-weight: 900; font-family: monospace; font-size: 10px; ${r.runningBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+          PKR ${r.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </td>
+      </tr>
+    `).join('');
+
+    const statementHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Account Statement - ${customer.name}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              color: #0f172a;
+              background-color: #ffffff;
+              margin: 0;
+              padding: 0;
+              font-size: 11px;
+              line-height: 1.35;
+            }
+            .header-banner {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 10px;
+              margin-bottom: 12px;
+            }
+            .store-name {
+              font-size: 18px;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: -0.5px;
+              color: #0a382c;
+            }
+            .statement-title {
+              font-size: 15px;
+              font-weight: 800;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              text-align: right;
+              color: #0f172a;
+            }
+            .summary-cards-grid {
+              display: grid;
+              grid-template-columns: repeat(5, 1fr);
+              gap: 8px;
+              margin-bottom: 14px;
+            }
+            .summary-card {
+              border: 1px solid #cbd5e1;
+              background: #f8fafc;
+              padding: 7px 9px;
+              border-radius: 6px;
+            }
+            .summary-label {
+              font-size: 9px;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #64748b;
+              margin-bottom: 3px;
+            }
+            .summary-val {
+              font-size: 12px;
+              font-weight: 800;
+              font-family: monospace;
+              color: #0f172a;
+            }
+            .table-container {
+              width: 100%;
+              border-collapse: collapse;
+              border: 1px solid #0f172a;
+              margin-bottom: 14px;
+            }
+            .table-container th {
+              background-color: #f1f5f9;
+              font-weight: 800;
+              font-size: 9.5px;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              padding: 6px 7px;
+              border-bottom: 1.5px solid #0f172a;
+              border-right: 1px solid #cbd5e1;
+            }
+            .net-balance-banner {
+              border: 2px solid #0a382c;
+              background-color: #f0fdf4;
+              padding: 12px 16px;
+              border-radius: 6px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-top: 14px;
+              page-break-inside: avoid;
+            }
+            .signatures-block {
+              display: flex;
+              justify-content: space-between;
+              margin-top: 36px;
+              padding-top: 10px;
+              page-break-inside: avoid;
+            }
+            .signature-line {
+              width: 220px;
+              border-top: 1px solid #0f172a;
+              text-align: center;
+              padding-top: 5px;
+              font-size: 10px;
+              font-weight: 700;
+              color: #334155;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-banner">
+            <div>
+              <div class="store-name">${storeDetails?.name || 'STORE ACCOUNT LEDGER'}</div>
+              ${storeDetails?.address ? `<div style="font-size: 10px; color: #334155;">${storeDetails.address}</div>` : ''}
+              ${storeDetails?.phone ? `<div style="font-size: 10px; color: #334155;">Phone: ${storeDetails.phone}</div>` : ''}
+              ${storeDetails?.email ? `<div style="font-size: 10px; color: #334155;">Email: ${storeDetails.email}</div>` : ''}
+            </div>
+            <div>
+              <div class="statement-title">Customer Account Statement</div>
+              <div style="font-size: 10px; color: #475569; text-align: right; margin-top: 3px;">
+                Statement Date: <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+              </div>
+              <div style="font-size: 10px; color: #475569; text-align: right;">
+                Issue Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer Details & Account Reference -->
+          <div style="display: flex; justify-content: space-between; border: 1px solid #cbd5e1; background: #fafafa; padding: 9px 12px; border-radius: 6px; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Customer Information</div>
+              <div style="font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 2px;">${customer.name}</div>
+              <div style="font-size: 10px; color: #334155; margin-top: 2px;">Phone / Mobile: <strong>${customer.mobile}</strong></div>
+              ${customer.email ? `<div style="font-size: 10px; color: #334155;">Email: ${customer.email}</div>` : ''}
+              ${customer.city ? `<div style="font-size: 10px; color: #334155;">City: ${customer.city}</div>` : ''}
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Account Reference</div>
+              <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px;">ID: ${customer.id}</div>
+              <div style="font-size: 10px; color: #334155; margin-top: 2px;">Total Invoices: <strong>${sales.length}</strong></div>
+              <div style="font-size: 10px; color: #334155;">Total Transactions: <strong>${statementRows.length}</strong></div>
+            </div>
+          </div>
+
+          <!-- Summary Cards Grid (Initial Balance, Invoiced, Paid, Pending on Invoices, Net Balance) -->
+          <div class="summary-cards-grid">
+            <div class="summary-card">
+              <div class="summary-label">Initial Balance</div>
+              <div class="summary-val">PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total Invoiced</div>
+              <div class="summary-val">PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Total Paid</div>
+              <div class="summary-val" style="color: #15803d;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Pending on Invoices</div>
+              <div class="summary-val" style="color: #b45309;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-card" style="border: 1.5px solid #0a382c; background: #f0fdf4;">
+              <div class="summary-label" style="color: #0a382c;">Net Account Balance</div>
+              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 13px;">
+                PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
+          <!-- Statement Table -->
+          <table class="table-container">
+            <thead>
+              <tr>
+                <th style="width: 13%;">Date & Time</th>
+                <th style="width: 10%;">Type</th>
+                <th style="width: 13%;">Ref / Invoice #</th>
+                <th style="width: 25%;">Particulars / Notes</th>
+                <th style="width: 11%; text-align: right;">Invoice Total (Debit)</th>
+                <th style="width: 11%; text-align: right;">Paid (Credit)</th>
+                <th style="width: 13%; text-align: right;">Invoice Balance (Pending)</th>
+                <th style="width: 14%; text-align: right;">Net Running Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              <tr style="background-color: #f1f5f9; font-weight: 800; border-top: 1.5px solid #0f172a;">
+                <td colspan="4" style="padding: 7px 8px; text-align: right; text-transform: uppercase; font-size: 9.5px; border-right: 1px solid #cbd5e1;">Totals:</td>
+                <td style="padding: 7px 8px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 7px 8px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 7px 8px; text-align: right; color: #b45309; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 7px 8px; text-align: right; font-family: monospace; font-size: 11px; font-weight: 900; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+                  PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Closing Net Account Balance Banner -->
+          <div class="net-balance-banner">
+            <div>
+              <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
+                Account Settlement Status
+              </div>
+              <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">
+                ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' : financialTotals.currentBalance < 0 ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
+              </div>
+              <div style="font-size: 10px; color: #475569; margin-top: 3px;">
+                Initial Balance: PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Invoiced: PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Paid: PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
+                Net Account Balance
+              </div>
+              <div style="font-size: 20px; font-weight: 900; font-family: monospace; margin-top: 2px; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+                PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
+          <!-- Signatures -->
+          <div class="signatures-block">
+            <div class="signature-line">
+              Authorized Store Signature
+            </div>
+            <div class="signature-line">
+              Customer Acknowledgment Signature
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(statementHtml);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 400);
   };
 
   return (
@@ -802,7 +1160,22 @@ export default function CustomerLedgerView({
       </div>
 
       {/* Financial Metrics Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Initial Balance</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+              <Banknote className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+            PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-xs text-slate-500 mt-1 font-medium">
+            Account opening balance
+          </div>
+        </div>
+
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Invoiced</span>
@@ -810,11 +1183,11 @@ export default function CustomerLedgerView({
               <FileText className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 mt-2">
-            PKR {financialTotals.totalInvoiced.toFixed(2)}
+          <div className="text-2xl font-black text-slate-900 mt-2 font-mono">
+            PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            Generated across {sales.length} invoice(s)
+            Across {sales.length} sales invoice(s)
           </div>
         </div>
 
@@ -825,11 +1198,11 @@ export default function CustomerLedgerView({
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-emerald-700 mt-2">
-            PKR {financialTotals.totalPaid.toFixed(2)}
+          <div className="text-2xl font-black text-emerald-700 mt-2 font-mono">
+            PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-emerald-600/90 mt-1 font-medium">
-            Cleared invoices & payments received
+            Payments & receipts cleared
           </div>
         </div>
 
@@ -840,11 +1213,11 @@ export default function CustomerLedgerView({
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-amber-900 mt-2">
-            PKR {financialTotals.totalPending.toFixed(2)}
+          <div className="text-2xl font-black text-amber-900 mt-2 font-mono">
+            PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-amber-700/80 mt-1 font-medium">
-            Unpaid / Partial invoice balances
+            Invoice balances due
           </div>
         </div>
 
@@ -855,8 +1228,8 @@ export default function CustomerLedgerView({
               <CreditCard className="w-4 h-4" />
             </div>
           </div>
-          <div className={`text-2xl font-black mt-2 ${financialTotals.currentBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
-            PKR {financialTotals.currentBalance.toFixed(2)}
+          <div className={`text-2xl font-black mt-2 font-mono ${financialTotals.currentBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
+            PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
             {financialTotals.currentBalance > 0 ? 'Customer owes store' : 'Account is fully settled'}
@@ -1426,69 +1799,135 @@ export default function CustomerLedgerView({
 
             {/* TAB 3: Running Balance Statement */}
             {activeTab === 'statement' && (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1050px] divide-y divide-slate-100 text-left text-xs">
-                  <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
-                    <tr>
-                      <th className="py-4 px-5">Date</th>
-                      <th className="py-4 px-5">Transaction Type</th>
-                      <th className="py-4 px-5">Reference #</th>
-                      <th className="py-4 px-5 min-w-[200px]">Particulars / Notes</th>
-                      <th className="py-4 px-5 text-right whitespace-nowrap">Debit (Due)</th>
-                      <th className="py-4 px-5 text-right whitespace-nowrap">Credit (Paid)</th>
-                      <th className="py-4 px-5 text-right whitespace-nowrap">Running Balance</th>
-                      <th className="py-4 px-5 text-center whitespace-nowrap">Mode / Channel</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {statementRows.length === 0 ? (
+              <div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1150px] divide-y divide-slate-100 text-left text-xs">
+                    <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
                       <tr>
-                        <td colSpan={8} className="py-16 text-center text-slate-400 italic">
-                          No ledger statement history recorded yet for this customer.
-                        </td>
+                        <th className="py-4 px-5">Date & Time</th>
+                        <th className="py-4 px-5">Transaction Type</th>
+                        <th className="py-4 px-5">Reference #</th>
+                        <th className="py-4 px-5 min-w-[200px]">Particulars / Notes</th>
+                        <th className="py-4 px-5 text-right whitespace-nowrap">Invoice Total (Debit)</th>
+                        <th className="py-4 px-5 text-right whitespace-nowrap">Paid (Credit)</th>
+                        <th className="py-4 px-5 text-right whitespace-nowrap">Invoice Balance</th>
+                        <th className="py-4 px-5 text-right whitespace-nowrap">Net Running Balance</th>
+                        <th className="py-4 px-5 text-center whitespace-nowrap">Mode / Channel</th>
                       </tr>
-                    ) : (
-                      statementRows.map((row) => (
-                        <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-4 px-5 whitespace-nowrap text-slate-700 font-medium">
-                            {row.date ? new Date(row.date).toLocaleDateString() : 'N/A'}
-                          </td>
-                          <td className="py-4 px-5 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                              row.type === 'Invoice'
-                                ? 'bg-slate-100 text-slate-800'
-                                : row.type === 'Return'
-                                  ? 'bg-purple-50 text-purple-800 border border-purple-200'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            }`}>
-                              {row.type}
-                            </span>
-                          </td>
-                          <td className="py-4 px-5 whitespace-nowrap font-mono font-bold text-slate-900">
-                            {row.refNo}
-                          </td>
-                          <td className="py-4 px-5 text-slate-700 font-medium">
-                            {row.description}
-                          </td>
-                          <td className="py-4 px-5 text-right whitespace-nowrap font-bold text-slate-900">
-                            {row.debit > 0 ? `PKR ${row.debit.toFixed(2)}` : '—'}
-                          </td>
-                          <td className="py-4 px-5 text-right whitespace-nowrap font-bold text-emerald-700">
-                            {row.credit > 0 ? `PKR ${row.credit.toFixed(2)}` : '—'}
-                          </td>
-                          <td className="py-4 px-5 text-right whitespace-nowrap font-black text-sm">
-                            <span className={row.runningBalance > 0 ? 'text-amber-800' : 'text-slate-900'}>
-                              PKR {row.runningBalance.toFixed(2)}
-                            </span>
-                          </td>
-                          <td className="py-4 px-5 text-center whitespace-nowrap text-slate-600 font-semibold">
-                            {row.mode} {row.bankInfo ? `(${row.bankInfo})` : ''}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {statementRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-16 text-center text-slate-400 italic">
+                            No ledger statement history recorded yet for this customer.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        statementRows.map((row) => (
+                          <tr 
+                            key={row.id} 
+                            className={`transition-colors ${row.type === 'Initial Balance' ? 'bg-emerald-50/40 hover:bg-emerald-50/70 font-semibold' : 'hover:bg-slate-50/80'}`}
+                          >
+                            <td className="py-4 px-5 whitespace-nowrap text-slate-700 font-medium">
+                              {row.date ? new Date(row.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                            </td>
+                            <td className="py-4 px-5 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                row.type === 'Initial Balance'
+                                  ? 'bg-[#0a382c]/10 text-[#0a382c] border border-[#0a382c]/20'
+                                  : row.type === 'Invoice'
+                                    ? 'bg-slate-100 text-slate-800'
+                                    : row.type === 'Return'
+                                      ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              }`}>
+                                {row.type}
+                              </span>
+                            </td>
+                            <td className="py-4 px-5 whitespace-nowrap font-mono font-bold text-slate-900">
+                              {row.refNo}
+                            </td>
+                            <td className="py-4 px-5 text-slate-700 font-medium">
+                              {row.description}
+                            </td>
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-bold text-slate-900">
+                              {row.debit > 0 ? `PKR ${row.debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-bold text-emerald-700">
+                              {row.credit > 0 ? `PKR ${row.credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-bold">
+                              {row.invoiceBalance !== undefined ? (
+                                <span className={row.invoiceBalance > 0 ? 'text-amber-700 font-mono' : 'text-slate-500'}>
+                                  PKR {row.invoiceBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : '—'}
+                            </td>
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-black text-sm">
+                              <span className={`font-mono ${row.runningBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}`}>
+                                PKR {row.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </td>
+                            <td className="py-4 px-5 text-center whitespace-nowrap text-slate-600 font-semibold">
+                              {row.mode} {row.bankInfo ? `(${row.bankInfo})` : ''}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-xs text-slate-900">
+                        <td colSpan={4} className="py-4 px-5 text-right uppercase tracking-wider text-slate-500 text-[11px]">
+                          Account Summary Totals:
+                        </td>
+                        <td className="py-4 px-5 text-right text-slate-900 font-mono font-bold">
+                          PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 px-5 text-right text-emerald-700 font-mono font-bold">
+                          PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 px-5 text-right text-amber-700 font-mono font-bold">
+                          PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 px-5 text-right text-sm font-black font-mono">
+                          <span className={financialTotals.currentBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}>
+                            PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </td>
+                        <td className="py-4 px-5 text-center text-slate-400 text-xs">
+                          Final Net
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Prominent Net Account Balance Box at the End of Statement */}
+                <div className="m-5 p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-[#0a382c] text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-md">
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-widest text-emerald-300">
+                      Closing Statement Summary
+                    </div>
+                    <div className="text-base font-black mt-1 text-white">
+                      {financialTotals.currentBalance > 0 
+                        ? 'Outstanding Balance Receivable from Customer' 
+                        : financialTotals.currentBalance < 0 
+                          ? 'Advance Credit in Customer Account' 
+                          : 'Account Fully Cleared (Zero Balance)'}
+                    </div>
+                    <div className="text-xs text-slate-300 mt-1 font-mono">
+                      Initial Balance: PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} + Invoiced: PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2 })} - Paid: PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                      Net Account Balance
+                    </div>
+                    <div className="text-2xl font-black font-mono text-white mt-1">
+                      PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1596,7 +2035,7 @@ export default function CustomerLedgerView({
 
       {/* Hidden Print Container for Clean A4 Printing */}
       <div id="print-statement-section" className="hidden print:block print:fixed print:inset-0 print:bg-white print:p-8 print:z-[9999]">
-        <div className="border-b-2 border-black pb-4 mb-6">
+        <div className="border-b-2 border-black pb-4 mb-5">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-black uppercase tracking-tight text-black">{storeDetails?.name || 'Store Account Ledger'}</h1>
@@ -1604,24 +2043,29 @@ export default function CustomerLedgerView({
               {storeDetails?.address && <p className="text-xs text-black font-semibold">Address: {storeDetails.address}</p>}
             </div>
             <div className="text-right">
-              <h2 className="text-lg font-black uppercase text-black">Customer Statement</h2>
-              <p className="text-xs text-black font-mono">Date: {new Date().toLocaleDateString()}</p>
+              <h2 className="text-lg font-black uppercase text-black">Customer Account Statement</h2>
+              <p className="text-xs text-black font-mono">Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border border-black p-4 mb-6 text-xs">
+        <div className="grid grid-cols-2 gap-4 border border-black p-4 mb-5 text-xs">
           <div>
             <h3 className="font-bold uppercase text-[10px] text-black">Customer Details</h3>
             <p className="font-black text-sm text-black">{customer.name}</p>
             <p className="font-semibold">Mobile: {customer.mobile}</p>
             {customer.city && <p className="font-semibold">City: {customer.city}</p>}
+            <p className="font-mono text-[11px]">ID: {customer.id}</p>
           </div>
           <div className="text-right">
-            <h3 className="font-bold uppercase text-[10px] text-black">Account Summary</h3>
-            <p className="font-semibold">Total Invoiced: PKR {financialTotals.totalInvoiced.toFixed(2)}</p>
-            <p className="font-semibold">Total Paid: PKR {financialTotals.totalPaid.toFixed(2)}</p>
-            <p className="font-black text-sm text-black mt-1">Outstanding Balance: PKR {(customer.balance || 0).toFixed(2)}</p>
+            <h3 className="font-bold uppercase text-[10px] text-black">Account Financial Summary</h3>
+            <p className="font-semibold">Initial Balance: PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="font-semibold">Total Invoiced: PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="font-semibold">Total Paid: PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="font-semibold">Pending on Invoices: PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="font-black text-sm text-black mt-1">
+              Net Account Balance: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
 
@@ -1631,30 +2075,68 @@ export default function CustomerLedgerView({
               <th className="p-2 border-r border-black">Date</th>
               <th className="p-2 border-r border-black">Type</th>
               <th className="p-2 border-r border-black">Ref #</th>
-              <th className="p-2 border-r border-black">Particulars</th>
-              <th className="p-2 border-r border-black text-right">Debit</th>
-              <th className="p-2 border-r border-black text-right">Credit</th>
-              <th className="p-2 text-right">Balance</th>
+              <th className="p-2 border-r border-black">Particulars / Notes</th>
+              <th className="p-2 border-r border-black text-right">Invoice Total</th>
+              <th className="p-2 border-r border-black text-right">Paid (Credit)</th>
+              <th className="p-2 border-r border-black text-right">Invoice Balance</th>
+              <th className="p-2 text-right">Net Running Balance</th>
             </tr>
           </thead>
           <tbody>
             {statementRows.map((r, i) => (
-              <tr key={i} className="border-b border-black">
-                <td className="p-2 border-r border-black">{r.date ? new Date(r.date).toLocaleDateString() : ''}</td>
+              <tr key={i} className={`border-b border-black ${r.type === 'Initial Balance' ? 'bg-slate-50 font-semibold' : ''}`}>
+                <td className="p-2 border-r border-black">{r.date ? new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</td>
                 <td className="p-2 border-r border-black">{r.type}</td>
-                <td className="p-2 border-r border-black font-mono">{r.refNo}</td>
+                <td className="p-2 border-r border-black font-mono font-bold">{r.refNo}</td>
                 <td className="p-2 border-r border-black">{r.description}</td>
-                <td className="p-2 border-r border-black text-right">{r.debit > 0 ? r.debit.toFixed(2) : '—'}</td>
-                <td className="p-2 border-r border-black text-right">{r.credit > 0 ? r.credit.toFixed(2) : '—'}</td>
-                <td className="p-2 text-right font-bold">{r.runningBalance.toFixed(2)}</td>
+                <td className="p-2 border-r border-black text-right">{r.debit > 0 ? `PKR ${r.debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+                <td className="p-2 border-r border-black text-right">{r.credit > 0 ? `PKR ${r.credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+                <td className="p-2 border-r border-black text-right">
+                  {r.invoiceBalance !== undefined ? `PKR ${r.invoiceBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                </td>
+                <td className="p-2 text-right font-black font-mono">
+                  PKR {r.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="bg-slate-100 border-t-2 border-black font-bold">
+              <td colSpan={4} className="p-2 text-right uppercase border-r border-black">Totals:</td>
+              <td className="p-2 text-right border-r border-black">PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="p-2 text-right border-r border-black">PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="p-2 text-right border-r border-black">PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="p-2 text-right font-black font-mono">PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            </tr>
+          </tfoot>
         </table>
 
-        <div className="mt-16 flex justify-between pt-8 text-xs font-bold border-t border-black">
+        {/* Closing Net Account Balance Banner */}
+        <div className="mt-5 p-4 border-2 border-black flex justify-between items-center bg-slate-50">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-wider">Account Settlement Status</div>
+            <div className="text-sm font-black text-black mt-1">
+              {financialTotals.currentBalance > 0 
+                ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' 
+                : financialTotals.currentBalance < 0 
+                  ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' 
+                  : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
+            </div>
+            <div className="text-[11px] text-black mt-1">
+              Initial Balance: PKR {initialBalance.toFixed(2)} + Invoiced: PKR {financialTotals.totalInvoiced.toFixed(2)} - Paid: PKR {financialTotals.totalPaid.toFixed(2)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-black uppercase tracking-wider">Net Account Balance</div>
+            <div className="text-xl font-black font-mono text-black mt-1">
+              PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-14 flex justify-between pt-6 text-xs font-bold border-t border-black">
           <div>Authorized Store Signature: _________________________</div>
-          <div>Customer Signature: _________________________</div>
+          <div>Customer Acknowledgment Signature: _________________________</div>
         </div>
       </div>
     </div>

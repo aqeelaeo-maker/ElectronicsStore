@@ -13,6 +13,8 @@ interface Customer {
   email: string;
   city: string;
   balance: number;
+  openingBalance?: number;
+  initialBalance?: number;
   storeId?: string;
   createdAt?: any;
   updatedAt?: any;
@@ -62,12 +64,15 @@ export default function Customers() {
     }
 
     const formData = new FormData(e.currentTarget);
+    const balanceVal = Number(formData.get('balance')) || 0;
     const newCustomer = {
       name: formData.get('name'),
       mobile: formData.get('mobile'),
       email: formData.get('email'),
       city: formData.get('city'),
-      balance: Number(formData.get('balance')) || 0,
+      balance: balanceVal,
+      openingBalance: balanceVal,
+      initialBalance: balanceVal,
       storeId,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -88,12 +93,15 @@ export default function Customers() {
     if (!editingCustomer) return;
 
     const formData = new FormData(e.currentTarget);
+    const balanceVal = Number(formData.get('balance')) || 0;
     const updatedCustomer = {
       name: formData.get('name'),
       mobile: formData.get('mobile'),
       email: formData.get('email'),
       city: formData.get('city'),
-      balance: Number(formData.get('balance')) || 0,
+      balance: balanceVal,
+      openingBalance: editingCustomer.openingBalance !== undefined ? editingCustomer.openingBalance : (editingCustomer.initialBalance !== undefined ? editingCustomer.initialBalance : balanceVal),
+      initialBalance: editingCustomer.initialBalance !== undefined ? editingCustomer.initialBalance : (editingCustomer.openingBalance !== undefined ? editingCustomer.openingBalance : balanceVal),
       updatedAt: serverTimestamp(),
     };
 
