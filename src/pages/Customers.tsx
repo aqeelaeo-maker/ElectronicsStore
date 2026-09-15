@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Users, Receipt } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Clock } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import CustomerLedgerView from '../components/CustomerLedgerView';
@@ -23,6 +23,7 @@ interface Customer {
 export default function Customers() {
   const { storeId, role } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -55,6 +56,103 @@ export default function Customers() {
 
     return () => unsubscribe();
   }, [storeId]);
+
+  // Real-time sales subscription to accurately compute Pending on Invoices for every customer
+  useEffect(() => {
+    if (!storeId) return;
+
+    const qSales = query(collection(db, 'sales'), where('storeId', '==', storeId));
+    const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      setSales(list);
+    }, (error) => {
+      console.error('Error fetching sales for customer ledger balances:', error);
+    });
+
+    return () => unsubscribeSales();
+  }, [storeId]);
+
+  // 1. Initial / Opening balance for a customer
+  const getCustomerInitialBalance = (customer: Customer): number => {
+    if (customer.openingBalance !== undefined && customer.openingBalance !== null && !isNaN(Number(customer.openingBalance))) {
+      return Number(customer.openingBalance);
+    }
+    if (customer.initialBalance !== undefined && customer.initialBalance !== null && !isNaN(Number(customer.initialBalance))) {
+      return Number(customer.initialBalance);
+    }
+    // If no sales exist for this customer, balance is their initial balance
+    const custSales = sales.filter(s => s.customerId === customer.id);
+    if (custSales.length === 0 && customer.balance !== undefined && !isNaN(Number(customer.balance))) {
+      return Number(customer.balance);
+    }
+    return 0;
+  };
+
+  // 2. Pending on Invoices for a customer
+  const getCustomerPendingInvoices = (customerId: string): number => {
+    return sales
+      .filter(s => s.customerId === customerId)
+      .reduce((sum, sale) => {
+        const pending = sale.pendingAmount !== undefined 
+          ? sale.pendingAmount 
+          : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
+        return sum + pending;
+      }, 0);
+  };
+
+  // 3. In Customer ledger, Net Account Balance = sum of Pending on Invoices and Initial Balance
+  const getCustomerNetAccountBalance = (customer: Customer): number => {
+    const initial = getCustomerInitialBalance(customer);
+    const pending = getCustomerPendingInvoices(customer.id);
+    return Number((initial + pending).toFixed(2));
+  };
+
+  // Automatically reconcile and sync customer.balance in Firestore to match Ledger Net Account Balance
+  useEffect(() => {
+    if (loading || sales.length === 0 || customers.length === 0) return;
+
+    customers.forEach(async (c) => {
+      const netBal = getCustomerNetAccountBalance(c);
+      const currentStored = typeof c.balance === 'number' ? c.balance : (parseFloat(c.balance as any) || 0);
+      if (Math.abs(currentStored - netBal) > 0.01) {
+        try {
+          const custRef = doc(db, 'customers', c.id);
+          await updateDoc(custRef, {
+            balance: netBal,
+            updatedAt: serverTimestamp()
+          });
+        } catch (syncErr) {
+          console.warn(`Could not auto-sync balance for customer ${c.name}:`, syncErr);
+        }
+      }
+    });
+  }, [customers, sales, loading]);
+
+  // Overall financial summary metrics
+  const { totalNetReceivables, pendingAccountsCount, settledAccountsCount } = useMemo(() => {
+    let total = 0;
+    let pendingCount = 0;
+    let settledCount = 0;
+
+    customers.forEach(c => {
+      const net = getCustomerNetAccountBalance(c);
+      total += net;
+      if (net > 0) {
+        pendingCount++;
+      } else {
+        settledCount++;
+      }
+    });
+
+    return {
+      totalNetReceivables: Number(total.toFixed(2)),
+      pendingAccountsCount: pendingCount,
+      settledAccountsCount: settledCount
+    };
+  }, [customers, sales]);
 
   const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -93,15 +191,18 @@ export default function Customers() {
     if (!editingCustomer) return;
 
     const formData = new FormData(e.currentTarget);
-    const balanceVal = Number(formData.get('balance')) || 0;
+    const openingBalVal = Number(formData.get('balance')) || 0;
+    const pendingInvoices = getCustomerPendingInvoices(editingCustomer.id);
+    const calculatedNetBalance = Number((openingBalVal + pendingInvoices).toFixed(2));
+
     const updatedCustomer = {
       name: formData.get('name'),
       mobile: formData.get('mobile'),
       email: formData.get('email'),
       city: formData.get('city'),
-      balance: balanceVal,
-      openingBalance: editingCustomer.openingBalance !== undefined ? editingCustomer.openingBalance : (editingCustomer.initialBalance !== undefined ? editingCustomer.initialBalance : balanceVal),
-      initialBalance: editingCustomer.initialBalance !== undefined ? editingCustomer.initialBalance : (editingCustomer.openingBalance !== undefined ? editingCustomer.openingBalance : balanceVal),
+      balance: calculatedNetBalance,
+      openingBalance: openingBalVal,
+      initialBalance: openingBalVal,
       updatedAt: serverTimestamp(),
     };
 
@@ -160,7 +261,7 @@ export default function Customers() {
             onClick={() => {
               setShowAddForm(false);
               setEditingCustomer(null);
-            }}
+            }} 
             className="flex items-center px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-sm text-sm font-semibold"
           >
             Cancel
@@ -188,8 +289,22 @@ export default function Customers() {
                   <input type="text" name="city" id="city" defaultValue={initialData.city} className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
-                  <label htmlFor="balance" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Opening Balance</label>
-                  <input type="number" name="balance" id="balance" defaultValue={initialData.balance ?? 0} step="0.01" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
+                  <label htmlFor="balance" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Opening / Initial Balance (PKR)
+                  </label>
+                  <input 
+                    type="number" 
+                    name="balance" 
+                    id="balance" 
+                    defaultValue={initialData.openingBalance ?? initialData.initialBalance ?? initialData.balance ?? 0} 
+                    step="0.01" 
+                    className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm font-mono font-bold" 
+                  />
+                  {isEditing && editingCustomer && (
+                    <p className="text-[11px] text-slate-500 mt-1.5 font-medium">
+                      Current Ledger Net Account Balance: <span className="font-mono font-bold text-amber-800">PKR {getCustomerNetAccountBalance(editingCustomer).toFixed(2)}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -219,7 +334,7 @@ export default function Customers() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Customers</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage and view your customer database</p>
+          <p className="text-sm text-slate-500 mt-1">Manage customers and monitor ledger account balances</p>
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
@@ -230,6 +345,47 @@ export default function Customers() {
         </button>
       </div>
 
+      {/* Financial Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Customers</span>
+            <Users className="w-4 h-4 text-slate-400" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 mt-1.5 font-mono">{customers.length}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Active customer base</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl border-amber-200/60 bg-amber-50/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Net Receivables</span>
+            <Wallet className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="text-2xl font-black text-amber-900 mt-1.5 font-mono">
+            PKR {totalNetReceivables.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] text-amber-700/80 mt-0.5">Total ledger balance due</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-700">Accounts Due</span>
+            <Clock className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="text-2xl font-black text-rose-800 mt-1.5 font-mono">{pendingAccountsCount}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Pending ledger balances</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Settled Accounts</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="text-2xl font-black text-emerald-800 mt-1.5 font-mono">{settledAccountsCount}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Zero or cleared balance</div>
+        </div>
+      </div>
+
       <div className="glass-panel rounded-2xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-150 bg-slate-50/50">
           <div className="relative max-w-sm">
@@ -238,7 +394,7 @@ export default function Customers() {
             </div>
             <input
               type="text"
-              placeholder="Search customers..."
+              placeholder="Search customers by name or mobile..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="glass-input block w-full pl-10 pr-3 py-2 rounded-xl text-xs"
@@ -253,7 +409,9 @@ export default function Customers() {
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">City</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Balance</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider" title="Net Account Balance = Initial Balance + Pending on Invoices">
+                  Net Balance
+                </th>
                 <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -271,63 +429,81 @@ export default function Customers() {
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((customer) => (
-                  <tr key={customer.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
-                          <Users className="h-5 w-5" />
+                filteredCustomers.map((customer) => {
+                  const initialBal = getCustomerInitialBalance(customer);
+                  const pendingBal = getCustomerPendingInvoices(customer.id);
+                  const netBal = getCustomerNetAccountBalance(customer);
+
+                  return (
+                    <tr key={customer.id} className="hover:bg-[#f8faf9] transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
+                            <Users className="h-5 w-5" />
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-bold text-slate-900">{customer.name}</div>
+                          </div>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-bold text-slate-900">{customer.name}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-bold text-slate-800">{customer.mobile}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{customer.email || '—'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
+                        {customer.city || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-900">
+                        <div className="font-mono text-sm font-black">
+                          PKR {netBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-bold text-slate-800">{customer.mobile}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">{customer.email}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
-                      {customer.city || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-900">
-                      <div>PKR {(customer.balance || 0).toFixed(2)}</div>
-                      {(customer.balance || 0) > 0 ? (
-                        <span className="inline-block mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
-                          Pending
-                        </span>
-                      ) : (
-                        <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-md">
-                          Cleared
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
-                      <button 
-                        onClick={() => setLedgerCustomer(customer)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200"
-                        title="View Customer Invoices & Payment Ledger"
-                      >
-                        <Receipt className="w-3.5 h-3.5 text-emerald-700" />
-                        Ledger
-                      </button>
-                      <button 
-                        onClick={() => setEditingCustomer(customer)}
-                        className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5"
-                        title="Edit Customer"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteCustomer(customer.id)}
-                        className="text-red-400 hover:text-red-600 transition-colors p-1.5"
-                        title="Delete Customer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {netBal > 0 ? (
+                            <span className="inline-block text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                              Pending
+                            </span>
+                          ) : (
+                            <span className="inline-block text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                              Cleared
+                            </span>
+                          )}
+                          {(initialBal > 0 || pendingBal > 0) && (
+                            <span 
+                              className="text-[10px] text-slate-400 font-medium font-mono hidden sm:inline" 
+                              title={`Initial Balance: PKR ${initialBal.toFixed(2)} | Invoices Pending: PKR ${pendingBal.toFixed(2)}`}
+                            >
+                              (Init: {initialBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} + Pend: {pendingBal.toLocaleString('en-US', { maximumFractionDigits: 0 })})
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                        <button 
+                          onClick={() => setLedgerCustomer(customer)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200 shadow-sm"
+                          title="View Customer Invoices & Payment Ledger"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                          Ledger
+                        </button>
+                        <button 
+                          onClick={() => setEditingCustomer(customer)}
+                          className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5"
+                          title="Edit Customer"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteCustomer(customer.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors p-1.5"
+                          title="Delete Customer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

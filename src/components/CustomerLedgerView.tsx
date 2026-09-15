@@ -303,6 +303,23 @@ export default function CustomerLedgerView({
     };
   }, [sales, payments, initialBalance]);
 
+  // Automatically keep customer.balance in Firestore synced with the ledger's true Net Account Balance
+  useEffect(() => {
+    if (!customer?.id || loading) return;
+    const currentStoredBal = customer.balance !== undefined ? Number(customer.balance) : null;
+    if (currentStoredBal !== null && Math.abs(currentStoredBal - financialTotals.currentBalance) > 0.01) {
+      try {
+        const custRef = doc(db, 'customers', customer.id);
+        updateDoc(custRef, {
+          balance: financialTotals.currentBalance,
+          updatedAt: serverTimestamp()
+        }).catch(err => console.warn('Could not sync customer balance in Firestore:', err));
+      } catch (e) {
+        console.warn('Sync customer balance error:', e);
+      }
+    }
+  }, [customer?.id, customer?.balance, financialTotals.currentBalance, loading]);
+
   // Thermal voucher / Receipt Print for an individual payment
   const printPaymentReceipt = (payment: CustomerPaymentRecord) => {
     const printWindow = window.open('', '_blank');
