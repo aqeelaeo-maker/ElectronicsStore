@@ -47,6 +47,11 @@ service cloud.firestore {
       allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
     }
     
+    match /quotations/{document=**} {
+      allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
+      allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));
+    }
+    
     match /vendors/{document=**} {
       allow read, update, delete: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(resource.data.storeId));
       allow create: if isSuperAdmin() || (isAuthenticated() && isStoreOwner(request.resource.data.storeId));

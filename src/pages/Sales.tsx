@@ -41,6 +41,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import SalesReturnModal, { printReturnReceipt, SaleReturnRecord } from '../components/SalesReturnModal';
@@ -203,6 +204,9 @@ export default function Sales() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showSelectReturnInvoiceModal, setShowSelectReturnInvoiceModal] = useState(false);
   const [returnInvoiceSearch, setReturnInvoiceSearch] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [sourceQuotationId, setSourceQuotationId] = useState<string | null>(null);
 
   // New Invoice Form States
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -393,6 +397,65 @@ export default function Sales() {
 
     return () => unsubscribe();
   }, [storeId]);
+
+  // Handle Quotation Conversion: prefill invoice items and customer from quotation
+  useEffect(() => {
+    if (location.state && (location.state as any).fromQuotation && products.length > 0) {
+      const quote = (location.state as any).fromQuotation;
+      setSourceQuotationId(quote.id);
+      setEditingSale(null);
+
+      // Pre-fill customer
+      if (quote.customerId && customers.some(c => c.id === quote.customerId)) {
+        setSelectedCustomerId(quote.customerId);
+      } else if (quote.customerName && quote.customerName !== 'Walk In Customer') {
+        setSelectedCustomerId(quote.customerName);
+      } else {
+        setSelectedCustomerId('walk-in');
+      }
+      setCustomerSearchInput(quote.customerName || 'Walk In Customer');
+
+      // Pre-fill items from quotation
+      if (quote.items && quote.items.length > 0) {
+        const mappedItems: any[] = [];
+        quote.items.forEach((item: any) => {
+          if (item.selectedSerials && item.selectedSerials.length > 0) {
+            item.selectedSerials.forEach((snStr: string) => {
+              const matchedDoc = allSerials.find(s => (s.serialNumber === snStr || s.id === snStr) && s.productId === item.productId);
+              mappedItems.push({
+                productId: item.productId,
+                quantity: 1,
+                salePrice: item.salePrice,
+                discount: item.discount ? (item.discount / item.selectedSerials.length) : 0,
+                warranty: item.warranty || '1 Year Warranty',
+                selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
+              });
+            });
+          } else {
+            mappedItems.push({
+              productId: item.productId,
+              quantity: item.quantity || 1,
+              salePrice: item.salePrice,
+              discount: item.discount || 0,
+              warranty: item.warranty || '1 Year Warranty',
+              selectedSerials: []
+            });
+          }
+        });
+        setInvoiceItems(mappedItems);
+      } else {
+        setInvoiceItems([]);
+      }
+
+      setInvoiceStatus('Paid');
+      setPaymentMode('Cash');
+      setShowModal(true);
+      toast.info(`Loaded Quotation ${quote.quotationNo} into New Sale. Review and save to deduct inventory stock.`);
+
+      // Clear router location state so reloading or tab switching doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, products, customers, allSerials]);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -1475,11 +1538,22 @@ export default function Sales() {
         }
       }
 
+      // If this sale was created by converting a Quotation, mark quotation as Converted
+      if (sourceQuotationId) {
+        batch.update(doc(db, 'quotations', sourceQuotationId), {
+          status: 'Converted',
+          convertedSaleId: saleId,
+          convertedInvoiceNo: invoiceNo,
+          updatedAt: serverTimestamp()
+        });
+      }
+
       await batch.commit();
 
       toast.success(editingSale ? `Invoice ${invoiceNo} updated successfully!` : `Invoice ${invoiceNo} recorded successfully!`);
       setShowModal(false);
       setEditingSale(null);
+      setSourceQuotationId(null);
       
       if (printOnCreate) {
         const createdSale: Sale = {
@@ -1518,6 +1592,7 @@ export default function Sales() {
       setIsPaidAmountCustom(false);
       setInvoiceNumber('');
       setInvoiceDate(new Date().toISOString().split('T')[0]);
+      setSourceQuotationId(null);
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
       toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');

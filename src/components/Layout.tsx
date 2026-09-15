@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   ShieldCheck,
-  User as UserIcon
+  User as UserIcon,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
@@ -24,6 +25,7 @@ import OfflineSyncBanner from './OfflineSyncBanner';
 const allNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Sales', href: '/sales', icon: ShoppingCart },
+  { name: 'Quotations', href: '/quotations', icon: FileText },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Vendors', href: '/vendors', icon: Building2 },
@@ -37,10 +39,10 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
 
-  // User role can ONLY view: Dashboard, Sales, Products, Customers
+  // User role can ONLY view: Dashboard, Sales, Quotations, Products, Customers
   // Admin role can view everything in the application
   const visibleNavigation = isUser
-    ? allNavigation.filter(item => ['Dashboard', 'Sales', 'Products', 'Customers'].includes(item.name))
+    ? allNavigation.filter(item => ['Dashboard', 'Sales', 'Quotations', 'Products', 'Customers'].includes(item.name))
     : allNavigation;
 
   useEffect(() => {

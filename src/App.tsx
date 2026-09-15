@@ -11,6 +11,7 @@ import Products from './pages/Products';
 import Customers from './pages/Customers';
 import Vendors from './pages/Vendors';
 import Sales from './pages/Sales';
+import Quotations from './pages/Quotations';
 import Settings from './pages/Settings';
 
 import SerialNumbers from './pages/SerialNumbers';
@@ -93,8 +94,9 @@ export default function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="products" element={<Products />} />
             <Route path="sales" element={<Sales />} />
+            <Route path="quotations" element={<Quotations />} />
+            <Route path="products" element={<Products />} />
             <Route path="customers" element={<Customers />} />
 
             {/* Admin-only routes */}
