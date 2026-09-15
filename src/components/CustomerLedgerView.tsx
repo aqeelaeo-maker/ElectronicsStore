@@ -291,9 +291,8 @@ export default function CustomerLedgerView({
       totalPaid += isReturn ? (payment.refundAmount || 0) : (payment.paidAmount || 0);
     });
 
-    const netAccountBalance = customer?.balance !== undefined 
-      ? customer.balance 
-      : Number((initialBalance + totalInvoiced - totalPaid).toFixed(2));
+    // Net Account Balance is explicitly calculated as sum of Pending on Invoices and Initial Balance
+    const netAccountBalance = Number((totalPending + initialBalance).toFixed(2));
 
     return {
       initialBalance,
@@ -302,7 +301,7 @@ export default function CustomerLedgerView({
       totalPending,
       currentBalance: netAccountBalance
     };
-  }, [sales, payments, customer, initialBalance]);
+  }, [sales, payments, initialBalance]);
 
   // Thermal voucher / Receipt Print for an individual payment
   const printPaymentReceipt = (payment: CustomerPaymentRecord) => {
@@ -447,28 +446,7 @@ export default function CustomerLedgerView({
 
       // 1. Determine customer balance safely
       const customerRef = doc(db, 'customers', customer.id);
-      let currentCustBal = (typeof customer.balance === 'number' && !isNaN(customer.balance)) 
-        ? customer.balance 
-        : (parseFloat(customer.balance as any) || 0);
-
-      try {
-        const custSnap = await getDoc(customerRef);
-        if (custSnap.exists()) {
-          const raw = custSnap.data().balance;
-          if (typeof raw === 'number' && !isNaN(raw)) {
-            currentCustBal = raw;
-          } else if (raw !== undefined && raw !== null) {
-            currentCustBal = parseFloat(raw) || 0;
-          }
-        }
-      } catch (custReadErr) {
-        console.warn('Could not re-fetch customer balance, using local state:', custReadErr);
-      }
-
-      if (currentCustBal === 0 && financialTotals.totalPending > 0) {
-        currentCustBal = financialTotals.totalPending;
-      }
-
+      const currentCustBal = financialTotals.currentBalance > 0 ? financialTotals.currentBalance : (customer.balance || 0);
       const newBalance = Number(Math.max(0, currentCustBal - amount).toFixed(2));
 
       // 2. Prepare customerPayments entry
@@ -1025,7 +1003,7 @@ export default function CustomerLedgerView({
                 ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' : financialTotals.currentBalance < 0 ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
               </div>
               <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                Initial Balance: PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Invoiced: PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Paid: PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Initial Balance (PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
               </div>
             </div>
             <div style="text-align: right;">
@@ -1232,7 +1210,7 @@ export default function CustomerLedgerView({
             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            {financialTotals.currentBalance > 0 ? 'Customer owes store' : 'Account is fully settled'}
+            Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Initial (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
           </div>
         </div>
       </div>
@@ -1251,9 +1229,9 @@ export default function CustomerLedgerView({
               </p>
             </div>
             <div className="text-right">
-              <span className="text-xs text-slate-500 font-medium">Current Balance:</span>
+              <span className="text-xs text-slate-500 font-medium">Net Balance Due:</span>
               <div className="text-base font-black text-amber-800">
-                PKR {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toFixed(2)}
+                PKR {financialTotals.currentBalance.toFixed(2)}
               </div>
             </div>
           </div>
@@ -1281,18 +1259,18 @@ export default function CustomerLedgerView({
                   />
                 </div>
                 {/* Quick Presets */}
-                {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0) > 0 && (
+                {financialTotals.currentBalance > 0 && (
                   <div className="flex gap-1.5 mt-2">
                     <button
                       type="button"
-                      onClick={() => setReceivingAmount(((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toString())}
+                      onClick={() => setReceivingAmount(financialTotals.currentBalance.toFixed(2))}
                       className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                     >
-                      Full (PKR {((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0).toFixed(2)})
+                      Full (PKR {financialTotals.currentBalance.toFixed(2)})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setReceivingAmount(((((financialTotals.currentBalance > 0 ? financialTotals.currentBalance : customer.balance) || 0)) / 2).toFixed(2))}
+                      onClick={() => setReceivingAmount((financialTotals.currentBalance / 2).toFixed(2))}
                       className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                     >
                       50%
@@ -1916,7 +1894,7 @@ export default function CustomerLedgerView({
                           : 'Account Fully Cleared (Zero Balance)'}
                     </div>
                     <div className="text-xs text-slate-300 mt-1 font-mono">
-                      Initial Balance: PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })} + Invoiced: PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2 })} - Paid: PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                     </div>
                   </div>
                   <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15">
@@ -1939,7 +1917,7 @@ export default function CustomerLedgerView({
             Customer Account ID: <span className="font-mono text-slate-800">{customer.id}</span>
           </div>
           <div className="text-xs text-slate-700 font-bold">
-            Total Outstanding Balance: <span className="font-mono font-black text-base text-amber-900 ml-1">PKR {(customer.balance || 0).toFixed(2)}</span>
+            Net Account Balance: <span className="font-mono font-black text-base text-rose-700 ml-1">PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
@@ -2123,7 +2101,7 @@ export default function CustomerLedgerView({
                   : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
             </div>
             <div className="text-[11px] text-black mt-1">
-              Initial Balance: PKR {initialBalance.toFixed(2)} + Invoiced: PKR {financialTotals.totalInvoiced.toFixed(2)} - Paid: PKR {financialTotals.totalPaid.toFixed(2)}
+              Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
             </div>
           </div>
           <div className="text-right">
