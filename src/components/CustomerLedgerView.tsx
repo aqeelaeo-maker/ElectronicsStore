@@ -257,16 +257,26 @@ export default function CustomerLedgerView({
       return Number(customer.initialBalance);
     }
     
-    // If not explicitly stored, derive mathematically from sales & payments:
-    // currentBalance = initialBalance + totalInvoicedDebits - totalPaidCredits
-    // initialBalance = currentBalance - totalInvoicedDebits + totalPaidCredits
-    const totalInvoiced = sales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const totalPaidOrCredited = payments.reduce((sum, p) => {
-      const isReturn = p.type === 'ReturnCredit' || (p.refundAmount && p.refundAmount > 0);
-      return sum + (isReturn ? (p.refundAmount || 0) : (p.paidAmount || 0));
-    }, 0);
+    // If not explicitly stored, derive mathematically:
+    // currentBalance = initialBalance + totalPending - totalReturns
+    // initialBalance = currentBalance - totalPending + totalReturns
+    let totalPendingInvoices = 0;
+    let totalReturns = 0;
+    sales.forEach(sale => {
+      const pending = sale.pendingAmount !== undefined 
+        ? sale.pendingAmount 
+        : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
+      totalPendingInvoices += pending;
+      if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0) {
+        totalReturns += sale.totalRefunded;
+      } else if (Array.isArray(sale.returns) && sale.returns.length > 0) {
+        sale.returns.forEach((r: any) => {
+          totalReturns += Number(r.totalRefund) || 0;
+        });
+      }
+    });
 
-    const derived = Number(((customer.balance || 0) - totalInvoiced + totalPaidOrCredited).toFixed(2));
+    const derived = Number(((customer.balance || 0) - totalPendingInvoices + totalReturns).toFixed(2));
     if (derived > 0) return derived;
     if (sales.length === 0 && (customer.balance || 0) > 0) return customer.balance;
     return 0;
@@ -285,20 +295,52 @@ export default function CustomerLedgerView({
       totalPending += pending;
     });
 
+    // 1. Total Return Value from sales returns / refund adjustments
+    let totalReturnValue = 0;
+    const recordedReturnIds = new Set<string>();
+
+    sales.forEach(sale => {
+      if (Array.isArray(sale.returns) && sale.returns.length > 0) {
+        sale.returns.forEach((r: any) => {
+          if (r.id) recordedReturnIds.add(r.id);
+          totalReturnValue += Number(r.totalRefund) || 0;
+        });
+      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0) {
+        totalReturnValue += sale.totalRefunded;
+      }
+    });
+
+    // Check payments for any ReturnCredit not already counted
+    payments.forEach(payment => {
+      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
+      if (isReturn) {
+        const ref = payment.referenceNo;
+        if (ref && recordedReturnIds.has(ref)) return;
+        if (payment.saleId && sales.some(s => s.id === payment.saleId && (s.totalRefunded || 0) > 0)) return;
+        totalReturnValue += (payment.refundAmount || payment.paidAmount || 0);
+      }
+    });
+    totalReturnValue = Number(totalReturnValue.toFixed(2));
+
+    // 2. Total Paid Amount (direct payments received, not return credits)
     let totalPaid = 0;
     payments.forEach(payment => {
       const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
-      totalPaid += isReturn ? (payment.refundAmount || 0) : (payment.paidAmount || 0);
+      if (!isReturn) {
+        totalPaid += (payment.paidAmount || 0);
+      }
     });
+    totalPaid = Number(totalPaid.toFixed(2));
 
-    // Net Account Balance is explicitly calculated as sum of Pending on Invoices and Initial Balance
-    const netAccountBalance = Number((totalPending + initialBalance).toFixed(2));
+    // 3. User Mandate: Net Account Balance = Initial Balance + Pending on Invoices - Return Value
+    const netAccountBalance = Number((initialBalance + totalPending - totalReturnValue).toFixed(2));
 
     return {
       initialBalance,
       totalInvoiced,
       totalPaid,
       totalPending,
+      totalReturnValue,
       currentBalance: netAccountBalance
     };
   }, [sales, payments, initialBalance]);
@@ -733,10 +775,15 @@ export default function CustomerLedgerView({
     });
 
     // 3. Customer Payments & Returns (Credit)
+    const existingReturnRefs = new Set<string>();
     payments.forEach(payment => {
       const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
       const amount = isReturn ? (payment.refundAmount || 0) : (payment.paidAmount || 0);
       const dateVal = payment.paymentDate || (payment.createdAt?.toMillis ? new Date(payment.createdAt.toMillis()).toISOString() : '');
+      if (isReturn) {
+        if (payment.referenceNo) existingReturnRefs.add(payment.referenceNo);
+        if (payment.saleId) existingReturnRefs.add(`sale-${payment.saleId}`);
+      }
       
       combined.push({
         id: `pay-${payment.id}`,
@@ -752,6 +799,45 @@ export default function CustomerLedgerView({
         mode: payment.paymentMode || 'Cash',
         bankInfo: payment.bankName ? `${payment.bankName} (${payment.bankAccountNumber})` : undefined
       });
+    });
+
+    // 4. Sales Returns recorded on Invoices (Credit) not already logged in customer payments
+    sales.forEach(sale => {
+      if (Array.isArray(sale.returns) && sale.returns.length > 0) {
+        sale.returns.forEach((r: any) => {
+          if (r.id && existingReturnRefs.has(r.id)) return;
+          const returnDate = r.returnDate || sale.date || '';
+          combined.push({
+            id: `ret-${r.id || Math.random()}`,
+            date: returnDate,
+            dateObj: new Date(returnDate || 0),
+            sortOrder: 2,
+            type: 'Return',
+            refNo: r.id || `RET-${sale.invoiceNo}`,
+            description: r.notes || `Sales Return on Inv #${sale.invoiceNo}${r.reason ? ` (${r.reason})` : ''}`,
+            debit: 0,
+            credit: Number(r.totalRefund) || 0,
+            invoiceBalance: 0,
+            mode: r.refundMode || 'Customer Credit',
+            bankInfo: r.bankName ? `${r.bankName} (${r.bankAccountNumber})` : undefined
+          });
+        });
+      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0 && !existingReturnRefs.has(`sale-${sale.id}`)) {
+        const returnDate = sale.date || '';
+        combined.push({
+          id: `ret-sale-${sale.id}`,
+          date: returnDate,
+          dateObj: new Date(returnDate || 0),
+          sortOrder: 2,
+          type: 'Return',
+          refNo: `RET-${sale.invoiceNo}`,
+          description: `Sales Return on Inv #${sale.invoiceNo}`,
+          debit: 0,
+          credit: sale.totalRefunded,
+          invoiceBalance: 0,
+          mode: 'Return Credit'
+        });
+      }
     });
 
     // Sort chronologically ascending to calculate running balance
@@ -850,7 +936,7 @@ export default function CustomerLedgerView({
             }
             .summary-cards-grid {
               display: grid;
-              grid-template-columns: repeat(5, 1fr);
+              grid-template-columns: repeat(6, 1fr);
               gap: 8px;
               margin-bottom: 14px;
             }
@@ -969,6 +1055,10 @@ export default function CustomerLedgerView({
               <div class="summary-val" style="color: #15803d;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card">
+              <div class="summary-label">Return Value</div>
+              <div class="summary-val" style="color: #7e22ce;">PKR ${financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-card">
               <div class="summary-label">Pending on Invoices</div>
               <div class="summary-val" style="color: #b45309;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
@@ -1020,7 +1110,7 @@ export default function CustomerLedgerView({
                 ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' : financialTotals.currentBalance < 0 ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
               </div>
               <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                Initial Balance (PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                Initial Balance (PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR ${financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
               </div>
             </div>
             <div style="text-align: right;">
@@ -1155,7 +1245,7 @@ export default function CustomerLedgerView({
       </div>
 
       {/* Financial Metrics Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Initial Balance</span>
@@ -1201,6 +1291,21 @@ export default function CustomerLedgerView({
           </div>
         </div>
 
+        <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-700">Return Value</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center text-purple-700">
+              <RotateCcw className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-purple-900 mt-2 font-mono">
+            PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-xs text-purple-700/80 mt-1 font-medium">
+            Credit for returned goods
+          </div>
+        </div>
+
         <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Pending on Invoices</span>
@@ -1227,7 +1332,7 @@ export default function CustomerLedgerView({
             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Initial (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+            Initial (PKR {initialBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })}) + Pending (PKR {financialTotals.totalPending.toLocaleString('en-US', { maximumFractionDigits: 0 })}) - Returns (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { maximumFractionDigits: 0 })})
           </div>
         </div>
       </div>
@@ -1911,7 +2016,7 @@ export default function CustomerLedgerView({
                           : 'Account Fully Cleared (Zero Balance)'}
                     </div>
                     <div className="text-xs text-slate-300 mt-1 font-mono">
-                      Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                     </div>
                   </div>
                   <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15">

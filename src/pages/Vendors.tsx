@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Building2, Receipt } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Building2, Receipt, Wallet, Clock, CheckCircle2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import VendorLedgerView from '../components/VendorLedgerView';
@@ -31,6 +31,8 @@ interface Vendor {
 export default function Vendors() {
   const { storeId, role } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -63,6 +65,140 @@ export default function Vendors() {
 
     return () => unsubscribe();
   }, [storeId]);
+
+  // Real-time stock purchases and payments subscription to compute accurate vendor ledger balances
+  useEffect(() => {
+    if (!storeId) return;
+
+    const qPurchases = query(collection(db, 'inventory_history'), where('storeId', '==', storeId));
+    const unsubPurchases = onSnapshot(qPurchases, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setPurchases(list);
+    }, (err) => {
+      console.error('Error fetching inventory history for vendors:', err);
+    });
+
+    const qPayments = query(collection(db, 'vendorPayments'), where('storeId', '==', storeId));
+    const unsubPayments = onSnapshot(qPayments, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setPayments(list);
+    }, (err) => {
+      console.error('Error fetching vendor payments:', err);
+    });
+
+    return () => {
+      unsubPurchases();
+      unsubPayments();
+    };
+  }, [storeId]);
+
+  // 1. Initial / Opening balance for a vendor
+  const getVendorInitialBalance = (vendor: Vendor): number => {
+    if (vendor.openingBalance !== undefined && vendor.openingBalance !== null && !isNaN(Number(vendor.openingBalance))) {
+      return Number(vendor.openingBalance);
+    }
+    if (vendor.initialBalance !== undefined && vendor.initialBalance !== null && !isNaN(Number(vendor.initialBalance))) {
+      return Number(vendor.initialBalance);
+    }
+    // If no purchases exist for this vendor, balance is their initial balance
+    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
+    if (vendPurchases.length === 0 && vendor.balance !== undefined && !isNaN(Number(vendor.balance))) {
+      return Number(vendor.balance);
+    }
+    return 0;
+  };
+
+  // 2. Net Payables for a vendor (consistent with VendorLedgerView)
+  const getVendorNetPayable = (vendor: Vendor): number => {
+    if (vendor.remainingAmount !== undefined && vendor.remainingAmount !== null && !isNaN(Number(vendor.remainingAmount))) {
+      return Number(vendor.remainingAmount);
+    }
+    if (vendor.balance !== undefined && vendor.balance !== null && !isNaN(Number(vendor.balance))) {
+      return Number(vendor.balance);
+    }
+
+    const initial = getVendorInitialBalance(vendor);
+    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
+    let totalPending = 0;
+    vendPurchases.forEach(p => {
+      const cost = p.totalCost !== undefined ? p.totalCost : ((p.purchasePrice || 0) * (p.quantityAdded || 1));
+      const paid = p.paymentDone !== undefined ? p.paymentDone : (p.paymentStatus === 'Paid' ? cost : 0);
+      const pending = p.remainingAmount !== undefined ? p.remainingAmount : Math.max(0, cost - paid);
+      totalPending += pending;
+    });
+
+    return Number((initial + totalPending).toFixed(2));
+  };
+
+  const getVendorPurchasesTotal = (vendor: Vendor): number => {
+    if (vendor.totalPurchases !== undefined && vendor.totalPurchases > 0) {
+      return vendor.totalPurchases;
+    }
+    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
+    return vendPurchases.reduce((sum, p) => {
+      const cost = p.totalCost !== undefined ? p.totalCost : ((p.purchasePrice || 0) * (p.quantityAdded || 1));
+      return sum + cost;
+    }, 0);
+  };
+
+  const getVendorPaidTotal = (vendor: Vendor): number => {
+    if (vendor.totalPaid !== undefined && vendor.totalPaid > 0) {
+      return vendor.totalPaid;
+    }
+    const vendPayments = payments.filter(p => p.vendorId === vendor.id);
+    return vendPayments.reduce((sum, p) => {
+      return sum + (p.paidAmount || p.paymentDone || 0);
+    }, 0);
+  };
+
+  // Financial summary metrics matching Customers module
+  const { totalNetPayables, vendorsDueCount, settledAccountsCount } = useMemo(() => {
+    let total = 0;
+    let dueCount = 0;
+    let settledCount = 0;
+
+    vendors.forEach(v => {
+      const net = getVendorNetPayable(v);
+      total += net;
+      if (net > 0) {
+        dueCount++;
+      } else {
+        settledCount++;
+      }
+    });
+
+    return {
+      totalNetPayables: Number(total.toFixed(2)),
+      vendorsDueCount: dueCount,
+      settledAccountsCount: settledCount
+    };
+  }, [vendors, purchases, payments]);
+
+  // Automatically keep vendor balance in Firestore reconciled
+  useEffect(() => {
+    if (loading || vendors.length === 0) return;
+
+    vendors.forEach(async (v) => {
+      const netBal = getVendorNetPayable(v);
+      const currentStored = typeof v.remainingAmount === 'number' 
+        ? v.remainingAmount 
+        : (typeof v.balance === 'number' ? v.balance : (parseFloat(v.balance as any) || 0));
+      if (Math.abs(currentStored - netBal) > 0.01) {
+        try {
+          const vendRef = doc(db, 'vendors', v.id);
+          await updateDoc(vendRef, {
+            balance: netBal,
+            remainingAmount: netBal,
+            updatedAt: serverTimestamp()
+          });
+        } catch (syncErr) {
+          console.warn(`Could not auto-sync balance for vendor ${v.companyName || v.name}:`, syncErr);
+        }
+      }
+    });
+  }, [vendors, purchases, loading]);
 
   const handleAddVendor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -290,11 +426,52 @@ export default function Vendors() {
         </div>
         <button 
           onClick={() => setShowAddForm(true)}
-          className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold"
+          className="flex items-center px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md shadow-emerald-950/10 transition-colors text-sm font-bold cursor-pointer"
         >
           <Plus className="w-4 h-4 mr-2" />
           Add Vendor
         </button>
+      </div>
+
+      {/* Financial Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Vendors</span>
+            <Building2 className="w-4 h-4 text-slate-400" />
+          </div>
+          <div className="text-2xl font-black text-slate-900 mt-1.5 font-mono">{vendors.length}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Active vendor suppliers</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl border-amber-200/60 bg-amber-50/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Net Payables</span>
+            <Wallet className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="text-2xl font-black text-amber-900 mt-1.5 font-mono">
+            PKR {totalNetPayables.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div className="text-[11px] text-amber-700/80 mt-0.5">Total vendor balance due</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-700">Vendors Due</span>
+            <Clock className="w-4 h-4 text-rose-500" />
+          </div>
+          <div className="text-2xl font-black text-rose-800 mt-1.5 font-mono">{vendorsDueCount}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Pending vendor balances</div>
+        </div>
+
+        <div className="glass-panel p-4 rounded-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Settled Accounts</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="text-2xl font-black text-emerald-800 mt-1.5 font-mono">{settledAccountsCount}</div>
+          <div className="text-[11px] text-slate-400 mt-0.5">Zero or cleared balance</div>
+        </div>
       </div>
 
       <div className="glass-panel rounded-2xl shadow-sm overflow-hidden">
@@ -340,7 +517,9 @@ export default function Vendors() {
                 </tr>
               ) : (
                 filteredVendors.map((vendor) => {
-                  const effectiveRemaining = vendor.remainingAmount !== undefined ? vendor.remainingAmount : (vendor.balance ?? 0);
+                  const effectiveRemaining = getVendorNetPayable(vendor);
+                  const effectivePurchases = getVendorPurchasesTotal(vendor);
+                  const effectivePaid = getVendorPaidTotal(vendor);
                   return (
                     <tr key={vendor.id} className="hover:bg-[#f8faf9] transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -362,10 +541,10 @@ export default function Vendors() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-xs font-semibold text-slate-700">
-                          Purchased: <span className="font-mono font-bold text-slate-900">PKR {(vendor.totalPurchases || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          Purchased: <span className="font-mono font-bold text-slate-900">PKR {effectivePurchases.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
-                          Paid: <span className="font-mono font-bold">PKR {(vendor.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          Paid: <span className="font-mono font-bold">PKR {effectivePaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

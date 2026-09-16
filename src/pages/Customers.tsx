@@ -103,11 +103,28 @@ export default function Customers() {
       }, 0);
   };
 
-  // 3. In Customer ledger, Net Account Balance = sum of Pending on Invoices and Initial Balance
+  // 3. Return value for a customer across sales returns / refunded invoices
+  const getCustomerReturnValue = (customerId: string): number => {
+    const custSales = sales.filter(s => s.customerId === customerId);
+    let totalReturns = 0;
+    custSales.forEach(s => {
+      if (Array.isArray(s.returns) && s.returns.length > 0) {
+        s.returns.forEach((r: any) => {
+          totalReturns += Number(r.totalRefund) || 0;
+        });
+      } else if (typeof s.totalRefunded === 'number' && s.totalRefunded > 0) {
+        totalReturns += s.totalRefunded;
+      }
+    });
+    return Number(totalReturns.toFixed(2));
+  };
+
+  // 4. In Customer ledger, Net Account Balance = Initial Balance + Pending on Invoices - Return Value
   const getCustomerNetAccountBalance = (customer: Customer): number => {
     const initial = getCustomerInitialBalance(customer);
     const pending = getCustomerPendingInvoices(customer.id);
-    return Number((initial + pending).toFixed(2));
+    const returnVal = getCustomerReturnValue(customer.id);
+    return Number((initial + pending - returnVal).toFixed(2));
   };
 
   // Automatically reconcile and sync customer.balance in Firestore to match Ledger Net Account Balance
@@ -432,6 +449,7 @@ export default function Customers() {
                 filteredCustomers.map((customer) => {
                   const initialBal = getCustomerInitialBalance(customer);
                   const pendingBal = getCustomerPendingInvoices(customer.id);
+                  const returnVal = getCustomerReturnValue(customer.id);
                   const netBal = getCustomerNetAccountBalance(customer);
 
                   return (
@@ -467,12 +485,12 @@ export default function Customers() {
                               Cleared
                             </span>
                           )}
-                          {(initialBal > 0 || pendingBal > 0) && (
+                          {(initialBal > 0 || pendingBal > 0 || returnVal > 0) && (
                             <span 
                               className="text-[10px] text-slate-400 font-medium font-mono hidden sm:inline" 
-                              title={`Initial Balance: PKR ${initialBal.toFixed(2)} | Invoices Pending: PKR ${pendingBal.toFixed(2)}`}
+                              title={`Initial Balance: PKR ${initialBal.toFixed(2)} | Invoices Pending: PKR ${pendingBal.toFixed(2)} | Returns: PKR ${returnVal.toFixed(2)}`}
                             >
-                              (Init: {initialBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} + Pend: {pendingBal.toLocaleString('en-US', { maximumFractionDigits: 0 })})
+                              (Init: {initialBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} + Pend: {pendingBal.toLocaleString('en-US', { maximumFractionDigits: 0 })}{returnVal > 0 ? ` - Ret: ${returnVal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''})
                             </span>
                           )}
                         </div>
