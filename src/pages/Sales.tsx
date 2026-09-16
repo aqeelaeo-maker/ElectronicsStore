@@ -40,7 +40,10 @@ import {
   Check,
   RotateCcw,
   AlertCircle,
-  Phone
+  Phone,
+  ShieldCheck,
+  Tag,
+  Calculator
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -85,8 +88,8 @@ interface SaleItem {
   category: string;
   quantity: number;
   salePrice: number;
-  discount: number;
-  warranty: string;
+  discount?: number;
+  warranty?: string;
   subtotal: number;
   selectedSerials: string[];
   returnedQuantity?: number;
@@ -99,6 +102,9 @@ interface Sale {
   customerId?: string | null;
   customerName: string;
   total: number;
+  subtotal?: number;
+  discount?: number;
+  warranty?: string;
   paidAmount?: number;
   pendingAmount?: number;
   date: string;
@@ -223,12 +229,17 @@ export default function Sales() {
   const [invoiceStatus, setInvoiceStatus] = useState<'Paid' | 'Pending' | 'Partial'>('Paid');
   const [paidAmountInput, setPaidAmountInput] = useState('');
   const [isPaidAmountCustom, setIsPaidAmountCustom] = useState(false);
+  const [invoiceDiscount, setInvoiceDiscount] = useState<number>(0);
+  const [invoiceDiscountInput, setInvoiceDiscountInput] = useState<string>('0');
+  const [invoiceWarranty, setInvoiceWarranty] = useState<string>('No Warranty');
+  const [isCustomWarranty, setIsCustomWarranty] = useState<boolean>(false);
+  const [customWarrantyInput, setCustomWarrantyInput] = useState<string>('');
   const [invoiceItems, setInvoiceItems] = useState<Array<{
     productId: string;
     quantity: number;
     salePrice: number;
-    discount: number;
-    warranty: string;
+    discount?: number;
+    warranty?: string;
     selectedSerials: string[];
   }>>([]);
   const [saving, setSaving] = useState(false);
@@ -428,7 +439,7 @@ export default function Sales() {
                 productId: item.productId,
                 quantity: 1,
                 salePrice: item.salePrice,
-                discount: item.discount ? (item.discount / item.selectedSerials.length) : 0,
+                discount: 0,
                 warranty: item.warranty || '1 Year Warranty',
                 selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
               });
@@ -438,7 +449,7 @@ export default function Sales() {
               productId: item.productId,
               quantity: item.quantity || 1,
               salePrice: item.salePrice,
-              discount: item.discount || 0,
+              discount: 0,
               warranty: item.warranty || '1 Year Warranty',
               selectedSerials: []
             });
@@ -447,6 +458,37 @@ export default function Sales() {
         setInvoiceItems(mappedItems);
       } else {
         setInvoiceItems([]);
+      }
+
+      // Pre-fill invoice-level discount & warranty from quotation
+      const quoteDiscount = quote.discount !== undefined
+        ? quote.discount
+        : (quote.items?.reduce((sum: number, it: any) => sum + (it.discount || 0), 0) || 0);
+      setInvoiceDiscount(quoteDiscount);
+      setInvoiceDiscountInput(quoteDiscount ? String(quoteDiscount) : '0');
+
+      const quoteWarranty = quote.warranty || quote.items?.[0]?.warranty || 'No Warranty';
+      setInvoiceWarranty(quoteWarranty);
+      const standardWarranties = [
+        'No Warranty',
+        '7 Days Checking Warranty',
+        '1 Month Warranty',
+        '3 Months Warranty',
+        '6 Months Warranty',
+        '1 Year Warranty',
+        '2 Years Warranty',
+        '3 Years Warranty',
+        'Lifetime Warranty'
+      ];
+      if (standardWarranties.includes(quoteWarranty)) {
+        setIsCustomWarranty(false);
+        setCustomWarrantyInput('');
+      } else if (quoteWarranty && quoteWarranty !== 'No Warranty') {
+        setIsCustomWarranty(true);
+        setCustomWarrantyInput(quoteWarranty);
+      } else {
+        setIsCustomWarranty(false);
+        setCustomWarrantyInput('');
       }
 
       setInvoiceStatus('Paid');
@@ -630,26 +672,35 @@ export default function Sales() {
     setInvoiceItems(updated);
   };
 
-  const handleItemDiscountChange = (index: number, discount: number) => {
-    const updated = [...invoiceItems];
-    updated[index] = {
-      ...updated[index],
-      discount: Math.max(0, discount)
-    };
-    setInvoiceItems(updated);
-  };
-
-  const handleItemWarrantyChange = (index: number, warranty: string) => {
-    const updated = [...invoiceItems];
-    updated[index] = {
-      ...updated[index],
-      warranty
-    };
-    setInvoiceItems(updated);
+  const calculateItemsSubtotal = () => {
+    return invoiceItems.reduce((sum, item) => sum + ((item.quantity || 1) * (item.salePrice || 0)), 0);
   };
 
   const calculateInvoiceTotal = () => {
-    return invoiceItems.reduce((sum, item) => sum + Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0)), 0);
+    const subtotal = calculateItemsSubtotal();
+    return Math.max(0, subtotal - (invoiceDiscount || 0));
+  };
+
+  const handleInvoiceDiscountChange = (valStr: string) => {
+    setInvoiceDiscountInput(valStr);
+    const parsed = parseFloat(valStr);
+    const num = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    setInvoiceDiscount(num);
+  };
+
+  const handleInvoiceWarrantyChange = (val: string) => {
+    if (val === 'Custom Warranty') {
+      setIsCustomWarranty(true);
+      setInvoiceWarranty(customWarrantyInput || 'Custom Warranty');
+    } else {
+      setIsCustomWarranty(false);
+      setInvoiceWarranty(val);
+    }
+  };
+
+  const handleCustomWarrantyInputChange = (val: string) => {
+    setCustomWarrantyInput(val);
+    setInvoiceWarranty(val.trim() || 'No Warranty');
   };
 
   const getInvoicePaidAndPending = (total: number) => {
@@ -738,7 +789,7 @@ export default function Sales() {
         quantity: 1,
         salePrice: product.salePrice || 0,
         discount: 0,
-        warranty: 'No Warranty',
+        warranty: invoiceWarranty || 'No Warranty',
         selectedSerials: []
       };
       const existingValid = invoiceItems.filter(i => i.productId && i.productId !== '');
@@ -826,7 +877,7 @@ export default function Sales() {
       quantity: 1,
       salePrice: product.salePrice || 0,
       discount: 0,
-      warranty: 'No Warranty',
+      warranty: invoiceWarranty || 'No Warranty',
       selectedSerials: [serialDoc.id]
     };
 
@@ -1019,6 +1070,39 @@ export default function Sales() {
     setIsProductDropdownOpen(false);
     setProductSelectionMode('with_serial');
     
+    // Set invoice-level discount and warranty
+    const existingDiscount = sale.discount !== undefined
+      ? sale.discount
+      : (sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0);
+    setInvoiceDiscount(existingDiscount);
+    setInvoiceDiscountInput(existingDiscount ? String(existingDiscount) : '0');
+
+    const existingWarranty = sale.warranty || (sale.items?.find(i => i.warranty && i.warranty !== 'No Warranty')?.warranty) || 'No Warranty';
+    const standardWarranties = [
+      'No Warranty',
+      '7 Days Checking Warranty',
+      '1 Month Warranty',
+      '3 Months Warranty',
+      '6 Months Warranty',
+      '1 Year Warranty',
+      '2 Years Warranty',
+      '3 Years Warranty',
+      'Lifetime Warranty'
+    ];
+    if (standardWarranties.includes(existingWarranty)) {
+      setIsCustomWarranty(false);
+      setCustomWarrantyInput('');
+      setInvoiceWarranty(existingWarranty);
+    } else if (existingWarranty && existingWarranty !== 'No Warranty') {
+      setIsCustomWarranty(true);
+      setCustomWarrantyInput(existingWarranty);
+      setInvoiceWarranty(existingWarranty);
+    } else {
+      setIsCustomWarranty(false);
+      setCustomWarrantyInput('');
+      setInvoiceWarranty('No Warranty');
+    }
+
     if (sale.items) {
       const mappedItems: any[] = [];
       sale.items.forEach(item => {
@@ -1029,8 +1113,8 @@ export default function Sales() {
               productId: item.productId,
               quantity: 1,
               salePrice: item.salePrice,
-              discount: item.discount ? (item.discount / item.selectedSerials.length) : 0,
-              warranty: item.warranty || 'No Warranty',
+              discount: 0,
+              warranty: existingWarranty || 'No Warranty',
               selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
             });
           });
@@ -1039,8 +1123,8 @@ export default function Sales() {
             productId: item.productId,
             quantity: item.quantity || 1,
             salePrice: item.salePrice,
-            discount: item.discount || 0,
-            warranty: item.warranty || 'No Warranty',
+            discount: 0,
+            warranty: existingWarranty || 'No Warranty',
             selectedSerials: []
           });
         }
@@ -1236,15 +1320,15 @@ export default function Sales() {
       const prod = products.find(p => p.id === item.productId)!;
       return {
         productId: item.productId,
-        productName: prod.name,
-        brand: prod.brand,
-        modelNumber: prod.modelNumber,
-        category: prod.category,
+        productName: prod?.name || '',
+        brand: prod?.brand || '',
+        modelNumber: prod?.modelNumber || '',
+        category: prod?.category || '',
         quantity: item.quantity,
         salePrice: item.salePrice,
-        discount: item.discount || 0,
-        warranty: item.warranty || 'No Warranty',
-        subtotal: Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0)),
+        discount: 0,
+        warranty: invoiceWarranty || 'No Warranty',
+        subtotal: item.quantity * item.salePrice,
         selectedSerials: item.selectedSerials.map(sId => {
           const sn = allSerials.find(s => s.id === sId);
           return sn ? sn.serialNumber : sId;
@@ -1254,7 +1338,9 @@ export default function Sales() {
 
     const itemsToSave: SaleItem[] = groupSaleItemsForPrint(rawItemsToSave);
 
-    const totalAmount = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
+    const itemsSubtotal = itemsToSave.reduce((sum, item) => sum + item.subtotal, 0);
+    const invoiceDiscountNum = Number((invoiceDiscount || 0).toFixed(2));
+    const totalAmount = Math.max(0, itemsSubtotal - invoiceDiscountNum);
     const { paid: calcPaid, pending: calcPending } = getInvoicePaidAndPending(totalAmount);
     const paidAmount = Number(calcPaid.toFixed(2));
     const pendingAmount = Number(calcPending.toFixed(2));
@@ -1270,6 +1356,9 @@ export default function Sales() {
       customerId,
       customerName,
       items: itemsToSave,
+      subtotal: itemsSubtotal,
+      discount: invoiceDiscountNum,
+      warranty: invoiceWarranty || 'No Warranty',
       total: totalAmount,
       paidAmount,
       pendingAmount,
@@ -1564,6 +1653,9 @@ export default function Sales() {
           customerId,
           customerName,
           items: itemsToSave,
+          subtotal: itemsSubtotal,
+          discount: invoiceDiscountNum,
+          warranty: invoiceWarranty || 'No Warranty',
           total: totalAmount,
           paidAmount,
           pendingAmount,
@@ -1579,6 +1671,11 @@ export default function Sales() {
 
       // Reset form states
       setInvoiceItems([]);
+      setInvoiceDiscount(0);
+      setInvoiceDiscountInput('0');
+      setInvoiceWarranty('No Warranty');
+      setIsCustomWarranty(false);
+      setCustomWarrantyInput('');
       setSelectedCustomerId('walk-in');
       setCustomerSearchInput('Walk In Customer');
       setIsCustomerDropdownOpen(false);
@@ -1668,8 +1765,12 @@ export default function Sales() {
         </tr>
       `;
 
-    const subtotal = sale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0) || sale.total;
-    const totalDiscount = sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0;
+    const subtotal = sale.subtotal !== undefined
+      ? sale.subtotal
+      : (sale.items?.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0) || sale.total);
+    const totalDiscount = sale.discount !== undefined
+      ? sale.discount
+      : (sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0);
     const matchedCust = customers.find(c => c.id === sale.customerId || c.name.toLowerCase() === sale.customerName.toLowerCase());
 
     const salePaidDisplay = sale.paidAmount !== undefined 
@@ -1992,6 +2093,12 @@ export default function Sales() {
                         <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Date:</td>
                         <td style="padding: 1px 0; font-weight: 700; color: #000000; vertical-align: top;">${formatInvoiceDate(sale.date)}</td>
                       </tr>
+                      ${sale.warranty && sale.warranty !== 'No Warranty' ? `
+                      <tr>
+                        <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Warranty:</td>
+                        <td style="padding: 1px 0; font-weight: 700; color: #000000; vertical-align: top;">${sale.warranty}</td>
+                      </tr>
+                      ` : ''}
                     </table>
                   </div>
                 </td>
@@ -2119,9 +2226,9 @@ export default function Sales() {
         category: prod?.category || '',
         quantity: item.quantity || 1,
         salePrice: item.salePrice || 0,
-        discount: item.discount || 0,
-        warranty: item.warranty || 'No Warranty',
-        subtotal: Math.max(0, ((item.quantity || 1) * (item.salePrice || 0)) - (item.discount || 0)),
+        discount: 0,
+        warranty: invoiceWarranty || 'No Warranty',
+        subtotal: (item.quantity || 1) * (item.salePrice || 0),
         selectedSerials: item.selectedSerials.map(sId => {
           const sn = allSerials.find(s => s.id === sId);
           return sn ? sn.serialNumber : sId;
@@ -2132,7 +2239,7 @@ export default function Sales() {
     const groupedDraftItems = groupSaleItemsForPrint(draftItems.filter(item => item.productId));
 
     const draftSubtotal = draftItems.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
-    const draftTotalDiscount = draftItems.reduce((sum, item) => sum + (item.discount || 0), 0);
+    const draftTotalDiscount = Number(invoiceDiscount) || 0;
     const draftTotal = Math.max(0, draftSubtotal - draftTotalDiscount);
 
     const currentDraftSale: Sale = {
@@ -2141,6 +2248,9 @@ export default function Sales() {
       customerId: currentCustomer.id,
       customerName: currentCustomer.name,
       items: groupedDraftItems,
+      subtotal: draftSubtotal,
+      discount: draftTotalDiscount,
+      warranty: invoiceWarranty || 'No Warranty',
       total: draftTotal,
       status: invoiceStatus,
       paymentMode,
@@ -2205,7 +2315,7 @@ export default function Sales() {
                 {/* 1. TOP SECTION: Invoice Information (Displayed Horizontally Across Top) */}
                 <div className="w-full bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
                   {/* Top Bar of Invoice Information */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[#0a382c]" />
                       <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
@@ -2213,6 +2323,18 @@ export default function Sales() {
                       </h3>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                      {invoiceWarranty && invoiceWarranty !== 'No Warranty' && (
+                        <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Warranty: {invoiceWarranty}</span>
+                        </span>
+                      )}
+                      {Number(invoiceDiscount) > 0 && (
+                        <span className="text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <Tag className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Discount: -PKR {Number(invoiceDiscount).toFixed(2)}</span>
+                        </span>
+                      )}
                       <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                         invoiceStatus === 'Paid'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -2223,18 +2345,18 @@ export default function Sales() {
                         {invoiceStatus}
                       </span>
                       <span className="text-xs font-mono font-bold text-slate-700 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
-                        Invoice Total: <strong className="text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</strong>
+                        Net Total: <strong className="text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</strong>
                       </span>
                     </div>
                   </div>
 
-                  {/* Row 1: Primary Identification (Invoice Number, Date, Customer Search & Selection) */}
+                  {/* Row 1: Primary Identification (Invoice Number, Date, Customer & Warranty) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-start">
                     {/* Invoice Number */}
-                    <div className="lg:col-span-3 space-y-1">
+                    <div className="lg:col-span-2 space-y-1">
                       <label htmlFor="invoiceNumberInput" className="text-xs font-bold text-slate-700 flex items-center gap-1">
                         <Hash className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Invoice Number</span>
+                        <span>Invoice No</span>
                       </label>
                       <input
                         id="invoiceNumberInput"
@@ -2248,10 +2370,10 @@ export default function Sales() {
                     </div>
 
                     {/* Invoice Date */}
-                    <div className="lg:col-span-3 space-y-1">
+                    <div className="lg:col-span-2 space-y-1">
                       <label htmlFor="invoiceDateInput" className="text-xs font-bold text-slate-700 flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Invoice Date</span>
+                        <span>Date</span>
                       </label>
                       <input
                         id="invoiceDateInput"
@@ -2264,7 +2386,7 @@ export default function Sales() {
                     </div>
 
                     {/* Customer Selection - Searchable Input with Dropdown & Selected Details */}
-                    <div className="sm:col-span-2 lg:col-span-6 space-y-1 relative" ref={customerDropdownRef}>
+                    <div className="sm:col-span-2 lg:col-span-4 space-y-1 relative" ref={customerDropdownRef}>
                       <div className="flex items-center justify-between">
                         <label htmlFor="customerSearchInput" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                           <User className="w-3.5 h-3.5 text-slate-500" />
@@ -2287,7 +2409,7 @@ export default function Sales() {
                           id="customerSearchInput"
                           type="text"
                           autoComplete="off"
-                          placeholder="Type customer name or phone to search..."
+                          placeholder="Search customer name or phone..."
                           value={customerSearchInput}
                           onFocus={() => setIsCustomerDropdownOpen(true)}
                           onChange={(e) => {
@@ -2426,18 +2548,129 @@ export default function Sales() {
                         );
                       })()}
                     </div>
+
+                    {/* Warranty - Global Invoice Warranty */}
+                    <div className="sm:col-span-2 lg:col-span-4 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="invoiceWarrantySelect" className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Warranty</span>
+                        </label>
+                        {invoiceWarranty && invoiceWarranty !== 'No Warranty' && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <select
+                          id="invoiceWarrantySelect"
+                          className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c] cursor-pointer"
+                          value={isCustomWarranty ? 'Custom Warranty' : invoiceWarranty}
+                          onChange={(e) => handleInvoiceWarrantyChange(e.target.value)}
+                        >
+                          <option value="No Warranty">No Warranty</option>
+                          <option value="7 Days Checking Warranty">7 Days Checking Warranty</option>
+                          <option value="1 Month Warranty">1 Month Warranty</option>
+                          <option value="3 Months Warranty">3 Months Warranty</option>
+                          <option value="6 Months Warranty">6 Months Warranty</option>
+                          <option value="1 Year Warranty">1 Year Warranty</option>
+                          <option value="2 Years Warranty">2 Years Warranty</option>
+                          <option value="3 Years Warranty">3 Years Warranty</option>
+                          <option value="Lifetime Warranty">Lifetime Warranty</option>
+                          <option value="Custom Warranty">Custom Warranty...</option>
+                        </select>
+                        {isCustomWarranty && (
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={customWarrantyInput}
+                              onChange={(e) => handleCustomWarrantyInputChange(e.target.value)}
+                              placeholder="Enter custom warranty (e.g. 45 Days, 18 Months)..."
+                              className="glass-input block w-full py-1.5 px-3 pr-7 text-xs font-bold text-amber-900 bg-amber-50/50 border border-amber-300 rounded-xl focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomWarranty(false);
+                                setCustomWarrantyInput('');
+                                setInvoiceWarranty('No Warranty');
+                              }}
+                              className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                              title="Reset warranty"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Row 2: Settlement, Payment Breakdown & Financial Status */}
+                  {/* Row 2: Financials & Settlement (Subtotal, Discount, Net Total, Payment Mode, Status, Paid & Pending) */}
                   <div className="pt-3 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3.5 items-end">
-                    {/* Payment Mode */}
+                    {/* Items Subtotal */}
                     <div className="lg:col-span-2 space-y-1">
+                      <span className="text-xs font-bold text-slate-700 block">
+                        Items Subtotal
+                      </span>
+                      <div className="font-mono font-bold text-xs text-slate-700 bg-white py-2 px-3 rounded-xl border border-slate-200">
+                        PKR {calculateItemsSubtotal().toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Invoice Discount (Global) */}
+                    <div className="lg:col-span-2 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="invoiceDiscountInput" className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <Tag className="w-3.5 h-3.5 text-rose-500" />
+                          <span>Discount (PKR)</span>
+                        </label>
+                        {Number(invoiceDiscount) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInvoiceDiscount(0);
+                              setInvoiceDiscountInput('0');
+                            }}
+                            className="text-[10px] text-rose-600 hover:text-rose-800 font-bold hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        id="invoiceDiscountInput"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        max={calculateItemsSubtotal()}
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-mono font-bold text-rose-700 bg-white border border-slate-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                        value={invoiceDiscountInput}
+                        onChange={(e) => handleInvoiceDiscountChange(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    {/* Net Total Amount */}
+                    <div className="lg:col-span-2 space-y-1">
+                      <span className="text-xs font-bold text-slate-700 block">
+                        Net Total
+                      </span>
+                      <div className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50/60 py-2 px-3 rounded-xl border border-emerald-200">
+                        PKR {calculateInvoiceTotal().toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Payment Mode */}
+                    <div className={`${paymentMode === 'Online' ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-1`}>
                       <label htmlFor="paymentModeSelect" className="text-xs font-bold text-slate-700">
-                        Payment Mode
+                        Mode
                       </label>
                       <select
                         id="paymentModeSelect"
-                        className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        className="glass-input block w-full rounded-xl py-2 px-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                         value={paymentMode}
                         onChange={(e) => {
                           const mode = e.target.value as 'Cash' | 'Online';
@@ -2454,18 +2687,18 @@ export default function Sales() {
 
                     {/* Bank Account Selection (Visible if Online) */}
                     {paymentMode === 'Online' && (
-                      <div className="lg:col-span-3 space-y-1">
+                      <div className="lg:col-span-2 space-y-1">
                         <div className="flex items-center justify-between">
-                          <label htmlFor="bankAccountSelect" className="text-xs font-bold text-slate-700">
-                            Bank Account <span className="text-red-500">*</span>
+                          <label htmlFor="bankAccountSelect" className="text-xs font-bold text-slate-700 truncate">
+                            Bank <span className="text-red-500">*</span>
                           </label>
                           {selectedBankAccNumber && (() => {
                             const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
                             if (!chosenAcc) return null;
                             const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
                             return (
-                              <span className="text-[10px] font-mono font-bold text-[#0a382c]">
-                                Bal: PKR {currentBal.toFixed(2)}
+                              <span className="text-[10px] font-mono font-bold text-[#0a382c] truncate">
+                                Bal: PKR {currentBal.toFixed(0)}
                               </span>
                             );
                           })()}
@@ -2474,7 +2707,7 @@ export default function Sales() {
                           <select
                             id="bankAccountSelect"
                             required={paymentMode === 'Online'}
-                            className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
+                            className="glass-input block w-full rounded-xl py-2 px-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
                             value={selectedBankAccNumber}
                             onChange={(e) => setSelectedBankAccNumber(e.target.value)}
                           >
@@ -2486,42 +2719,32 @@ export default function Sales() {
                             ))}
                           </select>
                         ) : (
-                          <div className="py-2 px-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
-                            No bank accounts found
+                          <div className="py-2 px-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold truncate">
+                            No banks
                           </div>
                         )}
                       </div>
                     )}
 
                     {/* Payment Status Dropdown */}
-                    <div className="lg:col-span-2 space-y-1">
+                    <div className="lg:col-span-1 space-y-1">
                       <label htmlFor="statusSelect" className="text-xs font-bold text-slate-700">
-                        Payment Status
+                        Status
                       </label>
                       <select
                         id="statusSelect"
-                        className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        className="glass-input block w-full rounded-xl py-2 px-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
                         value={invoiceStatus}
                         onChange={(e) => handleInvoiceStatusChange(e.target.value as 'Paid' | 'Partial' | 'Pending')}
                       >
-                        <option value="Paid">Paid (Full)</option>
-                        <option value="Partial">Partial Payment</option>
-                        <option value="Pending">Pending (Unpaid)</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Partial">Partial</option>
+                        <option value="Pending">Pending</option>
                       </select>
                     </div>
 
-                    {/* Total Amount Summary */}
-                    <div className="lg:col-span-2 space-y-1">
-                      <span className="text-xs font-bold text-slate-700 block">
-                        Total Amount
-                      </span>
-                      <div className="font-mono font-black text-xs text-slate-900 bg-white py-2 px-3 rounded-xl border border-slate-200">
-                        PKR {calculateInvoiceTotal().toFixed(2)}
-                      </div>
-                    </div>
-
                     {/* Paid Amount Input + Quick Presets */}
-                    <div className={`space-y-1 ${paymentMode === 'Online' ? 'lg:col-span-3' : 'lg:col-span-3'}`}>
+                    <div className="lg:col-span-2 space-y-1">
                       <div className="flex items-center justify-between">
                         <label htmlFor="paidAmountInput" className="text-xs font-bold text-slate-700">
                           Paid Amount
@@ -2578,7 +2801,7 @@ export default function Sales() {
                     </div>
 
                     {/* Amount Pending Display */}
-                    <div className={`space-y-1 ${paymentMode === 'Online' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                    <div className={`${paymentMode === 'Online' ? 'lg:col-span-2' : 'lg:col-span-2'} space-y-1`}>
                       <span className="text-xs font-bold text-slate-700 block">
                         Amount Pending
                       </span>
@@ -2951,10 +3174,8 @@ export default function Sales() {
                                 <th className="py-3 px-3 w-10 text-center">#</th>
                                 <th className="py-3 px-4">Product Details</th>
                                 <th className="py-3 px-3 text-center w-24">Qty</th>
-                                <th className="py-3 px-3 text-right w-28">Unit Price</th>
-                                <th className="py-3 px-3 text-right w-24">Discount</th>
-                                <th className="py-3 px-3 text-center w-28">Warranty</th>
-                                <th className="py-3 px-3 text-right w-28">Total (PKR)</th>
+                                <th className="py-3 px-3 text-right w-32">Unit Price</th>
+                                <th className="py-3 px-3 text-right w-32">Total (PKR)</th>
                                 <th className="py-3 px-3 text-center w-36 whitespace-nowrap">Actions</th>
                               </tr>
                             </thead>
@@ -2967,7 +3188,7 @@ export default function Sales() {
                                 const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
                                 const maxAllowed = (selectedProduct?.stock || 0) + previousQty;
                                 const isEditing = editingInvoiceItemIndex === index;
-                                const lineTotal = Math.max(0, ((item.quantity || 1) * item.salePrice) - (item.discount || 0));
+                                const lineTotal = (item.quantity || 1) * item.salePrice;
 
                                 return (
                                   <tr 
@@ -3066,59 +3287,14 @@ export default function Sales() {
                                       )}
                                     </td>
 
-                                    {/* 5. Discount */}
-                                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                                      {isEditing ? (
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={item.discount || ''}
-                                          onChange={(e) => handleItemDiscountChange(index, parseFloat(e.target.value) || 0)}
-                                          placeholder="0.00"
-                                          className="w-20 px-2 py-1 text-right text-xs font-mono border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0a382c] bg-white"
-                                        />
-                                      ) : (
-                                        <span className="font-mono text-slate-600">
-                                          PKR {Number(item.discount || 0).toFixed(2)}
-                                        </span>
-                                      )}
-                                    </td>
-
-                                    {/* 6. Warranty */}
-                                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                                      {isEditing ? (
-                                        <select
-                                          value={item.warranty || 'No Warranty'}
-                                          onChange={(e) => handleItemWarrantyChange(index, e.target.value)}
-                                          className="px-2 py-1 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0a382c] bg-white cursor-pointer"
-                                        >
-                                          <option value="No Warranty">No Warranty</option>
-                                          <option value="3 Months">3 Months</option>
-                                          <option value="6 Months">6 Months</option>
-                                          <option value="1 Year">1 Year</option>
-                                          <option value="2 Years">2 Years</option>
-                                          <option value="3 Years">3 Years</option>
-                                        </select>
-                                      ) : (
-                                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${
-                                          item.warranty && item.warranty !== 'No Warranty'
-                                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                            : 'text-slate-400'
-                                        }`}>
-                                          {item.warranty || 'No Warranty'}
-                                        </span>
-                                      )}
-                                    </td>
-
-                                    {/* 7. Line Total */}
+                                    {/* 5. Line Total */}
                                     <td className="py-3 px-3 text-right whitespace-nowrap">
                                       <span className="font-mono font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                                         PKR {lineTotal.toFixed(2)}
                                       </span>
                                     </td>
 
-                                    {/* 8. Actions (Edit and Delete fully visible without scroll bar) */}
+                                    {/* 6. Actions (Edit and Delete fully visible without scroll bar) */}
                                     <td className="py-3 px-3 text-center whitespace-nowrap">
                                       <div className="flex items-center justify-center gap-1.5">
                                         {isEditing ? (
@@ -3285,6 +3461,12 @@ export default function Sales() {
                             <span className="font-bold text-black min-w-[80px]">Date:</span>
                             <span className="font-bold text-black">{formatInvoiceDate(invoiceDate || new Date())}</span>
                           </div>
+                          {invoiceWarranty && invoiceWarranty !== 'No Warranty' && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-bold text-black min-w-[80px]">Warranty:</span>
+                              <span className="font-bold text-black">{invoiceWarranty}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

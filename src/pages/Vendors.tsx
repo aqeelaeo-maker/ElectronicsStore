@@ -299,17 +299,6 @@ export default function Vendors() {
     return name.includes(search) || phone.includes(search) || contact.includes(search);
   });
 
-  if (ledgerVendor) {
-    const currentVendor = vendors.find(v => v.id === ledgerVendor.id) || ledgerVendor;
-    return (
-      <VendorLedgerView
-        vendor={currentVendor}
-        storeId={storeId || currentVendor.storeId || ''}
-        onBack={() => setLedgerVendor(null)}
-      />
-    );
-  }
-
   const isFormOpen = showAddForm || !!editingVendor;
 
   if (isFormOpen) {
@@ -587,6 +576,30 @@ export default function Vendors() {
           </table>
         </div>
       </div>
+
+      {/* Vendor Ledger Modal Dialog (Replaces Full Page Mode) */}
+      {ledgerVendor && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen p-2 sm:p-4 md:p-6 text-center">
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
+              onClick={() => setLedgerVendor(null)} 
+            />
+            {/* Modal Dialog Content Container */}
+            <div className="relative z-10 w-full max-w-6xl bg-slate-100 rounded-3xl text-left shadow-2xl border border-slate-200 my-4 max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-3 sm:p-5 md:p-6 overflow-y-auto flex-1">
+                <VendorLedgerView
+                  vendor={vendors.find(v => v.id === ledgerVendor.id) || ledgerVendor}
+                  storeId={storeId || ledgerVendor.storeId || ''}
+                  onBack={() => setLedgerVendor(null)}
+                  isModal={true}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
