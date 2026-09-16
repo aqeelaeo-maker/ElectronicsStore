@@ -38,7 +38,9 @@ import {
   Layers,
   Minus,
   Check,
-  RotateCcw
+  RotateCcw,
+  AlertCircle,
+  Phone
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -2197,435 +2199,419 @@ export default function Sales() {
           <form onSubmit={handleCreateInvoiceSubmit} className="flex flex-col">
             <div className="p-4 sm:p-6 lg:p-8 space-y-8">
               
-              {/* Top Two Panels: Left = Invoice Information (vertical), Right = Product Line Items (vertical) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Stacked Layout: 1) Invoice Information Horizontally on Top, 2) ITEMS Underneath Full Width */}
+              <div className="space-y-6">
                 
-                {/* LEFT PANEL: Invoice Information (Vertically) */}
-                <div className="lg:col-span-4 bg-[#f8faf9] p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
-                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                {/* 1. TOP SECTION: Invoice Information (Displayed Horizontally Across Top) */}
+                <div className="w-full bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                  {/* Top Bar of Invoice Information */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-[#0a382c]" />
-                      Invoice Information
-                    </h3>
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      invoiceStatus === 'Pending' 
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200' 
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                    }`}>
-                      {invoiceStatus}
-                    </span>
+                      <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Invoice Information
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                        invoiceStatus === 'Paid'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : invoiceStatus === 'Partial'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}>
+                        {invoiceStatus}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-700 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
+                        Invoice Total: <strong className="text-[#0a382c]">PKR {calculateInvoiceTotal().toFixed(2)}</strong>
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Customer Selection - Searchable Textbox */}
-                  <div className="space-y-1 pb-2.5 border-b border-slate-200/80 relative" ref={customerDropdownRef}>
-                    <div className="flex items-center justify-between">
-                      <label htmlFor="customerSearchInput" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Select Customer:</span>
+                  {/* Row 1: Primary Identification (Invoice Number, Date, Customer Search & Selection) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5 items-start">
+                    {/* Invoice Number */}
+                    <div className="lg:col-span-3 space-y-1">
+                      <label htmlFor="invoiceNumberInput" className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Invoice Number</span>
                       </label>
-                      {selectedCustomerId === 'walk-in' ? (
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                          Walk-In
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                          Selected
-                        </span>
-                      )}
+                      <input
+                        id="invoiceNumberInput"
+                        type="text"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        value={invoiceNumber || (editingSale ? editingSale.invoiceNo : getNextInvoiceNumber())}
+                        onChange={(e) => setInvoiceNumber(e.target.value)}
+                        placeholder="e.g. INV-2026-0001"
+                      />
                     </div>
 
-                    <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                    {/* Invoice Date */}
+                    <div className="lg:col-span-3 space-y-1">
+                      <label htmlFor="invoiceDateInput" className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Invoice Date</span>
+                      </label>
                       <input
-                        id="customerSearchInput"
-                        type="text"
-                        autoComplete="off"
-                        placeholder="Type customer name or phone to search..."
-                        value={customerSearchInput}
-                        onFocus={() => setIsCustomerDropdownOpen(true)}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomerSearchInput(val);
-                          setIsCustomerDropdownOpen(true);
-                          if (!val.trim()) {
-                            setSelectedCustomerId('walk-in');
-                          } else {
-                            const exactMatch = customers.find(c => c.name.toLowerCase() === val.toLowerCase().trim());
-                            if (exactMatch) {
-                              setSelectedCustomerId(exactMatch.id);
-                            } else {
-                              setSelectedCustomerId(val);
-                            }
-                          }
-                        }}
-                        className="glass-input block w-full pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-[#0a382c] focus:ring-2 focus:ring-[#0a382c]/10"
+                        id="invoiceDateInput"
+                        type="date"
+                        required
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        value={invoiceDate}
+                        onChange={(e) => setInvoiceDate(e.target.value)}
                       />
-                      {customerSearchInput && customerSearchInput !== 'Walk In Customer' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomerSearchInput('');
-                            setSelectedCustomerId('walk-in');
-                            setIsCustomerDropdownOpen(true);
-                          }}
-                          className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-                          title="Clear search"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
+                    </div>
 
-                      {/* Dropdown displaying customers filtered by text */}
-                      {isCustomerDropdownOpen && (
-                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
-                          {/* Walk In option */}
+                    {/* Customer Selection - Searchable Input with Dropdown & Selected Details */}
+                    <div className="sm:col-span-2 lg:col-span-6 space-y-1 relative" ref={customerDropdownRef}>
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="customerSearchInput" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Select Customer</span>
+                        </label>
+                        {selectedCustomerId === 'walk-in' ? (
+                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                            Walk-In Customer
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                        <input
+                          id="customerSearchInput"
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Type customer name or phone to search..."
+                          value={customerSearchInput}
+                          onFocus={() => setIsCustomerDropdownOpen(true)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomerSearchInput(val);
+                            setIsCustomerDropdownOpen(true);
+                            if (!val.trim()) {
+                              setSelectedCustomerId('walk-in');
+                            } else {
+                              const exactMatch = customers.find(c => c.name.toLowerCase() === val.toLowerCase().trim());
+                              if (exactMatch) {
+                                setSelectedCustomerId(exactMatch.id);
+                              } else {
+                                setSelectedCustomerId(val);
+                              }
+                            }
+                          }}
+                          className="glass-input block w-full pl-8 pr-7 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-[#0a382c] focus:ring-2 focus:ring-[#0a382c]/10"
+                        />
+                        {customerSearchInput && customerSearchInput !== 'Walk In Customer' && (
                           <button
                             type="button"
                             onClick={() => {
+                              setCustomerSearchInput('');
                               setSelectedCustomerId('walk-in');
-                              setCustomerSearchInput('Walk In Customer');
-                              setIsCustomerDropdownOpen(false);
+                              setIsCustomerDropdownOpen(true);
                             }}
-                            className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex items-center justify-between transition-colors ${
-                              selectedCustomerId === 'walk-in' ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-700'
-                            }`}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                            title="Clear search"
                           >
-                            <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Walk In Customer</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Default</span>
+                            <X className="w-3 h-3" />
                           </button>
+                        )}
 
-                          {/* Filtered list of customers according to typed text */}
-                          {filteredCustomers.map(c => (
+                        {/* Dropdown displaying customers filtered by text */}
+                        {isCustomerDropdownOpen && (
+                          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                            {/* Walk In option */}
                             <button
-                              key={c.id}
                               type="button"
                               onClick={() => {
-                                setSelectedCustomerId(c.id);
-                                setCustomerSearchInput(c.name);
+                                setSelectedCustomerId('walk-in');
+                                setCustomerSearchInput('Walk In Customer');
                                 setIsCustomerDropdownOpen(false);
                               }}
-                              className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex flex-col transition-colors ${
-                                selectedCustomerId === c.id ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-800'
+                              className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex items-center justify-between transition-colors ${
+                                selectedCustomerId === 'walk-in' ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-700'
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold">{c.name}</span>
-                                {c.mobile && <span className="text-[11px] font-mono text-slate-500">{c.mobile}</span>}
+                              <div className="flex items-center gap-2">
+                                <User className="w-3.5 h-3.5 text-slate-400" />
+                                <span>Walk In Customer</span>
                               </div>
-                              {(c.city || c.address) && (
-                                <span className="text-[10px] text-slate-400 truncate mt-0.5">
-                                  {[c.city, c.address].filter(Boolean).join(' • ')}
-                                </span>
-                              )}
+                              <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Default</span>
                             </button>
-                          ))}
 
-                          {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedCustomerId(customerSearchInput.trim());
-                                setIsCustomerDropdownOpen(false);
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-slate-50 text-slate-600 italic flex items-center justify-between"
-                            >
-                              <span>Use <strong>"{customerSearchInput.trim()}"</strong> as customer</span>
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Custom</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Selected Customer Details Card */}
-                    {selectedCustomerId !== 'walk-in' && (() => {
-                      const selectedCust = customers.find(c => c.id === selectedCustomerId);
-                      if (!selectedCust) {
-                        return (
-                          <div className="mt-1.5 p-2 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-600 space-y-0.5 shadow-2xs">
-                            <div className="font-bold text-slate-900">{customerSearchInput}</div>
-                            <div className="text-[10px] text-slate-400 italic">Custom customer name</div>
-                          </div>
-                        );
-                      }
-                      return (
-                        <div className="mt-1.5 p-2 rounded-xl bg-white border border-emerald-200/80 text-[11px] text-slate-600 space-y-1 shadow-2xs">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-slate-900">{selectedCust.name}</span>
-                            <span className="text-[10px] font-bold text-[#0a382c] bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                              Active Customer
-                            </span>
-                          </div>
-                          {selectedCust.mobile && <div>Phone: <span className="font-semibold text-slate-800">{selectedCust.mobile}</span></div>}
-                          {(selectedCust.address || selectedCust.city) && (
-                            <div className="truncate text-slate-500">
-                              Address: <span className="font-medium text-slate-700">{[selectedCust.address, selectedCust.city].filter(Boolean).join(', ')}</span>
-                            </div>
-                          )}
-                          {selectedCust.balance !== undefined && (
-                            <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                              <span className="text-slate-500 font-medium">Customer Balance:</span>
-                              <span className={`font-mono font-bold ${selectedCust.balance > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
-                                PKR {Number(selectedCust.balance).toFixed(2)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Compact Vertically Aligned Key-Value Form with Minimum Space */}
-                  <div className="space-y-2 text-xs pt-0.5">
-                    {/* 1. Invoice Number : */}
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <label htmlFor="invoiceNumberInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        Invoice Number :
-                      </label>
-                      <div className="col-span-7">
-                        <input
-                          id="invoiceNumberInput"
-                          type="text"
-                          required
-                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold text-slate-900 bg-white border border-slate-200 focus:border-[#0a382c]"
-                          value={invoiceNumber || (editingSale ? editingSale.invoiceNo : getNextInvoiceNumber())}
-                          onChange={(e) => setInvoiceNumber(e.target.value)}
-                          placeholder="e.g. INV-2026-0001"
-                        />
-                      </div>
-                    </div>
-
-                    {/* 2. Date: */}
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <label htmlFor="invoiceDateInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        Date:
-                      </label>
-                      <div className="col-span-7">
-                        <input
-                          id="invoiceDateInput"
-                          type="date"
-                          required
-                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                          value={invoiceDate}
-                          onChange={(e) => setInvoiceDate(e.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 3. Payment Mode */}
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <label htmlFor="paymentModeSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                        Payment Mode:
-                      </label>
-                      <div className="col-span-7">
-                        <select
-                          id="paymentModeSelect"
-                          className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                          value={paymentMode}
-                          onChange={(e) => {
-                            const mode = e.target.value as 'Cash' | 'Online';
-                            setPaymentMode(mode);
-                            if (mode === 'Online' && !selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
-                              setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
-                            }
-                          }}
-                        >
-                          <option value="Cash">Cash</option>
-                          <option value="Online">Online</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Bank Account Selection if Online */}
-                    {paymentMode === 'Online' && (
-                      <div className="bg-white p-2 rounded-xl border border-slate-200/90 shadow-2xs space-y-1.5 my-1">
-                        <div className="grid grid-cols-12 gap-2 items-center">
-                          <label htmlFor="bankAccountSelect" className="col-span-5 text-[11px] font-bold text-slate-600 whitespace-nowrap">
-                            Bank Account <span className="text-red-500">*</span>:
-                          </label>
-                          <div className="col-span-7">
-                            {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
-                              <select
-                                id="bankAccountSelect"
-                                required={paymentMode === 'Online'}
-                                className="glass-input block w-full rounded-lg py-1.5 px-2 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
-                                value={selectedBankAccNumber}
-                                onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                            {/* Filtered list of customers according to typed text */}
+                            {filteredCustomers.map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerId(c.id);
+                                  setCustomerSearchInput(c.name);
+                                  setIsCustomerDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 hover:bg-emerald-50/60 flex flex-col transition-colors ${
+                                  selectedCustomerId === c.id ? 'bg-emerald-50 text-[#0a382c] font-bold' : 'text-slate-800'
+                                }`}
                               >
-                                <option value="">-- Select Bank --</option>
-                                {storeDetails.bankAccounts.map((acc, idx) => (
-                                  <option key={idx} value={acc.accountNumber}>
-                                    {acc.bankName} - {acc.accountNumber}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className="text-[10px] text-amber-600 font-bold">No accounts</span>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold">{c.name}</span>
+                                  {c.mobile && <span className="text-[11px] font-mono text-slate-500">{c.mobile}</span>}
+                                </div>
+                                {(c.city || c.address) && (
+                                  <span className="text-[10px] text-slate-400 truncate mt-0.5">
+                                    {[c.city, c.address].filter(Boolean).join(' • ')}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+
+                            {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerId(customerSearchInput.trim());
+                                  setIsCustomerDropdownOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-slate-600 italic flex items-center justify-between"
+                              >
+                                <span>Use <strong>"{customerSearchInput.trim()}"</strong> as customer</span>
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Custom</span>
+                              </button>
                             )}
                           </div>
-                        </div>
+                        )}
+                      </div>
 
-                        {selectedBankAccNumber && (() => {
-                          const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
-                          if (!chosenAcc) return null;
-                          const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
-                          const currentPaid = getInvoicePaidAndPending(calculateInvoiceTotal()).paid;
+                      {/* Selected Customer Details Bar */}
+                      {selectedCustomerId !== 'walk-in' && (() => {
+                        const selectedCust = customers.find(c => c.id === selectedCustomerId);
+                        if (!selectedCust) {
                           return (
-                            <div className="p-2 rounded-lg bg-emerald-50/90 border border-emerald-200/80 text-[10px] space-y-0.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-600 font-medium">Bank Balance:</span>
-                                <span className="font-mono font-black text-[#0a382c]">
-                                  PKR {currentBal.toFixed(2)}
-                                </span>
-                              </div>
-                              {currentPaid > 0 && (
-                                <div className="flex items-center justify-between text-[10px] text-emerald-800 pt-1 border-t border-emerald-100/80 font-semibold">
-                                  <span>After Deposit:</span>
-                                  <span className="font-mono font-bold">
-                                    PKR {(currentBal + currentPaid).toFixed(2)}
-                                  </span>
-                                </div>
-                              )}
+                            <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between shadow-2xs">
+                              <span className="font-bold text-slate-900">{customerSearchInput}</span>
+                              <span className="text-[10px] text-slate-400 italic">Custom customer</span>
                             </div>
                           );
-                        })()}
+                        }
+                        return (
+                          <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-white border border-emerald-200/80 text-[11px] text-slate-600 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="font-bold text-slate-900">{selectedCust.name}</span>
+                              {selectedCust.mobile && (
+                                <span className="text-slate-600 flex items-center gap-1 font-mono">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  {selectedCust.mobile}
+                                </span>
+                              )}
+                              {(selectedCust.address || selectedCust.city) && (
+                                <span className="text-slate-500 truncate max-w-xs">
+                                  {[selectedCust.address, selectedCust.city].filter(Boolean).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                            {selectedCust.balance !== undefined && (
+                              <div className="flex items-center gap-1 text-[11px] shrink-0 font-medium">
+                                <span className="text-slate-500">Balance:</span>
+                                <span className={`font-mono font-bold ${selectedCust.balance > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                                  PKR {Number(selectedCust.balance).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Row 2: Settlement, Payment Breakdown & Financial Status */}
+                  <div className="pt-3 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3.5 items-end">
+                    {/* Payment Mode */}
+                    <div className="lg:col-span-2 space-y-1">
+                      <label htmlFor="paymentModeSelect" className="text-xs font-bold text-slate-700">
+                        Payment Mode
+                      </label>
+                      <select
+                        id="paymentModeSelect"
+                        className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        value={paymentMode}
+                        onChange={(e) => {
+                          const mode = e.target.value as 'Cash' | 'Online';
+                          setPaymentMode(mode);
+                          if (mode === 'Online' && !selectedBankAccNumber && storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0) {
+                            setSelectedBankAccNumber(storeDetails.bankAccounts[0].accountNumber);
+                          }
+                        }}
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="Online">Online</option>
+                      </select>
+                    </div>
+
+                    {/* Bank Account Selection (Visible if Online) */}
+                    {paymentMode === 'Online' && (
+                      <div className="lg:col-span-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="bankAccountSelect" className="text-xs font-bold text-slate-700">
+                            Bank Account <span className="text-red-500">*</span>
+                          </label>
+                          {selectedBankAccNumber && (() => {
+                            const chosenAcc = storeDetails.bankAccounts?.find(a => a.accountNumber === selectedBankAccNumber);
+                            if (!chosenAcc) return null;
+                            const currentBal = chosenAcc.balance !== undefined ? chosenAcc.balance : (chosenAcc.openingBalance || 0);
+                            return (
+                              <span className="text-[10px] font-mono font-bold text-[#0a382c]">
+                                Bal: PKR {currentBal.toFixed(2)}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        {storeDetails.bankAccounts && storeDetails.bankAccounts.length > 0 ? (
+                          <select
+                            id="bankAccountSelect"
+                            required={paymentMode === 'Online'}
+                            className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200"
+                            value={selectedBankAccNumber}
+                            onChange={(e) => setSelectedBankAccNumber(e.target.value)}
+                          >
+                            <option value="">-- Select Bank --</option>
+                            {storeDetails.bankAccounts.map((acc, idx) => (
+                              <option key={idx} value={acc.accountNumber}>
+                                {acc.bankName} - {acc.accountNumber}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="py-2 px-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+                            No bank accounts found
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {/* 4. Payment Record & Customer Ledger */}
-                    <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                    {/* Payment Status Dropdown */}
+                    <div className="lg:col-span-2 space-y-1">
+                      <label htmlFor="statusSelect" className="text-xs font-bold text-slate-700">
+                        Payment Status
+                      </label>
+                      <select
+                        id="statusSelect"
+                        className="glass-input block w-full rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        value={invoiceStatus}
+                        onChange={(e) => handleInvoiceStatusChange(e.target.value as 'Paid' | 'Partial' | 'Pending')}
+                      >
+                        <option value="Paid">Paid (Full)</option>
+                        <option value="Partial">Partial Payment</option>
+                        <option value="Pending">Pending (Unpaid)</option>
+                      </select>
+                    </div>
+
+                    {/* Total Amount Summary */}
+                    <div className="lg:col-span-2 space-y-1">
+                      <span className="text-xs font-bold text-slate-700 block">
+                        Total Amount
+                      </span>
+                      <div className="font-mono font-black text-xs text-slate-900 bg-white py-2 px-3 rounded-xl border border-slate-200">
+                        PKR {calculateInvoiceTotal().toFixed(2)}
+                      </div>
+                    </div>
+
+                    {/* Paid Amount Input + Quick Presets */}
+                    <div className={`space-y-1 ${paymentMode === 'Online' ? 'lg:col-span-3' : 'lg:col-span-3'}`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                          Payment Record
-                        </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          invoiceStatus === 'Paid'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : invoiceStatus === 'Partial'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {invoiceStatus}
-                        </span>
-                      </div>
-
-                      {/* Payment Status Dropdown */}
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <label htmlFor="statusSelect" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                          Payment Status:
+                        <label htmlFor="paidAmountInput" className="text-xs font-bold text-slate-700">
+                          Paid Amount
                         </label>
-                        <div className="col-span-7">
-                          <select
-                            id="statusSelect"
-                            className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                            value={invoiceStatus}
-                            onChange={(e) => handleInvoiceStatusChange(e.target.value as 'Paid' | 'Partial' | 'Pending')}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tot = calculateInvoiceTotal();
+                              setPaidAmountInput(String(tot));
+                              setIsPaidAmountCustom(true);
+                              setInvoiceStatus('Paid');
+                            }}
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-50 text-[#0a382c] border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer"
                           >
-                            <option value="Paid">Paid (Full)</option>
-                            <option value="Partial">Partial Payment</option>
-                            <option value="Pending">Pending (Unpaid)</option>
-                          </select>
+                            100%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const half = Number((calculateInvoiceTotal() / 2).toFixed(2));
+                              setPaidAmountInput(String(half));
+                              setIsPaidAmountCustom(true);
+                              setInvoiceStatus(half > 0 ? 'Partial' : 'Pending');
+                            }}
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                          >
+                            50%
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaidAmountInput('0');
+                              setIsPaidAmountCustom(true);
+                              setInvoiceStatus('Pending');
+                            }}
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                          >
+                            0
+                          </button>
                         </div>
                       </div>
+                      <input
+                        id="paidAmountInput"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        max={calculateInvoiceTotal()}
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-mono font-bold text-emerald-800 bg-white border border-slate-200 focus:border-[#0a382c]"
+                        value={isPaidAmountCustom ? paidAmountInput : getInvoicePaidAndPending(calculateInvoiceTotal()).paid}
+                        onChange={(e) => handlePaidAmountChange(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
 
-                      {/* Total Amount Summary */}
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <span className="col-span-5 text-xs font-bold text-slate-600 whitespace-nowrap">
-                          Total Amount:
-                        </span>
-                        <div className="col-span-7 font-mono font-bold text-xs text-slate-900 bg-slate-100/90 py-1.5 px-2.5 rounded-lg border border-slate-200">
-                          PKR {calculateInvoiceTotal().toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* Paid Amount Input */}
-                      <div className="grid grid-cols-12 gap-2 items-center">
-                        <label htmlFor="paidAmountInput" className="col-span-5 text-xs font-bold text-slate-700 whitespace-nowrap">
-                          Paid Amount:
-                        </label>
-                        <div className="col-span-7">
-                          <input
-                            id="paidAmountInput"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            max={calculateInvoiceTotal()}
-                            className="glass-input block w-full rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold text-emerald-800 bg-white border border-slate-200 focus:border-[#0a382c]"
-                            value={isPaidAmountCustom ? paidAmountInput : getInvoicePaidAndPending(calculateInvoiceTotal()).paid}
-                            onChange={(e) => handlePaidAmountChange(e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Quick Presets for Paid Amount */}
-                      <div className="flex items-center gap-1.5 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const tot = calculateInvoiceTotal();
-                            setPaidAmountInput(String(tot));
-                            setIsPaidAmountCustom(true);
-                            setInvoiceStatus('Paid');
-                          }}
-                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-50 text-[#0a382c] border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                        >
-                          100% Paid
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const half = Number((calculateInvoiceTotal() / 2).toFixed(2));
-                            setPaidAmountInput(String(half));
-                            setIsPaidAmountCustom(true);
-                            setInvoiceStatus(half > 0 ? 'Partial' : 'Pending');
-                          }}
-                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors"
-                        >
-                          50%
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPaidAmountInput('0');
-                            setIsPaidAmountCustom(true);
-                            setInvoiceStatus('Pending');
-                          }}
-                          className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition-colors"
-                        >
-                          0 (Credit)
-                        </button>
-                      </div>
-
-                      {/* Amount Pending Display */}
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-700">Amount Pending:</span>
-                          <span className={`font-mono font-black ${
-                            getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 
-                              ? 'text-rose-700' 
-                              : 'text-slate-700'
-                          }`}>
-                            PKR {getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)}
-                          </span>
-                        </div>
-                        {getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 && (
-                          <p className="text-[10px] text-amber-700 leading-tight">
-                            {selectedCustomerId && selectedCustomerId !== 'walk-in'
-                              ? `* PKR ${getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)} will be added to ${customerSearchInput}'s customer balance.`
-                              : '* Pending amount will not be added to customer ledger for Walk-in customer.'}
-                          </p>
+                    {/* Amount Pending Display */}
+                    <div className={`space-y-1 ${paymentMode === 'Online' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                      <span className="text-xs font-bold text-slate-700 block">
+                        Amount Pending
+                      </span>
+                      <div className={`font-mono font-black text-xs py-2 px-3 rounded-xl border flex items-center justify-between ${
+                        getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 
+                          ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      }`}>
+                        <span>PKR {getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)}</span>
+                        {getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 ? (
+                          <span className="text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded">Due</span>
+                        ) : (
+                          <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">Cleared</span>
                         )}
                       </div>
                     </div>
+
+                    {/* Pending Ledger Notice if any */}
+                    {getInvoicePaidAndPending(calculateInvoiceTotal()).pending > 0 && (
+                      <div className="col-span-full text-[11px] text-amber-800 bg-amber-50 border border-amber-200 py-1.5 px-3 rounded-xl flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>
+                          {selectedCustomerId && selectedCustomerId !== 'walk-in'
+                            ? `* PKR ${getInvoicePaidAndPending(calculateInvoiceTotal()).pending.toFixed(2)} will be added to ${customerSearchInput}'s customer balance.`
+                            : '* Pending amount will not be added to customer ledger for Walk-in customer.'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* RIGHT PANEL: Items (Selected by Serial numbers in stock) */}
-                <div className="lg:col-span-8 bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+                {/* 2. UNDER IT: ITEMS (Full Width with complete product details and visible actions without scroll bar) */}
+                <div className="w-full bg-[#f8faf9] p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
                   <div className="flex justify-between items-center pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-[#0a382c]" />
@@ -2937,7 +2923,7 @@ export default function Sales() {
                     </div>
                   )}
 
-                  {/* List of Selected Items - Displayed in ONLY ONE LINE with edit and delete actions in the end */}
+                  {/* List of Selected Items - Full width, product details displayed fully, edit and delete actions visible without scroll bar */}
                   <div className="space-y-2 pt-1">
                     {invoiceItems.length === 0 ? (
                       <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-white/70 text-center space-y-3">
@@ -2958,18 +2944,18 @@ export default function Sales() {
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs whitespace-nowrap">
+                        <div className="w-full overflow-x-auto lg:overflow-x-visible">
+                          <table className="w-full text-left text-xs table-auto">
                             <thead className="bg-slate-50/90 text-slate-600 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">
                               <tr>
-                                <th className="py-2.5 px-3 w-10 text-center">#</th>
-                                <th className="py-2.5 px-3 min-w-[220px]">Product Details</th>
-                                <th className="py-2.5 px-3 text-center w-24">Qty</th>
-                                <th className="py-2.5 px-3 text-right w-28">Unit Price</th>
-                                <th className="py-2.5 px-3 text-right w-24">Discount</th>
-                                <th className="py-2.5 px-3 text-center w-28">Warranty</th>
-                                <th className="py-2.5 px-3 text-right w-28">Total (PKR)</th>
-                                <th className="py-2.5 px-3 text-center w-36">Actions</th>
+                                <th className="py-3 px-3 w-10 text-center">#</th>
+                                <th className="py-3 px-4">Product Details</th>
+                                <th className="py-3 px-3 text-center w-24">Qty</th>
+                                <th className="py-3 px-3 text-right w-28">Unit Price</th>
+                                <th className="py-3 px-3 text-right w-24">Discount</th>
+                                <th className="py-3 px-3 text-center w-28">Warranty</th>
+                                <th className="py-3 px-3 text-right w-28">Total (PKR)</th>
+                                <th className="py-3 px-3 text-center w-36 whitespace-nowrap">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -2989,37 +2975,42 @@ export default function Sales() {
                                     className={`transition-colors ${isEditing ? 'bg-amber-50/40' : 'hover:bg-slate-50/60'}`}
                                   >
                                     {/* 1. Item Index */}
-                                    <td className="py-2.5 px-3 text-center font-bold text-slate-400">
+                                    <td className="py-3 px-3 text-center font-bold text-slate-400">
                                       #{index + 1}
                                     </td>
 
-                                    {/* 2. Product Details */}
-                                    <td className="py-2.5 px-3">
-                                      <div className="flex items-center gap-2 max-w-md">
+                                    {/* 2. Product Details (Fully displayed with serial badge, name, brand, model & category) */}
+                                    <td className="py-3 px-4">
+                                      <div className="flex items-center gap-2 flex-wrap">
                                         {isSerialized ? (
                                           <span className="inline-flex items-center gap-1 bg-emerald-50 text-[#0a382c] border border-emerald-200 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold shrink-0">
-                                            <Barcode className="w-3 h-3 text-[#0a382c]" />
+                                            <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
                                             {serialText}
                                           </span>
                                         ) : (
                                           <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">
-                                            <Package className="w-3 h-3 text-sky-600" />
+                                            <Package className="w-3.5 h-3.5 text-sky-600" />
                                             Non-Serial
                                           </span>
                                         )}
-                                        <span className="font-bold text-slate-900 truncate" title={selectedProduct?.name}>
+                                        <span className="font-bold text-slate-900 text-xs">
                                           {selectedProduct?.name || 'Product'}
                                         </span>
                                         {(selectedProduct?.brand || selectedProduct?.modelNumber) && (
-                                          <span className="text-[11px] text-slate-500 font-normal truncate">
+                                          <span className="text-[11px] text-slate-500 font-normal">
                                             ({[selectedProduct?.brand, selectedProduct?.modelNumber].filter(Boolean).join(' • ')})
+                                          </span>
+                                        )}
+                                        {selectedProduct?.category && (
+                                          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                                            {selectedProduct.category}
                                           </span>
                                         )}
                                       </div>
                                     </td>
 
                                     {/* 3. Quantity */}
-                                    <td className="py-2.5 px-3 text-center">
+                                    <td className="py-3 px-3 text-center whitespace-nowrap">
                                       {isEditing && !isSerialized ? (
                                         <div className="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
                                           <button
@@ -3057,7 +3048,7 @@ export default function Sales() {
                                     </td>
 
                                     {/* 4. Unit Price */}
-                                    <td className="py-2.5 px-3 text-right">
+                                    <td className="py-3 px-3 text-right whitespace-nowrap">
                                       {isEditing ? (
                                         <input
                                           type="number"
@@ -3076,7 +3067,7 @@ export default function Sales() {
                                     </td>
 
                                     {/* 5. Discount */}
-                                    <td className="py-2.5 px-3 text-right">
+                                    <td className="py-3 px-3 text-right whitespace-nowrap">
                                       {isEditing ? (
                                         <input
                                           type="number"
@@ -3095,7 +3086,7 @@ export default function Sales() {
                                     </td>
 
                                     {/* 6. Warranty */}
-                                    <td className="py-2.5 px-3 text-center">
+                                    <td className="py-3 px-3 text-center whitespace-nowrap">
                                       {isEditing ? (
                                         <select
                                           value={item.warranty || 'No Warranty'}
@@ -3121,15 +3112,15 @@ export default function Sales() {
                                     </td>
 
                                     {/* 7. Line Total */}
-                                    <td className="py-2.5 px-3 text-right">
+                                    <td className="py-3 px-3 text-right whitespace-nowrap">
                                       <span className="font-mono font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                                         PKR {lineTotal.toFixed(2)}
                                       </span>
                                     </td>
 
-                                    {/* 8. Edit and Delete Actions in the end */}
-                                    <td className="py-2.5 px-3 text-center">
-                                      <div className="flex items-center justify-center gap-1">
+                                    {/* 8. Actions (Edit and Delete fully visible without scroll bar) */}
+                                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                                      <div className="flex items-center justify-center gap-1.5">
                                         {isEditing ? (
                                           <button
                                             type="button"
@@ -3144,7 +3135,7 @@ export default function Sales() {
                                           <button
                                             type="button"
                                             onClick={() => setEditingInvoiceItemIndex(index)}
-                                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
                                             title="Edit product details"
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
@@ -3154,7 +3145,7 @@ export default function Sales() {
                                         <button
                                           type="button"
                                           onClick={() => handleRemoveItemRow(index)}
-                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                           title="Delete product"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
