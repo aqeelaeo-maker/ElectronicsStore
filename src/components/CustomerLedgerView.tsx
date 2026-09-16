@@ -21,9 +21,7 @@ import {
   Eye,
   X,
   CreditCard,
-  AlertCircle,
-  Maximize2,
-  Minimize2
+  AlertCircle
 } from 'lucide-react';
 import { 
   collection, 
@@ -155,7 +153,6 @@ export default function CustomerLedgerView({
   const { storeId: authStoreId, user } = useAuth();
   const activeStoreId = authStoreId || auth.currentUser?.uid || storeId || (customer as any)?.storeId || user?.uid || '';
 
-  const [isFullPage, setIsFullPage] = useState(true);
   const [sales, setSales] = useState<CustomerSaleRecord[]>([]);
   const [payments, setPayments] = useState<CustomerPaymentRecord[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -1148,11 +1145,7 @@ export default function CustomerLedgerView({
   return (
     <div 
       id="customer-ledger-view-container"
-      className={
-        isFullPage
-          ? "fixed inset-0 z-50 bg-[#f8faf9] overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col space-y-6 animate-in fade-in duration-200"
-          : "w-full max-w-full space-y-6 animate-in fade-in duration-200"
-      }
+      className="w-full max-w-full space-y-6 animate-in fade-in duration-200"
     >
       {/* Top Navigation & Action Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
@@ -1218,19 +1211,6 @@ export default function CustomerLedgerView({
           >
             <Banknote className="w-4 h-4 text-emerald-300" />
             {showReceiveForm ? 'Hide Payment Form' : 'Receive / Settle Payment'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsFullPage(!isFullPage)}
-            className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-bold transition-all cursor-pointer ${
-              isFullPage
-                ? 'bg-emerald-50 text-[#0a382c] border-emerald-200 hover:bg-emerald-100'
-                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-            }`}
-            title={isFullPage ? "Exit Fullscreen (Fit in window)" : "Full Page Mode (Maximize across screen to view all fields)"}
-          >
-            {isFullPage ? <Minimize2 className="w-4 h-4 text-[#0a382c]" /> : <Maximize2 className="w-4 h-4 text-slate-600" />}
-            <span className="whitespace-nowrap">{isFullPage ? 'Exit Full Page' : 'Full Page Mode'}</span>
           </button>
           <button
             type="button"
