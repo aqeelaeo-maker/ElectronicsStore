@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { 
   Plus, 
+  Minus,
   Search, 
   FileText, 
   Eye, 
@@ -35,7 +36,13 @@ import {
   ArrowRight,
   Sparkles,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  Mail,
+  MapPin,
+  Building2,
+  ShieldCheck,
+  Tag
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,6 +54,7 @@ interface Product {
   brand: string;
   category: string;
   modelNumber: string;
+  barcode?: string;
   productType?: 'Serials' | 'Without Serials' | string;
   unit?: string;
   purchasePrice: number;
@@ -521,29 +529,61 @@ export default function Quotations() {
 
   // Universal Barcode scanner handler
   const handleScanCode = (code: string) => {
-    const trimmed = code.trim();
+    let trimmed = (code || '').trim();
     if (!trimmed) return false;
 
-    // 1. Check if matches serial number
-    const matchedSerial = allSerials.find(s => s.serialNumber.toLowerCase() === trimmed.toLowerCase());
+    // Normalize common barcode prefixes (e.g. "SN:", "S/N:", "Barcode:", "QR:")
+    trimmed = trimmed.replace(/^(sn|s\/n|barcode|qr):\s*/i, '').trim();
+
+    // 1. Exact or case-insensitive serial match
+    let matchedSerial = allSerials.find(
+      s => s.serialNumber.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    // If not found, try alphanumeric-only matching (stripping hyphens, dashes, spaces)
+    if (!matchedSerial) {
+      const alphaTrimmed = trimmed.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      if (alphaTrimmed.length > 2) {
+        matchedSerial = allSerials.find(s => {
+          const sClean = s.serialNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+          return sClean === alphaTrimmed;
+        });
+      }
+    }
+
     if (matchedSerial) {
       addSerialNumber(matchedSerial);
       return true;
     }
 
-    // 2. Check if matches product model or barcode
+    // 2. Check if matches product model, barcode, id, or name
     const matchedProduct = products.find(p => 
       p.modelNumber?.toLowerCase() === trimmed.toLowerCase() ||
       p.id.toLowerCase() === trimmed.toLowerCase() ||
-      p.name.toLowerCase() === trimmed.toLowerCase()
+      p.name.toLowerCase() === trimmed.toLowerCase() ||
+      (p.barcode && p.barcode.toLowerCase() === trimmed.toLowerCase())
     );
     if (matchedProduct) {
       addProductWithoutSerial(matchedProduct);
       return true;
     }
 
+    // Alphanumeric fallback for model number or barcode
+    const alphaTrimmed = trimmed.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    if (alphaTrimmed.length > 2) {
+      const altProduct = products.find(p => {
+        const mClean = (p.modelNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const bClean = (p.barcode || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return (mClean && mClean === alphaTrimmed) || (bClean && bClean === alphaTrimmed);
+      });
+      if (altProduct) {
+        addProductWithoutSerial(altProduct);
+        return true;
+      }
+    }
+
     playScanBeep('error');
-    toast.warning(`No product or serial matching "${trimmed}" found.`);
+    toast.warning(`No product or serial matching "${trimmed}" found in stock catalog.`);
     return false;
   };
 
@@ -610,8 +650,10 @@ export default function Quotations() {
   };
 
   // Save Quotation (WITHOUT Stock Removal)
-  const handleSaveQuotation = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveQuotation = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     if (!storeId) {
       toast.error('Store identifier not found');
       return;
@@ -968,6 +1010,771 @@ export default function Quotations() {
 
   const { subtotal: formSubtotal, totalDiscount: formDiscount, total: formTotal } = calculateTotals();
 
+  // FULL-PAGE CREATE / EDIT QUOTATION VIEW (matching Customer Ledger View full-page architecture)
+  if (showModal) {
+    return (
+      <div id="create-quotation-full-page-view" className="w-full max-w-full space-y-6 animate-in fade-in duration-200">
+        {/* Full-Page Top Navigation & Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setShowModal(false);
+                setEditingQuotation(null);
+              }}
+              className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+              title="Back to Quotations List"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+                  {editingQuotation ? `Edit Quotation (${quotationNumber})` : 'Create Price Quotation'}
+                </h1>
+                <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 border border-emerald-200 text-[#0a382c]">
+                  Price Estimate
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  No Stock Deducted
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-medium text-slate-500 mt-1.5 flex-wrap">
+                <span>Prepare professional quotations and tender estimates</span>
+                <span className="text-slate-300">•</span>
+                <span className="font-mono text-slate-600 font-bold">Quote #: {quotationNumber || 'Auto-generated'}</span>
+                <span className="text-slate-300">•</span>
+                <span>Date: {formatDateDisplay(quotationDate)}</span>
+                <span className="text-slate-300">•</span>
+                <span>Valid Until: {formatDateDisplay(validUntilDate)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setShowModal(false);
+                setEditingQuotation(null);
+              }}
+              className="flex-1 lg:flex-none px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 transition-colors shadow-xs text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSaveQuotation()}
+              disabled={saving}
+              className="flex-1 lg:flex-none px-6 py-2.5 rounded-xl text-xs font-bold bg-[#0a382c] hover:bg-[#072d23] text-white shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Saving Quotation...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{editingQuotation ? 'Update Quotation' : 'Save Quotation (Stock Unchanged)'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Financial KPI Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quoted Items</div>
+            <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
+              {quotationItems.reduce((sum, item) => sum + (item.quantity || 0), 0)}{' '}
+              <span className="text-xs font-normal text-slate-500">({quotationItems.length} lines)</span>
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Gross Subtotal</div>
+            <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
+              PKR {formSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-rose-500">Total Discount</div>
+            <div className="text-2xl font-black text-rose-600 mt-1 font-mono">
+              - PKR {formDiscount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div className="bg-emerald-50/70 p-4 rounded-2xl border border-[#0a382c]/30 shadow-xs">
+            <div className="text-[11px] font-black uppercase tracking-wider text-[#0a382c]">Estimated Net Total</div>
+            <div className="text-2xl font-black text-[#0a382c] mt-1 font-mono">
+              PKR {formTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+
+        {/* Form Container */}
+        <form onSubmit={handleSaveQuotation} className="space-y-6">
+          {/* Card 1: Quotation Information */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+              <FileText className="w-5 h-5 text-[#0a382c]" />
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                Quotation Details & Schedule
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <Hash className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Quotation #</span>
+                </label>
+                <input
+                  type="text"
+                  value={quotationNumber}
+                  onChange={e => setQuotationNumber(e.target.value)}
+                  required
+                  placeholder="e.g. QT-2026-0001"
+                  className="glass-input block w-full rounded-xl py-2.5 px-3 text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Quotation Date</span>
+                </label>
+                <input
+                  type="date"
+                  value={quotationDate}
+                  onChange={e => setQuotationDate(e.target.value)}
+                  required
+                  className="glass-input block w-full rounded-xl py-2.5 px-3 text-xs font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Valid Until Date</span>
+                </label>
+                <input
+                  type="date"
+                  value={validUntilDate}
+                  onChange={e => setValidUntilDate(e.target.value)}
+                  required
+                  className="glass-input block w-full rounded-xl py-2.5 px-3 text-xs font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Quotation Status</span>
+                </label>
+                <select
+                  value={quotationStatus}
+                  onChange={e => setQuotationStatus(e.target.value as any)}
+                  className="glass-input block w-full rounded-xl py-2.5 px-3 text-xs font-bold"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="Sent">Sent to Customer</option>
+                  <option value="Accepted">Accepted</option>
+                  <option value="Declined">Declined</option>
+                  <option value="Converted">Converted to Sale</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Customer Information */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-[#0a382c]" />
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Customer Information
+                </h2>
+              </div>
+              {selectedCustomerId !== 'walk-in' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomerId('walk-in');
+                    setCustomerSearchInput('Walk In Customer');
+                    setCustomerPhone('');
+                    setCustomerEmail('');
+                    setCustomerCity('');
+                  }}
+                  className="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Reset to Walk-in
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="relative" ref={customerDropdownRef}>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Select / Search Customer</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Type or select customer..."
+                  value={customerSearchInput}
+                  onChange={e => {
+                    setCustomerSearchInput(e.target.value);
+                    setIsCustomerDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsCustomerDropdownOpen(true)}
+                  className="glass-input block w-full py-2.5 px-3 rounded-xl text-xs font-bold"
+                />
+                {isCustomerDropdownOpen && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCustomerId('walk-in');
+                        setCustomerSearchInput('Walk In Customer');
+                        setCustomerPhone('');
+                        setCustomerEmail('');
+                        setCustomerCity('');
+                        setIsCustomerDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs font-bold hover:bg-slate-50 border-b border-slate-100 flex items-center justify-between"
+                    >
+                      <span className="text-slate-800">Walk In Customer</span>
+                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Default</span>
+                    </button>
+                    {filteredCustomers.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId(c.id);
+                          setCustomerSearchInput(c.name);
+                          setCustomerPhone(c.mobile || '');
+                          setCustomerEmail(c.email || '');
+                          setCustomerCity(c.city || '');
+                          setIsCustomerDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-800">{c.name}</div>
+                          <div className="text-[10px] text-slate-400">{c.mobile || 'No phone'}</div>
+                        </div>
+                        {c.city && <span className="text-[10px] text-slate-400">{c.city}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Phone / Mobile</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 0300-1234567"
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value)}
+                  className="glass-input block w-full py-2.5 px-3 rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Customer Email</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="customer@example.com"
+                  value={customerEmail}
+                  onChange={e => setCustomerEmail(e.target.value)}
+                  className="glass-input block w-full py-2.5 px-3 rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span>City / Address</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Lahore, Pakistan"
+                  value={customerCity}
+                  onChange={e => setCustomerCity(e.target.value)}
+                  className="glass-input block w-full py-2.5 px-3 rounded-xl text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Product Search & Barcode / Camera Scanning */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProductSelectionMode('with_serial')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    productSelectionMode === 'with_serial'
+                      ? 'bg-[#0a382c] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Barcode className="w-4 h-4" />
+                  Add With Serial / Barcode Scan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductSelectionMode('without_serial')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                    productSelectionMode === 'without_serial'
+                      ? 'bg-[#0a382c] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  Add Product By Name / Model
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowCameraScanner(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors shadow-2xs cursor-pointer"
+              >
+                <Camera className="w-4 h-4 text-amber-600" />
+                Scan with Camera
+              </button>
+            </div>
+
+            {/* Mode: With Serial */}
+            {productSelectionMode === 'with_serial' && (
+              <div className="relative" ref={serialDropdownRef}>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Barcode className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <input
+                    ref={serialInputRef}
+                    type="text"
+                    placeholder="Scan or type Serial Number / Product Model (Press Enter to add)..."
+                    value={serialSearchInput}
+                    onChange={e => {
+                      setSerialSearchInput(e.target.value);
+                      setIsSerialDropdownOpen(true);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (serialSearchInput.trim()) {
+                          handleScanCode(serialSearchInput.trim());
+                        }
+                      }
+                    }}
+                    onFocus={() => setIsSerialDropdownOpen(true)}
+                    className="glass-input block w-full pl-10 pr-3 py-3 rounded-xl text-xs font-mono font-bold"
+                  />
+                </div>
+
+                {isSerialDropdownOpen && filteredSerials.length > 0 && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-1">
+                    {filteredSerials.map(s => {
+                      const prod = products.find(p => p.id === s.productId);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => addSerialNumber(s)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 text-xs flex items-center justify-between border-b border-slate-50 last:border-0 cursor-pointer"
+                        >
+                          <div>
+                            <span className="font-mono font-bold text-slate-900">{s.serialNumber}</span>
+                            <span className="ml-2 text-slate-600 font-medium">({prod?.name || 'Product'})</span>
+                            {prod?.brand && <span className="ml-2 text-[10px] text-slate-400">{prod.brand}</span>}
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-emerald-800">PKR {prod?.salePrice?.toFixed(2)}</span>
+                            <span className="ml-2 text-[10px] text-slate-400 font-mono">In Stock: {prod?.stock || 0}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mode: Without Serial */}
+            {productSelectionMode === 'without_serial' && (
+              <div className="relative" ref={productDropdownRef}>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <input
+                    ref={productInputRef}
+                    type="text"
+                    placeholder="Search product name, brand, model... (Press Enter to add first match)"
+                    value={productSearchInput}
+                    onChange={e => {
+                      setProductSearchInput(e.target.value);
+                      setIsProductDropdownOpen(true);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (filteredProductsWithoutSerials.length > 0) {
+                          addProductWithoutSerial(filteredProductsWithoutSerials[0]);
+                        }
+                      }
+                    }}
+                    onFocus={() => setIsProductDropdownOpen(true)}
+                    className="glass-input block w-full pl-10 pr-3 py-3 rounded-xl text-xs font-bold"
+                  />
+                </div>
+
+                {isProductDropdownOpen && filteredProductsWithoutSerials.length > 0 && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 py-1">
+                    {filteredProductsWithoutSerials.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => addProductWithoutSerial(p)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 text-xs flex items-center justify-between border-b border-slate-50 last:border-0 cursor-pointer"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900">{p.name}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {p.brand} {p.modelNumber ? `• ${p.modelNumber}` : ''} {p.category ? `• ${p.category}` : ''}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-emerald-800">PKR {p.salePrice?.toFixed(2)}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">Stock: {p.stock || 0}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Card 4: Quoted Items Table (Full Width & Spacious) */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="bg-[#fcfdfd] px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-[#0a382c]" />
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Quoted Items ({quotationItems.length})
+                </h2>
+              </div>
+              <span className="text-xs text-slate-500">
+                You can adjust line quantities, special rates, item discounts, and warranties
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-xs">
+                <thead className="bg-[#f8faf9]">
+                  <tr>
+                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-12">#</th>
+                    <th className="px-5 py-3 text-left font-bold text-slate-600 uppercase tracking-wider">Product Details</th>
+                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-36">Quantity</th>
+                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-40">Unit Price (PKR)</th>
+                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-36">Discount (PKR)</th>
+                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-40">Warranty</th>
+                    <th className="px-5 py-3 text-right font-bold text-slate-600 uppercase tracking-wider w-44">Line Total (PKR)</th>
+                    <th className="px-4 py-3 text-right w-12"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100">
+                  {quotationItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
+                        <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="font-medium text-slate-600">No items added to this quotation yet.</p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Use the barcode scanner or product search above to add items.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : (
+                    quotationItems.map((item, idx) => {
+                      const prod = products.find(p => p.id === item.productId);
+                      const lineTotal = Math.max(0, (item.quantity * item.salePrice) - (item.discount || 0));
+
+                      return (
+                        <tr key={`${item.productId}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3.5 text-center font-mono text-slate-400 font-bold">
+                            {idx + 1}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="font-bold text-slate-900 text-sm">
+                              {prod ? prod.name : 'Unknown Product'}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] text-slate-500">
+                              {prod?.brand && <span>Brand: <b className="text-slate-700">{prod.brand}</b></span>}
+                              {prod?.modelNumber && (
+                                <span className="bg-slate-100 px-2 py-0.5 rounded font-mono text-slate-700">
+                                  {prod.modelNumber}
+                                </span>
+                              )}
+                              {prod?.category && (
+                                <span className="bg-emerald-50 text-[#0a382c] px-2 py-0.5 rounded">
+                                  {prod.category}
+                                </span>
+                              )}
+                            </div>
+                            {item.selectedSerials && item.selectedSerials.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {item.selectedSerials.map((sn, sIdx) => (
+                                  <span
+                                    key={sIdx}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[10px] font-bold"
+                                  >
+                                    <Barcode className="w-3 h-3 text-emerald-600" />
+                                    {sn}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="inline-flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = Math.max(1, (item.quantity || 1) - 1);
+                                  const updated = [...quotationItems];
+                                  updated[idx].quantity = val;
+                                  setQuotationItems(updated);
+                                }}
+                                disabled={(item.quantity || 1) <= 1}
+                                className="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                                title="Decrease quantity"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={e => {
+                                  const val = Math.max(1, parseInt(e.target.value) || 1);
+                                  const updated = [...quotationItems];
+                                  updated[idx].quantity = val;
+                                  setQuotationItems(updated);
+                                }}
+                                className="w-14 text-center py-1.5 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = (item.quantity || 1) + 1;
+                                  const updated = [...quotationItems];
+                                  updated[idx].quantity = val;
+                                  setQuotationItems(updated);
+                                }}
+                                className="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                                title="Increase quantity"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.salePrice}
+                              onChange={e => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const updated = [...quotationItems];
+                                updated[idx].salePrice = val;
+                                setQuotationItems(updated);
+                              }}
+                              className="glass-input w-32 text-center py-1.5 rounded-xl text-xs font-mono font-bold"
+                            />
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.discount}
+                              onChange={e => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const updated = [...quotationItems];
+                                updated[idx].discount = val;
+                                setQuotationItems(updated);
+                              }}
+                              className="glass-input w-28 text-center py-1.5 rounded-xl text-xs font-mono text-rose-600 font-bold"
+                            />
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <select
+                              value={item.warranty}
+                              onChange={e => {
+                                const updated = [...quotationItems];
+                                updated[idx].warranty = e.target.value;
+                                setQuotationItems(updated);
+                              }}
+                              className="glass-input py-1.5 px-2.5 rounded-xl text-xs"
+                            >
+                              <option value="No Warranty">No Warranty</option>
+                              <option value="6 Months Warranty">6 Months</option>
+                              <option value="1 Year Warranty">1 Year</option>
+                              <option value="2 Years Warranty">2 Years</option>
+                              <option value="Company Warranty">Company Warranty</option>
+                            </select>
+                          </td>
+                          <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-900 text-sm">
+                            PKR {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuotationItems(quotationItems.filter((_, i) => i !== idx));
+                              }}
+                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Remove item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Card 5: Bottom Notes and Totals */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Quotation Notes / Terms & Conditions
+              </label>
+              <textarea
+                rows={4}
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Enter quotation validity, delivery timelines, payment milestones, or special notes for the client..."
+                className="glass-input block w-full rounded-xl p-3 text-xs leading-relaxed"
+              />
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>
+                  <b>Inventory Safety:</b> Saving or updating this quotation will not alter stock levels or remove units from inventory.
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 pb-2 border-b border-slate-100">
+                Estimated Financial Summary
+              </h3>
+              <div className="flex justify-between text-xs text-slate-600">
+                <span>Gross Items Subtotal:</span>
+                <span className="font-bold font-mono">
+                  PKR {formSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-rose-600">
+                <span>Total Deducted Discount:</span>
+                <span className="font-bold font-mono">
+                  - PKR {formDiscount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="pt-3 border-t border-slate-200 flex justify-between items-baseline">
+                <div>
+                  <span className="text-sm font-black text-slate-900 block">Estimated Net Total:</span>
+                  <span className="text-[11px] text-slate-400">Total payable upon quote acceptance</span>
+                </div>
+                <span className="font-mono text-emerald-800 text-xl font-black">
+                  PKR {formTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Action Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="font-bold text-slate-900">Items: {quotationItems.length}</span>
+              <span>•</span>
+              <span>
+                Net Total: <strong className="font-mono text-[#0a382c]">PKR {formTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingQuotation(null);
+                }}
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl text-xs font-bold bg-[#0a382c] hover:bg-[#072d23] text-white shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Saving Quotation...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{editingQuotation ? 'Update Quotation' : 'Save Quotation (Stock Unchanged)'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Camera Barcode Scanner Modal inside full-page view */}
+        <BarcodeScannerModal
+          isOpen={showCameraScanner}
+          onClose={() => setShowCameraScanner(false)}
+          onScan={code => {
+            setShowCameraScanner(false);
+            handleScanCode(code);
+          }}
+          title={
+            productSelectionMode === 'without_serial'
+              ? 'Scan Product Barcode'
+              : 'Scan Serial Barcode / QR Code'
+          }
+          subtitle="Point device camera at barcodes or QR labels to automatically add units to quotation."
+          continuous={true}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1196,8 +2003,8 @@ export default function Quotations() {
         </div>
       </div>
 
-      {/* CREATE / EDIT QUOTATION MODAL */}
-      {showModal && (
+      {/* Note: Create/Edit Quotation is rendered in full-page ledger mode */}
+      {false && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
           <div className="glass-panel bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
@@ -1749,6 +2556,18 @@ export default function Quotations() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    handleEditClick(selectedQuotation);
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Edit in full-page quotation view"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </button>
                 <button
                   onClick={() => printQuotation(selectedQuotation)}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
