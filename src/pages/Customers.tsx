@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Clock, Phone, MapPin, Mail } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import CustomerLedgerView from '../components/CustomerLedgerView';
@@ -12,6 +12,7 @@ interface Customer {
   mobile: string;
   email: string;
   city: string;
+  address?: string;
   balance: number;
   openingBalance?: number;
   initialBalance?: number;
@@ -185,6 +186,7 @@ export default function Customers() {
       mobile: formData.get('mobile'),
       email: formData.get('email'),
       city: formData.get('city'),
+      address: formData.get('address') || '',
       balance: balanceVal,
       openingBalance: balanceVal,
       initialBalance: balanceVal,
@@ -217,6 +219,7 @@ export default function Customers() {
       mobile: formData.get('mobile'),
       email: formData.get('email'),
       city: formData.get('city'),
+      address: formData.get('address') || '',
       balance: calculatedNetBalance,
       openingBalance: openingBalVal,
       initialBalance: openingBalVal,
@@ -246,8 +249,10 @@ export default function Customers() {
   };
 
   const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.mobile.toLowerCase().includes(searchTerm.toLowerCase())
+    (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.mobile || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.address || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (ledgerCustomer) {
@@ -304,6 +309,10 @@ export default function Customers() {
                 <div>
                   <label htmlFor="city" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">City</label>
                   <input type="text" name="city" id="city" defaultValue={initialData.city} className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
+                </div>
+                <div>
+                  <label htmlFor="address" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Address / Street</label>
+                  <input type="text" name="address" id="address" defaultValue={initialData.address} placeholder="e.g. Main Bazaar, Street #2" className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" />
                 </div>
                 <div>
                   <label htmlFor="balance" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -420,28 +429,28 @@ export default function Customers() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
+          <table className="w-full divide-y divide-slate-100">
             <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">City</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider" title="Net Account Balance = Initial Balance + Pending on Invoices">
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer Details</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-56" title="Net Account Balance = Initial Balance + Pending on Invoices">
                   Net Balance
                 </th>
-                <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={3} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No customers found. Add a new customer to get started.
                   </td>
                 </tr>
@@ -451,27 +460,45 @@ export default function Customers() {
                   const pendingBal = getCustomerPendingInvoices(customer.id);
                   const returnVal = getCustomerReturnValue(customer.id);
                   const netBal = getCustomerNetAccountBalance(customer);
+                  const addressDisplay = [customer.address, customer.city].filter(Boolean).join(', ');
 
                   return (
                     <tr key={customer.id} className="hover:bg-[#f8faf9] transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
-                            <Users className="h-5 w-5" />
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-start">
+                          <div className="h-9 w-9 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center mt-0.5">
+                            <Users className="h-4 w-4" />
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-bold text-slate-900">{customer.name}</div>
+                          <div className="ml-3 min-w-0">
+                            <div className="text-sm font-bold text-slate-900 leading-snug">{customer.name}</div>
+                            {/* Address and Contact Number displayed under Name with small fonts */}
+                            <div className="mt-1 space-y-0.5">
+                              <div className="flex items-center flex-wrap gap-x-2 text-xs text-slate-600">
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-800">
+                                  <Phone className="w-3 h-3 text-[#0a382c] shrink-0" />
+                                  {customer.mobile || 'No contact'}
+                                </span>
+                                {customer.email && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                                      <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                      {customer.email}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">
+                                  {addressDisplay || 'Address: N/A'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-slate-800">{customer.mobile}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{customer.email || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
-                        {customer.city || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-slate-900">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-sm font-extrabold text-slate-900">
                         <div className="font-mono text-sm font-black">
                           PKR {netBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
@@ -495,10 +522,10 @@ export default function Customers() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-right text-sm font-semibold">
                         <button 
                           onClick={() => setLedgerCustomer(customer)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200 shadow-sm"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2 border border-emerald-200 shadow-sm"
                           title="View Customer Invoices & Payment Ledger"
                         >
                           <Receipt className="w-3.5 h-3.5 text-emerald-700" />
@@ -506,7 +533,7 @@ export default function Customers() {
                         </button>
                         <button 
                           onClick={() => setEditingCustomer(customer)}
-                          className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5"
+                          className="text-slate-400 hover:text-slate-800 mr-2 transition-colors p-1.5"
                           title="Edit Customer"
                         >
                           <Edit2 className="w-4 h-4" />

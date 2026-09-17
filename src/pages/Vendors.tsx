@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Plus, Search, Edit2, Trash2, Building2, Receipt, Wallet, Clock, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Building2, Receipt, Wallet, Clock, CheckCircle2, Phone, MapPin, Mail } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import VendorLedgerView from '../components/VendorLedgerView';
@@ -15,6 +15,7 @@ interface Vendor {
   phone: string;
   email: string;
   city: string;
+  address?: string;
   balance: number;
   openingBalance?: number;
   initialBalance?: number;
@@ -212,6 +213,7 @@ export default function Vendors() {
     const mobileVal = (formData.get('mobile') || formData.get('phone') || '').toString();
     const emailVal = (formData.get('email') || '').toString();
     const cityVal = (formData.get('city') || '').toString();
+    const addressVal = (formData.get('address') || '').toString();
     const balanceVal = Number(formData.get('balance')) || 0;
 
     const newVendor = {
@@ -222,6 +224,7 @@ export default function Vendors() {
       phone: mobileVal,
       email: emailVal,
       city: cityVal,
+      address: addressVal,
       balance: balanceVal,
       openingBalance: balanceVal,
       initialBalance: balanceVal,
@@ -252,6 +255,7 @@ export default function Vendors() {
     const mobileVal = (formData.get('mobile') || formData.get('phone') || '').toString();
     const emailVal = (formData.get('email') || '').toString();
     const cityVal = (formData.get('city') || '').toString();
+    const addressVal = (formData.get('address') || '').toString();
     const balanceVal = Number(formData.get('balance')) || 0;
 
     const updatedVendor = {
@@ -262,6 +266,7 @@ export default function Vendors() {
       phone: mobileVal,
       email: emailVal,
       city: cityVal,
+      address: addressVal,
       balance: balanceVal,
       openingBalance: editingVendor.openingBalance !== undefined ? editingVendor.openingBalance : (editingVendor.initialBalance !== undefined ? editingVendor.initialBalance : balanceVal),
       initialBalance: editingVendor.initialBalance !== undefined ? editingVendor.initialBalance : (editingVendor.openingBalance !== undefined ? editingVendor.openingBalance : balanceVal),
@@ -295,8 +300,10 @@ export default function Vendors() {
     const name = (v.name || v.companyName || '').toLowerCase();
     const phone = (v.mobile || v.phone || '').toLowerCase();
     const contact = (v.contactPerson || '').toLowerCase();
+    const city = (v.city || '').toLowerCase();
+    const address = (v.address || '').toLowerCase();
     const search = searchTerm.toLowerCase();
-    return name.includes(search) || phone.includes(search) || contact.includes(search);
+    return name.includes(search) || phone.includes(search) || contact.includes(search) || city.includes(search) || address.includes(search);
   });
 
   if (ledgerVendor) {
@@ -377,6 +384,17 @@ export default function Vendors() {
                     name="city" 
                     id="city" 
                     defaultValue={initialData.city} 
+                    className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" 
+                  />
+                </div>
+                <div>
+                  <label htmlFor="address" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Address / Street</label>
+                  <input 
+                    type="text" 
+                    name="address" 
+                    id="address" 
+                    defaultValue={initialData.address} 
+                    placeholder="e.g. Commercial Area, Plaza #3" 
                     className="glass-input block w-full rounded-xl py-2.5 px-4 sm:text-sm" 
                   />
                 </div>
@@ -491,27 +509,25 @@ export default function Vendors() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
+          <table className="w-full divide-y divide-slate-100">
             <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vendor</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contact</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">City</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Purchases / Paid</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Remaining / Balance</th>
-                <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vendor Details</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-52">Purchases / Paid</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-52">Remaining / Balance</th>
+                <th scope="col" className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredVendors.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No vendors found. Add a new vendor to get started.
                   </td>
                 </tr>
@@ -520,26 +536,55 @@ export default function Vendors() {
                   const effectiveRemaining = getVendorNetPayable(vendor);
                   const effectivePurchases = getVendorPurchasesTotal(vendor);
                   const effectivePaid = getVendorPaidTotal(vendor);
+                  const addressDisplay = [vendor.address, vendor.city].filter(Boolean).join(', ');
+
                   return (
                     <tr key={vendor.id} className="hover:bg-[#f8faf9] transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center">
-                            <Building2 className="h-5 w-5" />
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-start">
+                          <div className="h-9 w-9 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-full flex items-center justify-center mt-0.5">
+                            <Building2 className="h-4 w-4" />
                           </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-bold text-slate-900">{vendor.companyName || vendor.name}</div>
+                          <div className="ml-3 min-w-0">
+                            <div className="text-sm font-bold text-slate-900 leading-snug">
+                              {vendor.companyName || vendor.name}
+                            </div>
+                            {/* Address and Contact Number displayed under Name with small fonts */}
+                            <div className="mt-1 space-y-0.5">
+                              <div className="flex items-center flex-wrap gap-x-2 text-xs text-slate-600">
+                                <span className="inline-flex items-center gap-1 font-semibold text-slate-800">
+                                  <Phone className="w-3 h-3 text-[#0a382c] shrink-0" />
+                                  {vendor.mobile || vendor.phone || 'No contact'}
+                                </span>
+                                {vendor.email && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                                      <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                      {vendor.email}
+                                    </span>
+                                  </>
+                                )}
+                                {vendor.contactPerson && vendor.contactPerson !== (vendor.companyName || vendor.name) && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-[11px] text-slate-500">
+                                      Attn: {vendor.contactPerson}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">
+                                  {addressDisplay || 'Address: N/A'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-slate-800">{vendor.mobile || vendor.phone}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{vendor.email}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-semibold">
-                        {vendor.city || 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-3.5 whitespace-nowrap">
                         <div className="text-xs font-semibold text-slate-700">
                           Purchased: <span className="font-mono font-bold text-slate-900">PKR {effectivePurchases.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
@@ -547,7 +592,7 @@ export default function Vendors() {
                           Paid: <span className="font-mono font-bold">PKR {effectivePaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-3.5 whitespace-nowrap">
                         <div className={`font-mono font-extrabold text-sm ${effectiveRemaining > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
                           PKR {effectiveRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
@@ -555,10 +600,10 @@ export default function Vendors() {
                           Outstanding Balance
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                      <td className="px-6 py-3.5 whitespace-nowrap text-right text-sm font-semibold">
                         <button 
                           onClick={() => setLedgerVendor(vendor)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2.5 border border-emerald-200 cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] text-xs font-bold transition-colors mr-2 border border-emerald-200 cursor-pointer"
                           title="View Vendor Purchases & Payment Ledger"
                         >
                           <Receipt className="w-3.5 h-3.5 text-emerald-700" />
@@ -566,7 +611,7 @@ export default function Vendors() {
                         </button>
                         <button 
                           onClick={() => setEditingVendor(vendor)}
-                          className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5 cursor-pointer"
+                          className="text-slate-400 hover:text-slate-800 mr-2 transition-colors p-1.5 cursor-pointer"
                           title="Edit Vendor"
                         >
                           <Edit2 className="w-4 h-4" />
