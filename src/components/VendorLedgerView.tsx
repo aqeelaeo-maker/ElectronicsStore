@@ -152,23 +152,11 @@ interface VendorLedgerViewProps {
   vendor: Vendor;
   storeId: string;
   onBack: () => void;
-  isModal?: boolean;
 }
 
-export default function VendorLedgerView({ vendor, storeId, onBack, isModal = false }: VendorLedgerViewProps) {
+export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedgerViewProps) {
   const { user } = useAuth();
   const activeStoreId = storeId || auth.currentUser?.uid || user?.uid || vendor?.storeId || '';
-
-  // Close modal on Escape key press
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onBack();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack]);
 
   const [activeTab, setActiveTab] = useState<'purchases' | 'payments' | 'statement'>('purchases');
   const [purchases, setPurchases] = useState<VendorPurchaseRecord[]>([]);
@@ -1162,9 +1150,9 @@ export default function VendorLedgerView({ vendor, storeId, onBack, isModal = fa
             type="button"
             onClick={onBack}
             className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            title={isModal ? "Close Ledger Modal" : "Back to Vendors List"}
+            title="Back to Vendors List"
           >
-            {isModal ? <X className="w-5 h-5" /> : <ArrowLeft className="w-5 h-5" />}
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">

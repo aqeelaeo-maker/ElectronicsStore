@@ -143,28 +143,15 @@ interface CustomerLedgerViewProps {
   customer: Customer;
   storeId: string;
   onBack: () => void;
-  isModal?: boolean;
 }
 
 export default function CustomerLedgerView({
   customer,
   storeId,
-  onBack,
-  isModal = false
+  onBack
 }: CustomerLedgerViewProps) {
   const { storeId: authStoreId, user } = useAuth();
   const activeStoreId = authStoreId || auth.currentUser?.uid || storeId || (customer as any)?.storeId || user?.uid || '';
-
-  // Close modal on Escape key press
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onBack();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack]);
 
   const [sales, setSales] = useState<CustomerSaleRecord[]>([]);
   const [payments, setPayments] = useState<CustomerPaymentRecord[]>([]);
@@ -1167,9 +1154,9 @@ export default function CustomerLedgerView({
             type="button"
             onClick={onBack}
             className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-            title={isModal ? "Close Ledger Modal" : "Back to Customers List"}
+            title="Back to Customers List"
           >
-            {isModal ? <X className="w-5 h-5" /> : <ArrowLeft className="w-5 h-5" />}
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">

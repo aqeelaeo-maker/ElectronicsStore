@@ -250,6 +250,17 @@ export default function Customers() {
     c.mobile.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (ledgerCustomer) {
+    const currentCustomer = customers.find(c => c.id === ledgerCustomer.id) || ledgerCustomer;
+    return (
+      <CustomerLedgerView
+        customer={currentCustomer}
+        storeId={storeId || currentCustomer.storeId || ''}
+        onBack={() => setLedgerCustomer(null)}
+      />
+    );
+  }
+
   const isFormOpen = showAddForm || !!editingCustomer;
 
   if (isFormOpen) {
@@ -516,30 +527,6 @@ export default function Customers() {
           </table>
         </div>
       </div>
-
-      {/* Customer Ledger Modal Dialog (Replaces Full Page Mode) */}
-      {ledgerCustomer && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen p-2 sm:p-4 md:p-6 text-center">
-            {/* Backdrop */}
-            <div 
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" 
-              onClick={() => setLedgerCustomer(null)} 
-            />
-            {/* Modal Dialog Content Container */}
-            <div className="relative z-10 w-full max-w-6xl bg-slate-100 rounded-3xl text-left shadow-2xl border border-slate-200 my-4 max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-              <div className="p-3 sm:p-5 md:p-6 overflow-y-auto flex-1">
-                <CustomerLedgerView
-                  customer={customers.find(c => c.id === ledgerCustomer.id) || ledgerCustomer}
-                  storeId={storeId || ledgerCustomer.storeId || ''}
-                  onBack={() => setLedgerCustomer(null)}
-                  isModal={true}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -898,7 +898,12 @@ export default function Sales() {
     if (!raw) return false;
 
     // Clean any surrounding quotes or barcode terminal characters
-    const trimmed = raw.replace(/^["']|["']$/g, '').trim();
+    let trimmed = raw.replace(/^["']|["']$/g, '').trim();
+    
+    // Strip common barcode label prefixes if present (e.g. "SN: 1002" or "S/N: ABC")
+    if (/^(sn|s\/n|serial|ser|barcode)\s*[:#-]?\s*/i.test(trimmed)) {
+      trimmed = trimmed.replace(/^(sn|s\/n|serial|ser|barcode)\s*[:#-]?\s*/i, '').trim();
+    }
     const lower = trimmed.toLowerCase();
 
     // 1. Direct Match against serial numbers in allSerials (by serialNumber or ID)
@@ -944,7 +949,7 @@ export default function Sales() {
       return false;
     }
 
-    // 3. Normalized / Stripped Match for serial numbers (stripping leading zeros or non-alphanumeric noise from hardware scanners)
+    // 3. Normalized / Stripped Match for serial numbers (stripping leading zeros or non-alphanumeric noise from scanners)
     const strippedCode = lower.replace(/^0+/, '');
     if (strippedCode.length >= 2) {
       const fuzzySerial = allSerials.find(
@@ -955,7 +960,18 @@ export default function Sales() {
       }
     }
 
-    // 4. Fuzzy Match against products (e.g. scanner captured model number within a full barcode or vice versa)
+    // 4. Alphanumeric match (ignoring dashes, hyphens, and whitespace between characters)
+    const alphaNumCode = lower.replace(/[^a-z0-9]/g, '');
+    if (alphaNumCode.length >= 2) {
+      const alphaNumSerial = allSerials.find(
+        s => s.serialNumber.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === alphaNumCode
+      );
+      if (alphaNumSerial) {
+        return addSerialNumberToInvoice(alphaNumSerial);
+      }
+    }
+
+    // 5. Fuzzy Match against products (e.g. scanner captured model number within a full barcode or vice versa)
     const fuzzyProduct = products.find(
       p => (p.modelNumber && (lower.includes(p.modelNumber.trim().toLowerCase()) || p.modelNumber.trim().toLowerCase().includes(lower))) ||
            (p.name && (lower.includes(p.name.trim().toLowerCase()) || p.name.trim().toLowerCase().includes(lower)))
@@ -3635,6 +3651,23 @@ export default function Sales() {
             </div>
           </form>
         </div>
+
+        {/* Sales Camera Barcode / Serial Scanner Modal */}
+        <BarcodeScannerModal
+          isOpen={showSalesCameraScanner}
+          onClose={() => {
+            setShowSalesCameraScanner(false);
+            setActiveScanningItemIndex(null);
+          }}
+          onScan={handleScanSerialNumber}
+          title={
+            productSelectionMode === 'without_serial'
+              ? 'Scan Product Barcode'
+              : 'Scan Barcode or Serial Number'
+          }
+          subtitle="Point device camera at barcodes or QR labels to automatically add units to invoice."
+          continuous={true}
+        />
       </div>
     );
   }
