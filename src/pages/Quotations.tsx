@@ -1487,17 +1487,17 @@ export default function Quotations() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-xs">
+              <table className="w-full divide-y divide-slate-200 text-xs">
                 <thead className="bg-[#f8faf9]">
                   <tr>
-                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-12">#</th>
-                    <th className="px-5 py-3 text-left font-bold text-slate-600 uppercase tracking-wider">Product Details</th>
-                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-36">Quantity</th>
-                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-40">Unit Price (PKR)</th>
-                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-36">Discount (PKR)</th>
-                    <th className="px-4 py-3 text-center font-bold text-slate-600 uppercase tracking-wider w-40">Warranty</th>
-                    <th className="px-5 py-3 text-right font-bold text-slate-600 uppercase tracking-wider w-44">Line Total (PKR)</th>
-                    <th className="px-4 py-3 text-right w-12"></th>
+                    <th className="px-2.5 py-2.5 text-center font-bold text-slate-600 uppercase tracking-wider w-8">#</th>
+                    <th className="px-3 py-2.5 text-left font-bold text-slate-600 uppercase tracking-wider">Product Details</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-slate-600 uppercase tracking-wider w-28">Quantity</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-slate-600 uppercase tracking-wider w-28">Unit Price</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-slate-600 uppercase tracking-wider w-24">Discount</th>
+                    <th className="px-2 py-2.5 text-center font-bold text-slate-600 uppercase tracking-wider w-28">Warranty</th>
+                    <th className="px-3 py-2.5 text-right font-bold text-slate-600 uppercase tracking-wider w-32">Line Total</th>
+                    <th className="px-2 py-2.5 text-right w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
@@ -1552,8 +1552,8 @@ export default function Quotations() {
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-3.5 text-center">
-                            <div className="inline-flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                          <td className="px-2 py-2.5 text-center">
+                            <div className="inline-flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1563,10 +1563,10 @@ export default function Quotations() {
                                   setQuotationItems(updated);
                                 }}
                                 disabled={(item.quantity || 1) <= 1}
-                                className="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                                className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
                                 title="Decrease quantity"
                               >
-                                <Minus className="w-3.5 h-3.5" />
+                                <Minus className="w-3 h-3" />
                               </button>
                               <input
                                 type="number"
@@ -1578,7 +1578,7 @@ export default function Quotations() {
                                   updated[idx].quantity = val;
                                   setQuotationItems(updated);
                                 }}
-                                className="w-14 text-center py-1.5 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
+                                className="w-10 text-center py-1 text-xs font-bold text-slate-900 border-x border-slate-200 focus:outline-none"
                               />
                               <button
                                 type="button"
@@ -1588,14 +1588,14 @@ export default function Quotations() {
                                   updated[idx].quantity = val;
                                   setQuotationItems(updated);
                                 }}
-                                className="px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                                className="px-1.5 py-1 text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 title="Increase quantity"
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                <Plus className="w-3 h-3" />
                               </button>
                             </div>
                           </td>
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <input
                               type="number"
                               step="0.01"
@@ -1606,10 +1606,10 @@ export default function Quotations() {
                                 updated[idx].salePrice = val;
                                 setQuotationItems(updated);
                               }}
-                              className="glass-input w-32 text-center py-1.5 rounded-xl text-xs font-mono font-bold"
+                              className="glass-input w-24 text-center py-1 rounded-lg text-xs font-mono font-bold"
                             />
                           </td>
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <input
                               type="number"
                               step="0.01"
@@ -1620,10 +1620,10 @@ export default function Quotations() {
                                 updated[idx].discount = val;
                                 setQuotationItems(updated);
                               }}
-                              className="glass-input w-28 text-center py-1.5 rounded-xl text-xs font-mono text-rose-600 font-bold"
+                              className="glass-input w-20 text-center py-1 rounded-lg text-xs font-mono text-rose-600 font-bold"
                             />
                           </td>
-                          <td className="px-4 py-3.5 text-center">
+                          <td className="px-2 py-2.5 text-center">
                             <select
                               value={item.warranty}
                               onChange={e => {
@@ -1631,7 +1631,7 @@ export default function Quotations() {
                                 updated[idx].warranty = e.target.value;
                                 setQuotationItems(updated);
                               }}
-                              className="glass-input py-1.5 px-2.5 rounded-xl text-xs"
+                              className="glass-input py-1 px-2 rounded-lg text-xs w-28"
                             >
                               <option value="No Warranty">No Warranty</option>
                               <option value="6 Months Warranty">6 Months</option>
@@ -1640,19 +1640,19 @@ export default function Quotations() {
                               <option value="Company Warranty">Company Warranty</option>
                             </select>
                           </td>
-                          <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-900 text-sm">
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900 text-xs">
                             PKR {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-4 py-3.5 text-right">
+                          <td className="px-2 py-2.5 text-right">
                             <button
                               type="button"
                               onClick={() => {
                                 setQuotationItems(quotationItems.filter((_, i) => i !== idx));
                               }}
-                              className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              className="p-1 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                               title="Remove item"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
                         </tr>
@@ -1876,29 +1876,26 @@ export default function Quotations() {
 
         {/* Quotations Table */}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-150">
+          <table className="w-full divide-y divide-slate-150">
             <thead className="bg-[#fcfdfd]">
               <tr>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quotation</th>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer</th>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Dates</th>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Items</th>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Amount</th>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-5 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quotation & Customer</th>
+                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Items & Status</th>
+                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Total Amount</th>
+                <th scope="col" className="px-4 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40 sm:w-48">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white/60 divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto mb-2"></div>
                     Loading quotations...
                   </td>
                 </tr>
               ) : filteredQuotations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
                     <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm font-semibold text-slate-600">No quotations found</p>
                     <p className="text-xs text-slate-400 mt-1">Create your first price estimate to share with customers.</p>
@@ -1907,88 +1904,93 @@ export default function Quotations() {
               ) : (
                 filteredQuotations.map(quote => (
                   <tr key={quote.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <div className="font-mono font-bold text-sm text-slate-900">{quote.quotationNo}</div>
-                      <div className="text-[11px] text-slate-400 font-medium">Stock not affected</div>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <div className="text-sm font-bold text-slate-900">{quote.customerName}</div>
-                      {quote.customerMobile && (
-                        <div className="text-xs text-slate-500">{quote.customerMobile}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <div className="text-xs font-semibold text-slate-700">Issued: {formatDateDisplay(quote.date)}</div>
-                      <div className="text-[11px] text-amber-700 font-medium">Valid: {formatDateDisplay(quote.validUntil)}</div>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <div className="text-xs font-bold text-slate-800">
-                        {quote.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0} unit(s)
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-sm text-slate-900">{quote.quotationNo}</span>
+                        <span className="text-slate-300 font-bold">•</span>
+                        <span className="text-sm font-bold text-slate-900">{quote.customerName}</span>
                       </div>
-                      <div className="text-[11px] text-slate-400">{quote.items?.length || 0} line product(s)</div>
+                      <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {quote.customerMobile && (
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                            <Phone className="w-3 h-3 text-[#0a382c]" /> {quote.customerMobile}
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+                          <Calendar className="w-3 h-3 text-slate-400" /> Issued: {formatDateDisplay(quote.date)}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+                          Valid: {formatDateDisplay(quote.validUntil)}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
+                          quote.status === 'Converted' 
+                            ? 'bg-teal-50 text-teal-800 border-teal-200' 
+                            : quote.status === 'Accepted'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : quote.status === 'Sent'
+                            ? 'bg-sky-50 text-sky-800 border-sky-200'
+                            : quote.status === 'Declined'
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : 'bg-slate-100 text-slate-800 border-slate-200'
+                        }`}>
+                          {quote.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium mt-1">
+                        {quote.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0} unit(s) • {quote.items?.length || 0} line product(s)
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="font-mono text-sm font-black text-slate-900">
                         PKR {quote.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       {quote.totalDiscount > 0 && (
-                        <div className="text-[10px] text-rose-600 font-bold">
+                        <div className="text-[10px] text-rose-600 font-bold mt-0.5">
                           Disc: PKR {quote.totalDiscount.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                         </div>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold border ${
-                        quote.status === 'Converted' 
-                          ? 'bg-teal-50 text-teal-800 border-teal-200' 
-                          : quote.status === 'Accepted'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          : quote.status === 'Sent'
-                          ? 'bg-sky-50 text-sky-800 border-sky-200'
-                          : quote.status === 'Declined'
-                          ? 'bg-rose-50 text-rose-800 border-rose-200'
-                          : 'bg-slate-100 text-slate-800 border-slate-200'
-                      }`}>
-                        {quote.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => {
-                            setSelectedQuotation(quote);
-                            setShowDetailModal(true);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                          title="View Quotation Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => printQuotation(quote)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
-                          title="Print Quotation"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </button>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleConvertToSale(quote)}
-                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 flex items-center gap-1 transition-colors"
+                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 inline-flex items-center gap-1 transition-colors mr-1 cursor-pointer"
                           title="Convert to Real Sale (Deducts Stock)"
                         >
                           <ArrowRight className="w-3 h-3" />
                           To Sale
                         </button>
                         <button
+                          onClick={() => {
+                            setSelectedQuotation(quote);
+                            setShowDetailModal(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="View Quotation Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => printQuotation(quote)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                          title="Print Quotation"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleEditClick(quote)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
                           title="Edit Quotation"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteQuotation(quote)}
-                          className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Delete Quotation"
                         >
                           <Trash2 className="w-4 h-4" />

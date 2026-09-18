@@ -554,72 +554,80 @@ export default function Products() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
+          <table className="w-full divide-y divide-slate-100">
             <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Type</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unit</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Price</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Stock</th>
-                <th scope="col" className="relative px-6 py-4"><span className="sr-only">Actions</span></th>
+                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Details</th>
+                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Price</th>
+                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 sm:w-40">Stock</th>
+                <th scope="col" className="px-4 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24 sm:w-28">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0a382c] mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic text-sm">
                     No products found. Add a new product to get started.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 flex-shrink-0 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center">
-                          <Package className="h-5 w-5 text-[#0a382c]" />
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-start">
+                        <div className="h-9 w-9 flex-shrink-0 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center mt-0.5">
+                          <Package className="h-4 w-4 text-[#0a382c]" />
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-bold text-slate-900">{product.name}</div>
-                          <div className="text-xs text-slate-500 mt-0.5">{product.brand} • {product.modelNumber}</div>
+                        <div className="ml-3 min-w-0">
+                          <div className="text-sm font-bold text-slate-900 leading-snug">{product.name}</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                            {(product.brand || product.modelNumber) && (
+                              <span className="text-slate-600 font-medium">
+                                {[product.brand, product.modelNumber].filter(Boolean).join(' • ')}
+                              </span>
+                            )}
+                            {product.category && (
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                                {product.category}
+                              </span>
+                            )}
+                            {product.productType === 'Without Serials' ? (
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-900 border border-amber-200 uppercase tracking-wider">
+                                Without Serials
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 inline-flex items-center gap-1 text-[10px] font-bold rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                                <Barcode className="w-3 h-3" />
+                                Serials
+                              </span>
+                            )}
+                            {product.unit && (
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {product.unit}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {product.productType === 'Without Serials' ? (
-                        <span className="px-2.5 py-1 inline-flex items-center gap-1 text-[10px] leading-4 font-black rounded-full bg-amber-50 text-amber-900 border border-amber-200 uppercase tracking-wider">
-                          Without Serials
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 inline-flex items-center gap-1 text-[10px] leading-4 font-black rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-                          <Barcode className="w-3 h-3" />
-                          Serials
-                        </span>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <div className="font-mono text-sm font-extrabold text-slate-900">
+                        PKR {product.salePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      {product.purchasePrice > 0 && (
+                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                          Cost: PKR {product.purchasePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full bg-emerald-50 border border-emerald-150 text-emerald-800 uppercase tracking-wider">
-                        {product.category}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2.5 py-1 inline-flex text-[11px] font-bold rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-mono">
-                        {product.unit || 'Pcs'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-900">
-                      PKR {product.salePrice.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 inline-flex text-[10px] leading-5 font-black rounded-full uppercase tracking-wider ${
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 inline-flex text-[10px] leading-4 font-black rounded-full uppercase tracking-wider ${
                         product.stock > 10 
                           ? 'bg-emerald-50 text-emerald-800 border border-emerald-150' 
                           : product.stock > 0 
@@ -629,19 +637,21 @@ export default function Products() {
                         {product.stock} {product.unit ? product.unit : 'in stock'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold">
+                    <td className="px-4 py-3.5 whitespace-nowrap text-right text-sm font-semibold">
                       <button 
                         onClick={() => {
                           setSelectedProductType(product.productType || 'Serials');
                           setEditingProduct(product);
                         }}
-                        className="text-slate-400 hover:text-slate-800 mr-4 transition-colors"
+                        className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5 cursor-pointer"
+                        title="Edit Product"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => handleDeleteProduct(product.id)}
-                        className="text-red-400 hover:text-red-600 transition-colors"
+                        className="text-red-400 hover:text-red-600 transition-colors p-1.5 cursor-pointer"
+                        title="Delete Product"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
