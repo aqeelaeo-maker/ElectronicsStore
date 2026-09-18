@@ -24,36 +24,53 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 
-function StatCard({ title, value, icon: Icon, trend, colorClass, subtitle, footer, action }: any) {
+interface StatCardProps {
+  title: string;
+  value: React.ReactNode;
+  icon: React.ElementType;
+  cardClass: string;
+  iconBadgeClass: string;
+  titleClass: string;
+  valueClass: string;
+  action?: React.ReactNode;
+  subtitle?: React.ReactNode;
+}
+
+function StatCard({ 
+  title, 
+  value, 
+  icon: Icon, 
+  cardClass, 
+  iconBadgeClass, 
+  titleClass, 
+  valueClass, 
+  action, 
+  subtitle 
+}: StatCardProps) {
   return (
-    <div className="glass-panel glass-panel-hover p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+    <div className={cn(
+      "px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl transition-all duration-200 flex flex-col justify-between shadow-2xs",
+      cardClass
+    )}>
       <div>
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center justify-between gap-1.5 mb-1">
+          <p className={cn("text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider truncate", titleClass)}>
+            {title}
+          </p>
+          <div className="flex items-center gap-1.5 shrink-0">
             {action}
-            <div className={`p-2.5 rounded-xl ${colorClass} flex items-center justify-center shrink-0`}>
-              <Icon className="w-5 h-5" />
+            <div className={cn("w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center shrink-0", iconBadgeClass)}>
+              <Icon className="w-3.5 h-3.5" />
             </div>
           </div>
         </div>
-        <p className="mt-2 text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight leading-tight">{value}</p>
-        {subtitle && (
-          <div className="mt-1">
-            {subtitle}
-          </div>
-        )}
-      </div>
-      {footer && (
-        <div className="mt-3">
-          {footer}
+        <div className={cn("text-lg sm:text-xl xl:text-[22px] font-black tracking-tight leading-snug font-mono", valueClass)}>
+          {value}
         </div>
-      )}
-      {trend && (
-        <div className="mt-3 flex items-center text-xs font-semibold">
-          <TrendingUp className="w-4 h-4 text-emerald-600 mr-1 shrink-0" />
-          <span className="text-emerald-700 font-bold">{trend}</span>
-          <span className="text-slate-400 ml-1.5">vs last month</span>
+      </div>
+      {subtitle && (
+        <div className="mt-1.5 pt-1.5 border-t border-black/5">
+          {subtitle}
         </div>
       )}
     </div>
@@ -350,10 +367,10 @@ export default function Dashboard() {
       </div>
 
       <div className={cn(
-        "grid gap-5",
+        "grid gap-3 sm:gap-3.5",
         isUser 
-          ? "grid-cols-1 sm:grid-cols-3" 
-          : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          ? "grid-cols-1 sm:grid-cols-3 lg:grid-cols-3" 
+          : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
       )}>
         {/* Total Sales: Admin only */}
         {!isUser && (
@@ -361,65 +378,70 @@ export default function Dashboard() {
             title="Total Sales" 
             value={`PKR ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
             icon={DollarSign} 
-            trend={salesTrend}
-            colorClass="bg-emerald-50 text-emerald-700 border border-emerald-100"
+            cardClass="bg-emerald-50/80 hover:bg-emerald-50 border border-emerald-200/90"
+            iconBadgeClass="bg-emerald-600 text-white shadow-2xs"
+            titleClass="text-emerald-800"
+            valueClass="text-emerald-950"
+            subtitle={
+              <div className="flex items-center justify-between text-[10.5px] font-medium text-emerald-700 truncate">
+                <span>Net: PKR {netSales.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                {salesTrend && (
+                  <span className="inline-flex items-center text-emerald-900 font-bold">
+                    <TrendingUp className="w-3 h-3 mr-0.5" />
+                    {salesTrend}
+                  </span>
+                )}
+              </div>
+            }
           />
         )}
 
-        {/* Total Price of Stock: Admin only */}
+        {/* Total Price of Products: Admin only */}
         {!isUser && (
           <StatCard 
-            title="Total Price of Stock" 
+            title="Total Price of Products" 
             value={`PKR ${(stockPriceBasis === 'cost' ? totalStockCost : totalStockRetail).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
             icon={Boxes} 
-            colorClass="bg-teal-50 text-teal-700 border border-teal-100"
+            cardClass="bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90"
+            iconBadgeClass="bg-indigo-600 text-white shadow-2xs"
+            titleClass="text-indigo-800"
+            valueClass="text-indigo-950"
             action={
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+              <div className="flex items-center bg-indigo-100/90 border border-indigo-200/80 p-0.5 rounded-md text-[9px] font-bold">
                 <button
                   type="button"
                   onClick={() => setStockPriceBasis('cost')}
-                  className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                     stockPriceBasis === 'cost' 
-                      ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-indigo-600 text-white shadow-2xs font-black' 
+                      : 'text-indigo-700 hover:text-indigo-950'
                   }`}
-                  title="Valued at Purchase / Cost Price"
+                  title="Valued at Purchase Cost"
                 >
                   Cost
                 </button>
                 <button
                   type="button"
                   onClick={() => setStockPriceBasis('retail')}
-                  className={`px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                     stockPriceBasis === 'retail' 
-                      ? 'bg-white text-[#0a382c] shadow-2xs font-black' 
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-indigo-600 text-white shadow-2xs font-black' 
+                      : 'text-indigo-700 hover:text-indigo-950'
                   }`}
-                  title="Valued at Retail / Sale Price"
+                  title="Valued at Retail Price"
                 >
                   Retail
                 </button>
               </div>
             }
             subtitle={
-              <p className="text-[11px] font-semibold text-slate-500">
-                {stockPriceBasis === 'cost' ? 'At purchase cost value' : 'At retail selling value'}
-              </p>
-            }
-            footer={
-              <div className="pt-2.5 border-t border-slate-150/70 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400 font-medium">
-                    {stockPriceBasis === 'cost' ? 'Retail Value:' : 'Purchase Cost:'}
-                  </span>
-                  <span className="font-bold text-slate-800 font-mono">
-                    PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-                  <span>Total Units in Stock:</span>
-                  <span className="text-[#0a382c] font-bold">{totalStockUnits.toLocaleString()} units</span>
-                </div>
+              <div className="flex items-center justify-between text-[10.5px] font-medium text-indigo-700 truncate">
+                <span>
+                  {stockPriceBasis === 'cost' ? 'Retail' : 'Cost'}: PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </span>
+                <span className="font-semibold text-indigo-900">
+                  {totalStockUnits.toLocaleString()} units
+                </span>
               </div>
             }
           />
@@ -430,11 +452,14 @@ export default function Dashboard() {
           title="Total Products" 
           value={totalProducts} 
           icon={Package} 
-          colorClass="bg-amber-50 text-amber-700 border border-amber-100"
-          footer={
-            <div className="pt-2.5 border-t border-slate-150/70 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400 font-medium">Total Units:</span>
-              <span className="font-bold text-amber-900 font-mono">{totalStockUnits.toLocaleString()} units</span>
+          cardClass="bg-sky-50/80 hover:bg-sky-50 border border-sky-200/90"
+          iconBadgeClass="bg-sky-600 text-white shadow-2xs"
+          titleClass="text-sky-800"
+          valueClass="text-sky-950"
+          subtitle={
+            <div className="flex items-center justify-between text-[10.5px] font-medium text-sky-700 truncate">
+              <span>Catalog SKUs</span>
+              <span className="font-bold text-sky-900">{totalStockUnits.toLocaleString()} units</span>
             </div>
           }
         />
@@ -444,20 +469,36 @@ export default function Dashboard() {
           title="Total Customers" 
           value={totalCustomers} 
           icon={Users} 
-          trend={customerTrend}
-          colorClass="bg-blue-50 text-blue-700 border border-blue-100"
+          cardClass="bg-amber-50/80 hover:bg-amber-50 border border-amber-200/90"
+          iconBadgeClass="bg-amber-600 text-white shadow-2xs"
+          titleClass="text-amber-800"
+          valueClass="text-amber-950"
+          subtitle={
+            <div className="flex items-center justify-between text-[10.5px] font-medium text-amber-700 truncate">
+              <span>Client records</span>
+              {customerTrend && (
+                <span className="inline-flex items-center text-amber-900 font-bold">
+                  <TrendingUp className="w-3 h-3 mr-0.5" />
+                  {customerTrend}
+                </span>
+              )}
+            </div>
+          }
         />
 
-        {/* Low Stock Items: Visible to both Admin and User */}
+        {/* Low Item Stock: Visible to both Admin and User */}
         <StatCard 
-          title="Low Stock Items" 
+          title="Low Item Stock" 
           value={lowStockProducts} 
           icon={AlertTriangle} 
-          colorClass="bg-rose-50 text-rose-700 border border-rose-100"
+          cardClass="bg-rose-50/80 hover:bg-rose-50 border border-rose-200/90"
+          iconBadgeClass="bg-rose-600 text-white shadow-2xs"
+          titleClass="text-rose-800"
+          valueClass="text-rose-950"
           subtitle={
-            <p className="text-[11px] font-semibold text-slate-500">
-              Under 10 units remaining
-            </p>
+            <div className="text-[10.5px] font-medium text-rose-700 truncate">
+              {lowStockProducts > 0 ? `${lowStockProducts} item(s) < 10 units` : 'Inventory healthy'}
+            </div>
           }
         />
       </div>
