@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Package, Barcode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
+import { Pagination } from '../components/Pagination';
 
 interface Product {
   id: string;
@@ -236,11 +237,34 @@ export default function Products() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_products');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_products', String(val));
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.modelNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.brand.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const paginatedProducts = useMemo(() => {
+    if (itemsPerPage === -1) return filteredProducts;
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredProducts.slice(start, start + itemsPerPage);
+  }, [filteredProducts, currentPage, itemsPerPage]);
 
   const isFormOpen = showAddForm || !!editingProduct;
 
@@ -557,10 +581,10 @@ export default function Products() {
           <table className="w-full divide-y divide-slate-100">
             <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Details</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Price</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 sm:w-40">Stock</th>
-                <th scope="col" className="px-4 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24 sm:w-28">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Product Details</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 sm:w-36">Price</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 sm:w-32">Stock</th>
+                <th scope="col" className="px-3 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-20 sm:w-24">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
@@ -577,16 +601,16 @@ export default function Products() {
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((product) => (
+                paginatedProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3">
                       <div className="flex items-start">
-                        <div className="h-9 w-9 flex-shrink-0 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-center mt-0.5">
+                        <div className="h-8 w-8 flex-shrink-0 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-center mt-0.5">
                           <Package className="h-4 w-4 text-[#0a382c]" />
                         </div>
-                        <div className="ml-3 min-w-0">
+                        <div className="ml-2.5 min-w-0">
                           <div className="text-sm font-bold text-slate-900 leading-snug">{product.name}</div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                             {(product.brand || product.modelNumber) && (
                               <span className="text-slate-600 font-medium">
                                 {[product.brand, product.modelNumber].filter(Boolean).join(' • ')}
@@ -616,7 +640,7 @@ export default function Products() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="font-mono text-sm font-extrabold text-slate-900">
                         PKR {product.salePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
@@ -626,7 +650,7 @@ export default function Products() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <span className={`px-2.5 py-1 inline-flex text-[10px] leading-4 font-black rounded-full uppercase tracking-wider ${
                         product.stock > 10 
                           ? 'bg-emerald-50 text-emerald-800 border border-emerald-150' 
@@ -637,13 +661,13 @@ export default function Products() {
                         {product.stock} {product.unit ? product.unit : 'in stock'}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right text-sm font-semibold">
+                    <td className="px-3 py-3 whitespace-nowrap text-right text-sm font-semibold">
                       <button 
                         onClick={() => {
                           setSelectedProductType(product.productType || 'Serials');
                           setEditingProduct(product);
                         }}
-                        className="text-slate-400 hover:text-slate-800 mr-3 transition-colors p-1.5 cursor-pointer"
+                        className="text-slate-400 hover:text-slate-800 mr-2 transition-colors p-1.5 cursor-pointer"
                         title="Edit Product"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -662,6 +686,14 @@ export default function Products() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredProducts.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          itemName="products"
+        />
       </div>
     </div>
   );

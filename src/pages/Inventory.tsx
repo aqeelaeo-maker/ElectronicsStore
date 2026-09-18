@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
@@ -32,6 +32,7 @@ import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import AddInventoryStock, { Product, Vendor } from './AddInventoryStock';
 import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
+import { Pagination } from '../components/Pagination';
 
 interface InventoryLog {
   id: string;
@@ -432,12 +433,43 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_inventory');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_inventory', String(val));
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.modelNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeTab]);
+
+  const paginatedProducts = useMemo(() => {
+    if (itemsPerPage === -1) return filteredProducts;
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredProducts.slice(start, start + itemsPerPage);
+  }, [filteredProducts, currentPage, itemsPerPage]);
+
+  const paginatedLogs = useMemo(() => {
+    if (itemsPerPage === -1) return logs;
+    const totalPages = Math.max(1, Math.ceil(logs.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return logs.slice(start, start + itemsPerPage);
+  }, [logs, currentPage, itemsPerPage]);
 
   const getStockBadge = (stock: number) => {
     if (stock === 0) {
@@ -564,7 +596,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredProducts.map((product) => (
+                  {paginatedProducts.map((product) => (
                     <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
                       <td className="px-6 py-4">
                         <div className="font-bold text-slate-900 text-sm">{product.name}</div>
@@ -621,6 +653,14 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
               </table>
             )}
           </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={filteredProducts.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={handleItemsPerPageChange}
+            itemName="inventory items"
+          />
         </div>
       ) : (
         /* History / Audit Log Table */
@@ -652,7 +692,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {logs.map((log) => {
+                  {paginatedLogs.map((log) => {
                     const formattedDate = log.createdAt
                       ? new Date(log.createdAt.seconds * 1000).toLocaleDateString('en-US', {
                           month: 'short',
@@ -779,6 +819,14 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
               </table>
             )}
           </div>
+          <Pagination
+            currentPage={currentPage}
+            totalItems={logs.length}
+            itemsPerPage={itemsPerPage}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={handleItemsPerPageChange}
+            itemName="transaction records"
+          />
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { Plus, Search, Edit2, Trash2, Building2, Receipt, Wallet, Clock, CheckCi
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import VendorLedgerView from '../components/VendorLedgerView';
+import { Pagination } from '../components/Pagination';
 
 interface Vendor {
   id: string;
@@ -296,6 +297,17 @@ export default function Vendors() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_vendors');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_vendors', String(val));
+  };
+
   const filteredVendors = vendors.filter(v => {
     const name = (v.name || v.companyName || '').toLowerCase();
     const phone = (v.mobile || v.phone || '').toLowerCase();
@@ -305,6 +317,18 @@ export default function Vendors() {
     const search = searchTerm.toLowerCase();
     return name.includes(search) || phone.includes(search) || contact.includes(search) || city.includes(search) || address.includes(search);
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const paginatedVendors = useMemo(() => {
+    if (itemsPerPage === -1) return filteredVendors;
+    const totalPages = Math.max(1, Math.ceil(filteredVendors.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredVendors.slice(start, start + itemsPerPage);
+  }, [filteredVendors, currentPage, itemsPerPage]);
 
   if (ledgerVendor) {
     const currentVendor = vendors.find(v => v.id === ledgerVendor.id) || ledgerVendor;
@@ -532,7 +556,7 @@ export default function Vendors() {
                   </td>
                 </tr>
               ) : (
-                filteredVendors.map((vendor) => {
+                paginatedVendors.map((vendor) => {
                   const effectiveRemaining = getVendorNetPayable(vendor);
                   const effectivePurchases = getVendorPurchasesTotal(vendor);
                   const effectivePaid = getVendorPaidTotal(vendor);
@@ -631,6 +655,14 @@ export default function Vendors() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredVendors.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          itemName="vendors"
+        />
       </div>
     </div>
   );

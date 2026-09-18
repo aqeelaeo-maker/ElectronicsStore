@@ -5,6 +5,7 @@ import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Cloc
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import CustomerLedgerView from '../components/CustomerLedgerView';
+import { Pagination } from '../components/Pagination';
 
 interface Customer {
   id: string;
@@ -248,12 +249,35 @@ export default function Customers() {
     }
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_customers');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_customers', String(val));
+  };
+
   const filteredCustomers = customers.filter(c => 
     (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (c.mobile || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (c.address || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const paginatedCustomers = useMemo(() => {
+    if (itemsPerPage === -1) return filteredCustomers;
+    const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredCustomers.slice(start, start + itemsPerPage);
+  }, [filteredCustomers, currentPage, itemsPerPage]);
 
   if (ledgerCustomer) {
     const currentCustomer = customers.find(c => c.id === ledgerCustomer.id) || ledgerCustomer;
@@ -455,7 +479,7 @@ export default function Customers() {
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((customer) => {
+                paginatedCustomers.map((customer) => {
                   const initialBal = getCustomerInitialBalance(customer);
                   const pendingBal = getCustomerPendingInvoices(customer.id);
                   const returnVal = getCustomerReturnValue(customer.id);
@@ -553,6 +577,14 @@ export default function Customers() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredCustomers.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          itemName="customers"
+        />
       </div>
     </div>
   );

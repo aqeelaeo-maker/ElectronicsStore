@@ -49,27 +49,27 @@ function StatCard({
 }: StatCardProps) {
   return (
     <div className={cn(
-      "px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl transition-all duration-200 flex flex-col justify-between shadow-2xs",
+      "px-3.5 py-2.5 rounded-xl transition-all duration-200 shadow-2xs flex flex-col justify-between border min-h-[78px]",
       cardClass
     )}>
-      <div>
-        <div className="flex items-center justify-between gap-1.5 mb-1">
-          <p className={cn("text-[10px] sm:text-[10.5px] font-bold uppercase tracking-wider truncate", titleClass)}>
-            {title}
-          </p>
-          <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-start justify-between gap-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className={cn("text-[10px] font-bold uppercase tracking-wider truncate", titleClass)}>
+              {title}
+            </p>
             {action}
-            <div className={cn("w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center shrink-0", iconBadgeClass)}>
-              <Icon className="w-3.5 h-3.5" />
-            </div>
+          </div>
+          <div className={cn("text-base sm:text-[17px] xl:text-lg font-black tracking-tight font-mono truncate mt-0.5", valueClass)}>
+            {value}
           </div>
         </div>
-        <div className={cn("text-lg sm:text-xl xl:text-[22px] font-black tracking-tight leading-snug font-mono", valueClass)}>
-          {value}
+        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5", iconBadgeClass)}>
+          <Icon className="w-3.5 h-3.5" />
         </div>
       </div>
       {subtitle && (
-        <div className="mt-1.5 pt-1.5 border-t border-black/5">
+        <div className="mt-1 pt-1 border-t border-black/5">
           {subtitle}
         </div>
       )}
@@ -367,19 +367,19 @@ export default function Dashboard() {
       </div>
 
       <div className={cn(
-        "grid gap-3 sm:gap-3.5",
+        "grid gap-3",
         isUser 
-          ? "grid-cols-1 sm:grid-cols-3 lg:grid-cols-3" 
+          ? "grid-cols-1 sm:grid-cols-3" 
           : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
       )}>
-        {/* Total Sales: Admin only */}
+        {/* 1. Total Sales: Professional Emerald Theme */}
         {!isUser && (
           <StatCard 
             title="Total Sales" 
             value={`PKR ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
             icon={DollarSign} 
-            cardClass="bg-emerald-50/80 hover:bg-emerald-50 border border-emerald-200/90"
-            iconBadgeClass="bg-emerald-600 text-white shadow-2xs"
+            cardClass="bg-emerald-50/90 hover:bg-emerald-50 border border-emerald-200/90"
+            iconBadgeClass="bg-emerald-700 text-white shadow-2xs"
             titleClass="text-emerald-800"
             valueClass="text-emerald-950"
             subtitle={
@@ -396,25 +396,25 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Total Price of Products: Admin only */}
+        {/* 2. Total Price of Products: Professional Royal Blue Theme */}
         {!isUser && (
           <StatCard 
             title="Total Price of Products" 
             value={`PKR ${(stockPriceBasis === 'cost' ? totalStockCost : totalStockRetail).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
             icon={Boxes} 
-            cardClass="bg-indigo-50/80 hover:bg-indigo-50 border border-indigo-200/90"
-            iconBadgeClass="bg-indigo-600 text-white shadow-2xs"
-            titleClass="text-indigo-800"
-            valueClass="text-indigo-950"
+            cardClass="bg-blue-50/90 hover:bg-blue-50 border border-blue-200/90"
+            iconBadgeClass="bg-blue-700 text-white shadow-2xs"
+            titleClass="text-blue-800"
+            valueClass="text-blue-950"
             action={
-              <div className="flex items-center bg-indigo-100/90 border border-indigo-200/80 p-0.5 rounded-md text-[9px] font-bold">
+              <div className="flex items-center bg-blue-100/90 border border-blue-200/80 p-0.5 rounded-md text-[9px] font-bold">
                 <button
                   type="button"
                   onClick={() => setStockPriceBasis('cost')}
                   className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                     stockPriceBasis === 'cost' 
-                      ? 'bg-indigo-600 text-white shadow-2xs font-black' 
-                      : 'text-indigo-700 hover:text-indigo-950'
+                      ? 'bg-blue-700 text-white shadow-2xs font-black' 
+                      : 'text-blue-700 hover:text-blue-950'
                   }`}
                   title="Valued at Purchase Cost"
                 >
@@ -425,8 +425,8 @@ export default function Dashboard() {
                   onClick={() => setStockPriceBasis('retail')}
                   className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
                     stockPriceBasis === 'retail' 
-                      ? 'bg-indigo-600 text-white shadow-2xs font-black' 
-                      : 'text-indigo-700 hover:text-indigo-950'
+                      ? 'bg-blue-700 text-white shadow-2xs font-black' 
+                      : 'text-blue-700 hover:text-blue-950'
                   }`}
                   title="Valued at Retail Price"
                 >
@@ -435,11 +435,11 @@ export default function Dashboard() {
               </div>
             }
             subtitle={
-              <div className="flex items-center justify-between text-[10.5px] font-medium text-indigo-700 truncate">
+              <div className="flex items-center justify-between text-[10.5px] font-medium text-blue-700 truncate">
                 <span>
                   {stockPriceBasis === 'cost' ? 'Retail' : 'Cost'}: PKR {(stockPriceBasis === 'cost' ? totalStockRetail : totalStockCost).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                 </span>
-                <span className="font-semibold text-indigo-900">
+                <span className="font-semibold text-blue-900">
                   {totalStockUnits.toLocaleString()} units
                 </span>
               </div>
@@ -447,29 +447,29 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Total Products: Visible to both Admin and User */}
+        {/* 3. Total Products: Professional Violet/Purple Theme */}
         <StatCard 
           title="Total Products" 
           value={totalProducts} 
           icon={Package} 
-          cardClass="bg-sky-50/80 hover:bg-sky-50 border border-sky-200/90"
-          iconBadgeClass="bg-sky-600 text-white shadow-2xs"
-          titleClass="text-sky-800"
-          valueClass="text-sky-950"
+          cardClass="bg-purple-50/90 hover:bg-purple-50 border border-purple-200/90"
+          iconBadgeClass="bg-purple-700 text-white shadow-2xs"
+          titleClass="text-purple-800"
+          valueClass="text-purple-950"
           subtitle={
-            <div className="flex items-center justify-between text-[10.5px] font-medium text-sky-700 truncate">
+            <div className="flex items-center justify-between text-[10.5px] font-medium text-purple-700 truncate">
               <span>Catalog SKUs</span>
-              <span className="font-bold text-sky-900">{totalStockUnits.toLocaleString()} units</span>
+              <span className="font-bold text-purple-900">{totalStockUnits.toLocaleString()} units</span>
             </div>
           }
         />
 
-        {/* Total Customers: Visible to both Admin and User */}
+        {/* 4. Total Customers: Professional Amber Theme */}
         <StatCard 
           title="Total Customers" 
           value={totalCustomers} 
           icon={Users} 
-          cardClass="bg-amber-50/80 hover:bg-amber-50 border border-amber-200/90"
+          cardClass="bg-amber-50/90 hover:bg-amber-50 border border-amber-200/90"
           iconBadgeClass="bg-amber-600 text-white shadow-2xs"
           titleClass="text-amber-800"
           valueClass="text-amber-950"
@@ -486,12 +486,12 @@ export default function Dashboard() {
           }
         />
 
-        {/* Low Item Stock: Visible to both Admin and User */}
+        {/* 5. Low Item Stock: Professional Rose/Crimson Theme */}
         <StatCard 
           title="Low Item Stock" 
           value={lowStockProducts} 
           icon={AlertTriangle} 
-          cardClass="bg-rose-50/80 hover:bg-rose-50 border border-rose-200/90"
+          cardClass="bg-rose-50/90 hover:bg-rose-50 border border-rose-200/90"
           iconBadgeClass="bg-rose-600 text-white shadow-2xs"
           titleClass="text-rose-800"
           valueClass="text-rose-950"

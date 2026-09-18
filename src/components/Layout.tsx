@@ -87,27 +87,27 @@ export default function Layout() {
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-48 bg-[#0a382c] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-xl",
+        "fixed inset-y-0 left-0 z-50 w-40 bg-[#0a382c] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-xl",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="h-14 flex items-center justify-between px-3.5 border-b border-emerald-900/40 bg-[#072d23]">
-          <span className="text-xs sm:text-sm font-extrabold tracking-tight text-white flex items-center gap-2 min-w-0 flex-1">
+        <div className="h-14 flex items-center justify-between px-2.5 border-b border-emerald-900/40 bg-[#072d23]">
+          <span className="text-xs font-extrabold tracking-tight text-white flex items-center gap-1.5 min-w-0 flex-1">
             {storeDetails.logoUrl ? (
-              <img src={storeDetails.logoUrl} alt="Store Logo" className="h-7 w-7 rounded-lg object-cover flex-shrink-0" referrerPolicy="no-referrer" />
+              <img src={storeDetails.logoUrl} alt="Store Logo" className="h-6 w-6 rounded-lg object-cover flex-shrink-0" referrerPolicy="no-referrer" />
             ) : (
-              <div className="h-7 w-7 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-[11px] shadow flex-shrink-0">
+              <div className="h-6 w-6 rounded-lg bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-[10px] shadow flex-shrink-0">
                 {getInitials(storeDetails.name || 'ElectroManage')}
               </div>
             )}
-            <span className="truncate">{storeDetails.name || 'ElectroManage'}</span>
+            <span className="truncate text-xs font-bold">{storeDetails.name || 'ElectroManage'}</span>
           </span>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-300 hover:text-white transition-colors ml-1 p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto py-3">
-          <nav className="px-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto py-2.5">
+          <nav className="px-1.5 space-y-0.5">
             {visibleNavigation.map((item) => {
               const isActive = location.pathname === item.href || (item.href !== '/' && location.pathname.startsWith(item.href));
               return (
@@ -115,7 +115,7 @@ export default function Layout() {
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    "flex items-center px-2.5 py-1.5 text-xs font-semibold rounded-lg group transition-all duration-150 border",
+                    "flex items-center px-2 py-1.5 text-xs font-semibold rounded-lg group transition-all duration-150 border",
                     isActive 
                       ? "bg-[#195d4e] text-white border-[#227261] shadow-sm shadow-emerald-950/20" 
                       : "text-emerald-100/80 hover:bg-[#124d3f]/40 border-transparent hover:text-white"
@@ -123,11 +123,11 @@ export default function Layout() {
                 >
                   <item.icon 
                     className={cn(
-                      "flex-shrink-0 -ml-0.5 mr-2 h-4 w-4 transition-colors duration-150",
+                      "flex-shrink-0 mr-1.5 h-3.5 w-3.5 transition-colors duration-150",
                       isActive ? "text-emerald-300" : "text-emerald-300/60 group-hover:text-emerald-200"
                     )} 
                   />
-                  <span className="truncate">{item.name}</span>
+                  <span className="truncate text-[11.5px]">{item.name}</span>
                 </Link>
               );
             })}
@@ -135,71 +135,71 @@ export default function Layout() {
         </div>
 
         {/* Support Section */}
-        <div className="mx-2 mb-2 p-2 rounded-lg bg-[#092f25] border border-emerald-900/40">
-          <div className="flex items-center gap-2">
+        <div className="mx-1.5 mb-2 p-1.5 rounded-lg bg-[#092f25] border border-emerald-900/40">
+          <div className="flex items-center gap-1.5">
             <div className="p-1 bg-[#125d4c] rounded-md text-emerald-400 flex items-center justify-center shrink-0">
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.457L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.965C16.528 2.01 14.069.986 11.44.986c-5.442 0-9.866 4.372-9.87 9.802 0 1.73.463 3.42 1.34 4.947l-.997 3.641 3.734-.978zm11.567-7.619c-.302-.15-1.788-.876-2.057-.973-.269-.099-.465-.15-.659.15-.195.299-.752.973-.922 1.17-.17.195-.34.22-.641.07-1.125-.565-1.899-1.025-2.656-2.316-.2-.34.2-.315.572-1.055.062-.125.031-.235-.015-.33-.047-.095-.465-1.11-.637-1.524-.167-.402-.351-.347-.481-.353-.125-.004-.268-.005-.412-.005-.144 0-.379.054-.577.269-.198.215-.756.734-.756 1.792s.772 2.08 1.055 2.457c.284.377 1.543 2.338 3.723 3.269.519.222.923.355 1.238.455.52.164.993.14 1.368.085.418-.06 1.788-.726 2.042-1.427.254-.7.254-1.3.178-1.427-.076-.125-.284-.199-.586-.349z"/>
               </svg>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold text-white truncate">Need Support?</p>
-              <p className="text-[9.5px] text-emerald-300 truncate">Customer service</p>
+              <p className="text-[10px] font-bold text-white truncate">Need Support?</p>
+              <p className="text-[8.5px] text-emerald-300 truncate">Customer service</p>
             </div>
           </div>
         </div>
 
-        <div className="p-2 border-t border-emerald-900/60 bg-[#072d23]">
-          <div className="flex items-center p-1.5 rounded-lg bg-[#0d3c30] border border-emerald-900/50">
+        <div className="p-1.5 border-t border-emerald-900/60 bg-[#072d23]">
+          <div className="flex items-center p-1 rounded-lg bg-[#0d3c30] border border-emerald-900/50">
             <div className="flex-shrink-0">
               <div className={cn(
-                "h-7 w-7 rounded-full flex items-center justify-center text-white font-extrabold shadow-sm text-[10px]",
+                "h-6 w-6 rounded-full flex items-center justify-center text-white font-extrabold shadow-sm text-[9px]",
                 activeRole === 'Admin' ? "bg-emerald-600" : "bg-blue-600"
               )}>
                 {activeRole === 'Admin' ? (
-                  <ShieldCheck className="w-3.5 h-3.5 text-white" />
+                  <ShieldCheck className="w-3 h-3 text-white" />
                 ) : (
-                  <UserIcon className="w-3.5 h-3.5 text-white" />
+                  <UserIcon className="w-3 h-3 text-white" />
                 )}
               </div>
             </div>
-            <div className="ml-2 min-w-0 flex-1">
-              <p className="text-[11px] font-bold text-white truncate">
+            <div className="ml-1.5 min-w-0 flex-1">
+              <p className="text-[10px] font-bold text-white truncate">
                 {sessionUser?.name || activeUser?.name || (activeRole === 'Admin' ? 'Admin' : 'User')}
               </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className={cn(
-                  "px-1 py-0.2 rounded text-[8px] font-black uppercase tracking-wider",
+                  "px-1 py-0.2 rounded text-[7.5px] font-black uppercase tracking-wider",
                   activeRole === 'Admin' ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-blue-500/20 text-blue-200 border border-blue-500/30"
                 )}>
                   {activeRole}
                 </span>
-                <span className="text-[9px] text-emerald-200/70 truncate font-mono">
+                <span className="text-[8.5px] text-emerald-200/70 truncate font-mono">
                   @{sessionUser?.username || (activeRole === 'Admin' ? 'admin' : 'user')}
                 </span>
               </div>
             </div>
           </div>
-          <div className="mt-1.5 flex items-center gap-1">
+          <div className="mt-1 flex items-center gap-1">
             <button 
               type="button"
               onClick={() => {
                 clearSessionUser();
                 toast.info('Store session ended. Select Admin or User login.');
               }}
-              className="flex-1 flex items-center justify-center px-1.5 py-1 text-[10px] font-bold text-emerald-200 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-800/40 rounded-lg transition-all cursor-pointer shadow-2xs"
+              className="flex-1 flex items-center justify-center px-1 py-1 text-[9px] font-bold text-emerald-200 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-800/40 rounded-lg transition-all cursor-pointer shadow-2xs"
               title="Switch between Admin and User login"
             >
-              <Users className="w-2.5 h-2.5 mr-1" />
+              <Users className="w-2.5 h-2.5 mr-0.5" />
               Switch
             </button>
             <button 
               type="button"
               onClick={() => logout()}
-              className="flex-1 flex items-center justify-center px-1.5 py-1 text-[10px] font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-lg transition-all cursor-pointer shadow-2xs"
+              className="flex-1 flex items-center justify-center px-1 py-1 text-[9px] font-bold text-red-300 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 rounded-lg transition-all cursor-pointer shadow-2xs"
               title="Sign out of store and Google account"
             >
-              <LogOut className="w-2.5 h-2.5 mr-1" />
+              <LogOut className="w-2.5 h-2.5 mr-0.5" />
               Sign Out
             </button>
           </div>

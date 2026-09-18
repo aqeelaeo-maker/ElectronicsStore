@@ -47,6 +47,7 @@ import {
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
+import { Pagination } from '../components/Pagination';
 
 interface Product {
   id: string;
@@ -985,6 +986,29 @@ export default function Quotations() {
     });
   }, [quotations, statusFilter, searchTerm]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_quotations');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_quotations', String(val));
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  const paginatedQuotations = useMemo(() => {
+    if (itemsPerPage === -1) return filteredQuotations;
+    const totalPages = Math.max(1, Math.ceil(filteredQuotations.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredQuotations.slice(start, start + itemsPerPage);
+  }, [filteredQuotations, currentPage, itemsPerPage]);
+
   // Financial overview metrics
   const { totalQuotationCount, totalQuotedAmount, convertedQuotesCount, activeQuotesCount } = useMemo(() => {
     let quotedTotal = 0;
@@ -1879,10 +1903,10 @@ export default function Quotations() {
           <table className="w-full divide-y divide-slate-150">
             <thead className="bg-[#fcfdfd]">
               <tr>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quotation & Customer</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Items & Status</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Total Amount</th>
-                <th scope="col" className="px-4 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40 sm:w-48">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quotation & Customer</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 sm:w-36">Items & Status</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 sm:w-36">Total Amount</th>
+                <th scope="col" className="px-3 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white/60 divide-y divide-slate-100">
@@ -1902,15 +1926,15 @@ export default function Quotations() {
                   </td>
                 </tr>
               ) : (
-                filteredQuotations.map(quote => (
+                paginatedQuotations.map(quote => (
                   <tr key={quote.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-black text-sm text-slate-900">{quote.quotationNo}</span>
                         <span className="text-slate-300 font-bold">•</span>
                         <span className="text-sm font-bold text-slate-900">{quote.customerName}</span>
                       </div>
-                      <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
                         {quote.customerMobile && (
                           <span className="inline-flex items-center gap-1 font-medium text-slate-600">
                             <Phone className="w-3 h-3 text-[#0a382c]" /> {quote.customerMobile}
@@ -1924,7 +1948,7 @@ export default function Quotations() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
                           quote.status === 'Converted' 
@@ -1944,7 +1968,7 @@ export default function Quotations() {
                         {quote.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0} unit(s) • {quote.items?.length || 0} line product(s)
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="font-mono text-sm font-black text-slate-900">
                         PKR {quote.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
@@ -1954,15 +1978,15 @@ export default function Quotations() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-3 py-3 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleConvertToSale(quote)}
-                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 inline-flex items-center gap-1 transition-colors mr-1 cursor-pointer"
+                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
                           title="Convert to Real Sale (Deducts Stock)"
                         >
-                          <ArrowRight className="w-3 h-3" />
-                          To Sale
+                          <ArrowRight className="w-3 h-3 text-emerald-700" />
+                          <span className="hidden sm:inline">To Sale</span>
                         </button>
                         <button
                           onClick={() => {
@@ -2003,6 +2027,14 @@ export default function Quotations() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredQuotations.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          itemName="quotations"
+        />
       </div>
 
       {/* Note: Create/Edit Quotation is rendered in full-page ledger mode */}

@@ -50,6 +50,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import SalesReturnModal, { printReturnReceipt, SaleReturnRecord } from '../components/SalesReturnModal';
+import { Pagination } from '../components/Pagination';
 
 interface Product {
   id: string;
@@ -2192,6 +2193,17 @@ export default function Sales() {
     }, 500);
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(() => {
+    const saved = localStorage.getItem('pos_per_page_sales');
+    return saved ? Number(saved) : 25;
+  });
+
+  const handleItemsPerPageChange = (val: number) => {
+    setItemsPerPage(val);
+    localStorage.setItem('pos_per_page_sales', String(val));
+  };
+
   const filteredSales = sales.filter(s => {
     const matchesSearch = 
       s.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -2203,6 +2215,18 @@ export default function Sales() {
     if (statusFilter === 'Returns') return s.returns && s.returns.length > 0;
     return true;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  const paginatedSales = useMemo(() => {
+    if (itemsPerPage === -1) return filteredSales;
+    const totalPages = Math.max(1, Math.ceil(filteredSales.length / itemsPerPage));
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * itemsPerPage;
+    return filteredSales.slice(start, start + itemsPerPage);
+  }, [filteredSales, currentPage, itemsPerPage]);
 
   const getInitials = (name: string) => {
     if (!name) return 'EM';
@@ -3785,10 +3809,10 @@ export default function Sales() {
           <table className="w-full divide-y divide-slate-100">
             <thead className="bg-[#f8faf9]">
               <tr>
-                <th scope="col" className="px-5 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Invoice & Customer</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Status</th>
-                <th scope="col" className="px-4 py-3.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40 sm:w-48">Amount Details</th>
-                <th scope="col" className="px-4 py-3.5 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40 sm:w-48">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Invoice & Customer</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 sm:w-36">Status</th>
+                <th scope="col" className="px-3 py-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Amount Details</th>
+                <th scope="col" className="px-3 py-3 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -3805,20 +3829,20 @@ export default function Sales() {
                   </td>
                 </tr>
               ) : (
-                filteredSales.map((sale) => (
+                paginatedSales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-[#f8faf9] transition-colors">
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3">
                       <div className="flex items-start">
-                        <div className="h-9 w-9 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-xl flex items-center justify-center mt-0.5">
+                        <div className="h-8 w-8 flex-shrink-0 bg-emerald-50 border border-emerald-100 text-[#0a382c] rounded-lg flex items-center justify-center mt-0.5">
                           <FileText className="h-4 w-4" />
                         </div>
-                        <div className="ml-3 min-w-0">
+                        <div className="ml-2.5 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-black text-slate-900 font-mono">{sale.invoiceNo}</span>
                             <span className="text-slate-300 font-bold">•</span>
                             <span className="text-sm font-bold text-slate-900">{sale.customerName}</span>
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                             <span className="inline-flex items-center gap-1 font-medium text-slate-600">
                               <Calendar className="w-3 h-3 text-slate-400" />
                               {sale.date ? new Date(sale.date).toLocaleDateString() : 'N/A'}
@@ -3828,7 +3852,7 @@ export default function Sales() {
                                 • {sale.items.length} item(s)
                               </span>
                             )}
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                               sale.paymentMode === 'Online'
                                 ? 'bg-blue-50 text-blue-700 border border-blue-100'
                                 : 'bg-amber-50 text-amber-800 border border-amber-100'
@@ -3843,7 +3867,7 @@ export default function Sales() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="flex flex-col gap-1 items-start">
                         <span className={`px-2.5 py-0.5 inline-flex text-[10px] leading-4 font-black rounded-full uppercase tracking-wider ${
                           sale.status === 'Pending'
@@ -3866,7 +3890,7 @@ export default function Sales() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       <div className="font-mono text-sm font-black text-slate-900">
                         PKR {sale.total?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
@@ -3884,7 +3908,7 @@ export default function Sales() {
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                    <td className="px-3 py-3 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button 
                           onClick={() => {
@@ -3935,6 +3959,14 @@ export default function Sales() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredSales.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          itemName="sales invoices"
+        />
       </div>
 
       {/* 2. Styled Printable Receipt Detail Modal */}
