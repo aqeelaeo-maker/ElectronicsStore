@@ -1232,37 +1232,37 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-3 w-full lg:w-auto flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap">
           <button
             type="button"
             onClick={() => setShowPayForm(!showPayForm)}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-sm font-bold shadow-md shadow-emerald-950/10 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-950/10 transition-all cursor-pointer whitespace-nowrap"
           >
-            <Banknote className="w-4 h-4 text-emerald-300" />
-            {showPayForm ? 'Hide Payment Form' : 'Pay / Settle Payment'}
+            <Banknote className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>{showPayForm ? 'Hide Payment Form' : 'Pay / Settle Payment'}</span>
           </button>
           <button
             type="button"
             onClick={handlePrint}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-colors cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
             title="Print Full Vendor Ledger Statement"
           >
-            <Printer className="w-4 h-4 text-slate-600" />
-            <span className="hidden sm:inline">Print Statement</span>
+            <Printer className="w-4 h-4 text-slate-600 shrink-0" />
+            <span>Print Statement</span>
           </button>
           <button
             type="button"
             onClick={handleDownloadLedger}
             disabled={isDownloadingLedger}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Download Vendor Ledger Statement as PDF"
           >
             {isDownloadingLedger ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
             ) : (
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 shrink-0" />
             )}
-            <span className="hidden sm:inline">{isDownloadingLedger ? 'Downloading...' : 'Download Ledger'}</span>
+            <span>{isDownloadingLedger ? 'Downloading...' : 'Download Ledger'}</span>
           </button>
         </div>
       </div>

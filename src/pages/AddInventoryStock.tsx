@@ -6,6 +6,7 @@ import {
   onSnapshot, 
   doc, 
   getDoc,
+  getDocs,
   writeBatch, 
   serverTimestamp 
 } from 'firebase/firestore';
@@ -38,7 +39,11 @@ import {
   Calculator,
   CreditCard,
   Wallet,
-  Receipt
+  Receipt,
+  Zap,
+  ShieldAlert,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 
@@ -162,7 +167,20 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
 
   // Serial numbers management
   const [serialNumbersList, setSerialNumbersList] = useState<string[]>([]);
+  const [forceAddedSerials, setForceAddedSerials] = useState<Set<string>>(new Set());
   const [inputMode, setInputMode] = useState<'single' | 'bulk' | 'sequence'>('single');
+
+  // Force Add & Audit Modal state
+  const [showForceAddModal, setShowForceAddModal] = useState(false);
+  const [auditSerialTarget, setAuditSerialTarget] = useState('');
+  const [isAuditing, setIsAuditing] = useState(false);
+  const [auditDetails, setAuditDetails] = useState<{
+    serial: string;
+    inStock: { found: boolean; status?: string; productName?: string; isAvailable: boolean };
+    inSales: { found: boolean; details: string[] };
+    inReturns: { found: boolean; details: string[] };
+    inQuotations: { found: boolean; details: string[] };
+  } | null>(null);
   
   // Single scan mode
   const [singleSerial, setSingleSerial] = useState('');
@@ -324,7 +342,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
   };
 
   // Check if a serial already exists in current batch or Firestore
-  const checkDuplicateSerial = (serial: string): { isDup: boolean; reason?: string } => {
+  const checkDuplicateSerial = (serial: string): { isDup: boolean; reason?: string; existingDoc?: StoreSerialNumber } => {
     const trimmed = serial.trim().toLowerCase();
     if (!trimmed) return { isDup: true, reason: 'Empty serial number' };
 
@@ -337,13 +355,130 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     const existing = allStoreSerials.find(s => s.serialNumber.toLowerCase() === trimmed);
     if (existing) {
       if (existing.productId === selectedProduct?.id) {
-        return { isDup: true, reason: `Already registered for this product (${existing.status})` };
+        return { isDup: true, reason: `Already registered for this product (${existing.status || 'Available'})`, existingDoc: existing };
       } else {
-        return { isDup: true, reason: `Already assigned to another product (${existing.productName || 'Unknown'})` };
+        return { isDup: true, reason: `Already assigned to another product (${existing.productName || 'Unknown'})`, existingDoc: existing };
       }
     }
 
     return { isDup: false };
+  };
+
+  // Audit a serial across store database, sales invoices, return records, and quotations
+  const runSerialAudit = async (snToAudit: string) => {
+    const cleanSn = snToAudit.trim();
+    if (!cleanSn || !storeId) return;
+
+    setIsAuditing(true);
+    try {
+      // 1. Check Store Serial Database (allStoreSerials)
+      const existingInDb = allStoreSerials.find(s => s.serialNumber.toLowerCase() === cleanSn.toLowerCase());
+      const stockInfo = {
+        found: !!existingInDb,
+        status: existingInDb?.status || 'Unknown',
+        productName: existingInDb?.productName || (existingInDb?.productId === selectedProduct?.id ? selectedProduct?.name : 'Another Product'),
+        isAvailable: existingInDb?.status === 'Available'
+      };
+
+      // 2. Check Sales Invoices and Return Records
+      const salesQuery = query(collection(db, 'sales'), where('storeId', '==', storeId));
+      const salesSnap = await getDocs(salesQuery);
+      const matchedSales: string[] = [];
+      const matchedReturns: string[] = [];
+
+      salesSnap.forEach(docSnap => {
+        const saleData = docSnap.data();
+        const invoiceNo = saleData.invoiceNo || docSnap.id;
+        const customer = saleData.customerName || 'Customer';
+        const dateStr = saleData.createdAt?.toDate ? saleData.createdAt.toDate().toLocaleDateString() : '';
+
+        const items = Array.isArray(saleData.items) ? saleData.items : [];
+        for (const item of items) {
+          const serialsInItem = Array.isArray(item.selectedSerials) ? item.selectedSerials : [];
+          if (serialsInItem.some((s: string) => s && s.toLowerCase() === cleanSn.toLowerCase())) {
+            matchedSales.push(`Invoice #${invoiceNo} (${customer}${dateStr ? `, ${dateStr}` : ''})`);
+          }
+          if (item.returnQuantity && item.returnQuantity > 0) {
+            const retSerials = Array.isArray(item.returnedSerials) ? item.returnedSerials : [];
+            if (retSerials.some((s: string) => s && s.toLowerCase() === cleanSn.toLowerCase())) {
+              matchedReturns.push(`Return in Invoice #${invoiceNo} (${dateStr})`);
+            }
+          }
+        }
+      });
+
+      // 3. Check Quotations
+      const quotesQuery = query(collection(db, 'quotations'), where('storeId', '==', storeId));
+      const quotesSnap = await getDocs(quotesQuery);
+      const matchedQuotes: string[] = [];
+
+      quotesSnap.forEach(docSnap => {
+        const quoteData = docSnap.data();
+        const quoteNo = quoteData.quotationNo || docSnap.id;
+        const customer = quoteData.customerName || 'Customer';
+        const dateStr = quoteData.createdAt?.toDate ? quoteData.createdAt.toDate().toLocaleDateString() : '';
+
+        const items = Array.isArray(quoteData.items) ? quoteData.items : [];
+        for (const item of items) {
+          const serialsInItem = Array.isArray(item.selectedSerials) ? item.selectedSerials : [];
+          if (serialsInItem.some((s: string) => s && s.toLowerCase() === cleanSn.toLowerCase())) {
+            matchedQuotes.push(`Quotation #${quoteNo} (${customer}${dateStr ? `, ${dateStr}` : ''})`);
+          }
+        }
+      });
+
+      setAuditDetails({
+        serial: cleanSn,
+        inStock: stockInfo,
+        inSales: { found: matchedSales.length > 0, details: matchedSales },
+        inReturns: { found: matchedReturns.length > 0, details: matchedReturns },
+        inQuotations: { found: matchedQuotes.length > 0, details: matchedQuotes }
+      });
+    } catch (err) {
+      console.error('Audit serial error:', err);
+      toast.error('Could not complete serial audit check');
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
+  // Force Add a serial number into the intake list, bypassing duplicate check
+  const handleForceAddSerial = (snToForce: string) => {
+    const trimmed = snToForce.trim();
+    if (!trimmed) return;
+
+    if (!selectedProduct) {
+      playScanBeep('error');
+      toast.warning('Please select a product first');
+      return;
+    }
+
+    if (serialNumbersList.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      playScanBeep('error');
+      toast.warning(`Serial "${trimmed}" is already in the current intake list.`);
+      return;
+    }
+
+    playScanBeep('success');
+    setSerialNumbersList(prev => [trimmed, ...prev]);
+    setForceAddedSerials(prev => {
+      const next = new Set(prev);
+      next.add(trimmed);
+      return next;
+    });
+
+    toast.success(`Serial "${trimmed}" force-added to inventory stock!`);
+
+    // Reset single input & warning & modal
+    setSingleSerial('');
+    setSingleSerialWarning(null);
+    setShowForceAddModal(false);
+    setAuditSerialTarget('');
+    setAuditDetails(null);
+
+    setTimeout(() => {
+      singleInputRef.current?.focus();
+    }, 50);
   };
 
   // Real-time check on single serial input
@@ -376,7 +511,12 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     const check = checkDuplicateSerial(trimmed);
     if (check.isDup) {
       playScanBeep('error');
-      toast.error(`Cannot add: ${check.reason}`);
+      if (check.reason?.includes('Already registered') || check.reason?.includes('Already assigned')) {
+        toast.error(`Cannot add: ${check.reason}. Click "Force Add to Stock" to bypass.`);
+        setSingleSerialWarning(check.reason);
+      } else {
+        toast.error(`Cannot add: ${check.reason}`);
+      }
       return;
     }
 
@@ -404,7 +544,9 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     const check = checkDuplicateSerial(trimmed);
     if (check.isDup) {
       playScanBeep('error');
-      toast.error(`Cannot add "${trimmed}": ${check.reason}`);
+      setSingleSerial(trimmed);
+      if (check.reason) setSingleSerialWarning(check.reason);
+      toast.error(`Cannot add "${trimmed}": ${check.reason}. You can use "Force Add to Stock" button to override.`);
       return false;
     }
 
@@ -517,7 +659,15 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
 
   // Remove one serial
   const handleRemoveSerial = (indexToRemove: number) => {
+    const snToRemove = serialNumbersList[indexToRemove];
     setSerialNumbersList(prev => prev.filter((_, i) => i !== indexToRemove));
+    if (snToRemove) {
+      setForceAddedSerials(prev => {
+        const next = new Set(prev);
+        next.delete(snToRemove);
+        return next;
+      });
+    }
   };
 
   // Clear all entered serials
@@ -525,6 +675,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     if (serialNumbersList.length === 0) return;
     if (window.confirm('Clear all entered serial numbers for this batch?')) {
       setSerialNumbersList([]);
+      setForceAddedSerials(new Set());
       toast.info('Cleared serial numbers list');
     }
   };
@@ -692,22 +843,46 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           const batch = writeBatch(db);
 
           chunk.forEach(sn => {
-            const serialDocRef = doc(collection(db, 'serialNumbers'));
-            batch.set(serialDocRef, {
-              productId: selectedProduct.id,
-              productName: selectedProduct.name,
-              productBrand: selectedProduct.brand,
-              productModelNumber: selectedProduct.modelNumber,
-              storeId,
-              serialNumber: sn,
-              status: 'Available',
-              purchasePrice: purchasePriceInput,
-              salePrice: salePriceInput,
-              vendorId: selectedVendorId || null,
-              vendorName: selectedVendor?.companyName || null,
-              referenceNumber: referenceNumber.trim() || null,
-              createdAt: serverTimestamp()
-            });
+            const existingDoc = allStoreSerials.find(s => s.serialNumber.toLowerCase() === sn.toLowerCase());
+            const isForced = forceAddedSerials.has(sn);
+
+            if (existingDoc && existingDoc.id) {
+              const serialDocRef = doc(db, 'serialNumbers', existingDoc.id);
+              batch.set(serialDocRef, {
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                productBrand: selectedProduct.brand,
+                productModelNumber: selectedProduct.modelNumber,
+                storeId,
+                serialNumber: sn,
+                status: 'Available',
+                purchasePrice: purchasePriceInput,
+                salePrice: salePriceInput,
+                vendorId: selectedVendorId || null,
+                vendorName: selectedVendor?.companyName || null,
+                referenceNumber: referenceNumber.trim() || null,
+                forcedRestock: isForced,
+                updatedAt: serverTimestamp()
+              }, { merge: true });
+            } else {
+              const serialDocRef = doc(collection(db, 'serialNumbers'));
+              batch.set(serialDocRef, {
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                productBrand: selectedProduct.brand,
+                productModelNumber: selectedProduct.modelNumber,
+                storeId,
+                serialNumber: sn,
+                status: 'Available',
+                purchasePrice: purchasePriceInput,
+                salePrice: salePriceInput,
+                vendorId: selectedVendorId || null,
+                vendorName: selectedVendor?.companyName || null,
+                referenceNumber: referenceNumber.trim() || null,
+                forcedRestock: isForced,
+                createdAt: serverTimestamp()
+              });
+            }
           });
 
           // In first batch, also update product doc, vendor balance & payments, and add inventory log
@@ -1516,6 +1691,23 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {isSerialized && selectedProduct && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuditSerialTarget(singleSerial.trim());
+                      setShowForceAddModal(true);
+                      if (singleSerial.trim()) {
+                        runSerialAudit(singleSerial.trim());
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    title="Force add serial numbers if giving duplicate errors"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Force Add Stock</span>
+                  </button>
+                )}
                 <span className={`px-3 py-1 rounded-full text-xs font-black ${
                   isSerialized 
                     ? 'bg-emerald-100 text-[#0a382c]' 
@@ -1801,9 +1993,42 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                     </div>
 
                     {singleSerialWarning && (
-                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                        <span className="font-semibold">Notice: {singleSerialWarning}</span>
+                      <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-amber-900 text-xs space-y-2.5 shadow-2xs animate-in fade-in duration-150">
+                        <div className="flex items-start gap-2.5">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <span className="font-bold text-slate-900 block">
+                              Cannot add: {singleSerialWarning}
+                            </span>
+                            <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                              If this item is physically present in your store and not in active stock, sales, returns, or quotations, you can override and force add it to stock.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200/60">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuditSerialTarget(singleSerial.trim());
+                              setShowForceAddModal(true);
+                              runSerialAudit(singleSerial.trim());
+                            }}
+                            className="px-2.5 py-1.5 bg-amber-200/80 hover:bg-amber-300 text-amber-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Audit status across stock, sales, returns, and quotations"
+                          >
+                            <Search className="w-3.5 h-3.5" />
+                            <span>Audit Status</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleForceAddSerial(singleSerial.trim())}
+                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                            title="Force add this serial number into stock"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Force Add to Stock</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-500">
@@ -1985,10 +2210,17 @@ SN-4029103"
                                 {sn}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-150">
-                                  <Check className="w-2.5 h-2.5 mr-1" />
-                                  Ready to Add
-                                </span>
+                                {forceAddedSerials.has(sn) ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs">
+                                    <Zap className="w-2.5 h-2.5 mr-1 text-rose-600" />
+                                    Force Added
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-150">
+                                    <Check className="w-2.5 h-2.5 mr-1" />
+                                    Ready to Add
+                                  </span>
+                                )}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-right">
                                 <button
@@ -2053,6 +2285,262 @@ SN-4029103"
           )}
         </div>
       </div>
+
+      {/* Force Add Stock / Serial Audit Modal */}
+      {showForceAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-gradient-to-r from-rose-50 via-slate-50 to-white border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-100 text-rose-700 rounded-xl shadow-2xs">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Force Add Stock (Serial Override)</h3>
+                  <p className="text-xs text-slate-500">
+                    Bypass duplicate restrictions and manually force intake to stock
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForceAddModal(false);
+                  setAuditDetails(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* Target Product Summary */}
+              {selectedProduct && (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Target Product
+                    </span>
+                    <span className="font-extrabold text-slate-900 text-xs">
+                      {selectedProduct.brand} {selectedProduct.name}
+                    </span>
+                    {selectedProduct.modelNumber && (
+                      <span className="text-[11px] text-slate-500 block font-mono">
+                        Model: {selectedProduct.modelNumber}
+                      </span>
+                    )}
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-[#0a382c] font-black text-[11px]">
+                    Current Stock: {selectedProduct.stock || 0}
+                  </span>
+                </div>
+              )}
+
+              {/* Serial Input & Audit Trigger */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Serial Number to Force Add <span className="text-rose-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Enter or scan serial number..."
+                      value={auditSerialTarget}
+                      onChange={(e) => {
+                        setAuditSerialTarget(e.target.value);
+                        if (auditDetails && auditDetails.serial !== e.target.value.trim()) {
+                          setAuditDetails(null);
+                        }
+                      }}
+                      className="glass-input block w-full pl-9 pr-3 py-2.5 rounded-xl font-mono text-xs font-bold text-slate-900"
+                    />
+                    <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!auditSerialTarget.trim() || isAuditing}
+                    onClick={() => runSerialAudit(auditSerialTarget)}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                    title="Audit across stock, sales, return items, and quotations"
+                  >
+                    {isAuditing ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-600" />
+                    ) : (
+                      <Search className="w-3.5 h-3.5 text-slate-600" />
+                    )}
+                    <span>Audit Status</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {isAuditing && (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center gap-2 text-slate-600">
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#0a382c]" />
+                  <span>Auditing store database, sales invoices, return items, and quotations...</span>
+                </div>
+              )}
+
+              {/* Audit Results Breakdown */}
+              {auditDetails && !isAuditing && (
+                <div className="space-y-2.5 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Audit Verification Details:
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-700">
+                      SN: {auditDetails.serial}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Check 1: In Database */}
+                    <div className={`p-2.5 rounded-xl border ${
+                      auditDetails.inStock.found 
+                        ? 'bg-amber-50/70 border-amber-200' 
+                        : 'bg-emerald-50/70 border-emerald-200'
+                    }`}>
+                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                        {auditDetails.inStock.found ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        <span className="text-slate-800">Store Serial Database</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600">
+                        {auditDetails.inStock.found
+                          ? `Found (${auditDetails.inStock.status}) on ${auditDetails.inStock.productName || 'Product'}`
+                          : 'Not found in store serial database'}
+                      </p>
+                    </div>
+
+                    {/* Check 2: Sales Invoices */}
+                    <div className={`p-2.5 rounded-xl border ${
+                      auditDetails.inSales.found 
+                        ? 'bg-rose-50/70 border-rose-200' 
+                        : 'bg-emerald-50/70 border-emerald-200'
+                    }`}>
+                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                        {auditDetails.inSales.found ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        <span className="text-slate-800">Sales Invoices</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 truncate" title={auditDetails.inSales.details.join(', ')}>
+                        {auditDetails.inSales.found
+                          ? auditDetails.inSales.details[0]
+                          : 'Not found in any sales invoice'}
+                      </p>
+                    </div>
+
+                    {/* Check 3: Return Records */}
+                    <div className={`p-2.5 rounded-xl border ${
+                      auditDetails.inReturns.found 
+                        ? 'bg-amber-50/70 border-amber-200' 
+                        : 'bg-emerald-50/70 border-emerald-200'
+                    }`}>
+                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                        {auditDetails.inReturns.found ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        <span className="text-slate-800">Return Records</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 truncate" title={auditDetails.inReturns.details.join(', ')}>
+                        {auditDetails.inReturns.found
+                          ? auditDetails.inReturns.details[0]
+                          : 'Not found in any return records'}
+                      </p>
+                    </div>
+
+                    {/* Check 4: Quotations */}
+                    <div className={`p-2.5 rounded-xl border ${
+                      auditDetails.inQuotations.found 
+                        ? 'bg-amber-50/70 border-amber-200' 
+                        : 'bg-emerald-50/70 border-emerald-200'
+                    }`}>
+                      <div className="flex items-center gap-1.5 font-bold mb-1">
+                        {auditDetails.inQuotations.found ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        <span className="text-slate-800">Quotations</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 truncate" title={auditDetails.inQuotations.details.join(', ')}>
+                        {auditDetails.inQuotations.found
+                          ? auditDetails.inQuotations.details[0]
+                          : 'Not found in any quotation'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Verdict Guidance Callout */}
+                  {!auditDetails.inSales.found && !auditDetails.inReturns.found && !auditDetails.inQuotations.found ? (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Safe to Force Add:</span>
+                        <span className="text-[11px] text-emerald-800">
+                          This serial number is not in any sales, returns, or quotations. Clicking "Force Add to Stock" will override any previous registration and mark it as Available.
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Historical Activity Detected:</span>
+                        <span className="text-[11px] text-rose-800">
+                          This serial appears in past records. If you physically have this unit in hand and want to restock it, click "Force Add to Stock" to reactivate it.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 space-y-1">
+                <span className="font-bold text-slate-800 block text-[11px]">How Force Add Works:</span>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Bypasses the "Already registered for this product" check, adds this unit to your pending intake batch, and reassigns its status to <strong>Available</strong> upon saving.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForceAddModal(false);
+                  setAuditDetails(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!auditSerialTarget.trim()}
+                onClick={() => handleForceAddSerial(auditSerialTarget)}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                <Zap className="w-4 h-4" />
+                <span>Force Add to Stock</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Camera Barcode / Serial Scanner Modal */}
       <BarcodeScannerModal

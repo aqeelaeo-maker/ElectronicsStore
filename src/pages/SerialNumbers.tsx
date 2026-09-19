@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, where, doc, deleteDoc, getDocs, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Search, Plus, Trash2, Hash } from 'lucide-react';
+import { Search, Plus, Trash2, Hash, AlertCircle, Zap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -34,6 +34,7 @@ export default function SerialNumbers() {
   const [productSearch, setProductSearch] = useState('');
   const [newSerialNumber, setNewSerialNumber] = useState('');
   const [addingSerial, setAddingSerial] = useState(false);
+  const [duplicateConflict, setDuplicateConflict] = useState<{ serial: string; docId?: string; reason: string } | null>(null);
 
   useEffect(() => {
     if (!storeId) return;
@@ -107,9 +108,14 @@ export default function SerialNumbers() {
     setAddingSerial(true);
     try {
       // Check if serial number already exists for this product locally
-      const isLocalDuplicate = serialNumbers.some(sn => sn.serialNumber.toLowerCase() === targetSerialNumber.toLowerCase());
-      if (isLocalDuplicate) {
-        toast.warning('This serial number already exists for this product');
+      const localMatch = serialNumbers.find(sn => sn.serialNumber.toLowerCase() === targetSerialNumber.toLowerCase());
+      if (localMatch) {
+        setDuplicateConflict({
+          serial: targetSerialNumber,
+          docId: localMatch.id,
+          reason: `Already registered for this product (${localMatch.status || 'Available'})`
+        });
+        toast.warning('This serial number already exists for this product. You can click "Force Add to Stock" to bypass.');
         setAddingSerial(false);
         return;
       }
@@ -122,16 +128,22 @@ export default function SerialNumbers() {
       );
       const querySnapshot = await getDocs(serialQuery);
       if (!querySnapshot.empty) {
-        const existingDoc = querySnapshot.docs[0].data();
+        const existingDocSnap = querySnapshot.docs[0];
+        const existingDoc = existingDocSnap.data();
         const existingProductId = existingDoc.productId;
         
         // Find if we have the product name loaded to give a highly descriptive error
         const otherProduct = products.find(p => p.id === existingProductId);
-        if (otherProduct) {
-          toast.error(`This serial number is already assigned to product: "${otherProduct.name}" (${otherProduct.brand})`);
-        } else {
-          toast.error('This serial number is already assigned to another product');
-        }
+        const reason = otherProduct
+          ? `Already assigned to product: "${otherProduct.name}" (${otherProduct.brand})`
+          : 'Already assigned to another product';
+
+        setDuplicateConflict({
+          serial: targetSerialNumber,
+          docId: existingDocSnap.id,
+          reason
+        });
+        toast.error(`${reason}. Click "Force Add to Stock" to override.`);
         setAddingSerial(false);
         return;
       }
@@ -155,9 +167,51 @@ export default function SerialNumbers() {
 
       toast.success('Serial number added successfully');
       setNewSerialNumber('');
+      setDuplicateConflict(null);
     } catch (error) {
       console.error('Error adding serial number:', error);
       toast.error('Failed to add serial number');
+    } finally {
+      setAddingSerial(false);
+    }
+  };
+
+  const handleForceAddSerialNumber = async (serialToForce: string, existingDocId?: string) => {
+    if (!selectedProduct || !storeId || !serialToForce) return;
+
+    setAddingSerial(true);
+    try {
+      if (existingDocId) {
+        await updateDoc(doc(db, 'serialNumbers', existingDocId), {
+          productId: selectedProduct.id,
+          serialNumber: serialToForce,
+          status: 'Available',
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'serialNumbers'), {
+          productId: selectedProduct.id,
+          storeId,
+          serialNumber: serialToForce,
+          status: 'Available',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      try {
+        await updateDoc(doc(db, 'products', selectedProduct.id), {
+          stock: increment(1)
+        });
+      } catch (err) {
+        console.warn('Could not increment product stock count:', err);
+      }
+
+      toast.success(`Serial "${serialToForce}" force-added to stock for ${selectedProduct.name}!`);
+      setNewSerialNumber('');
+      setDuplicateConflict(null);
+    } catch (error) {
+      console.error('Error force adding serial number:', error);
+      toast.error('Failed to force add serial number');
     } finally {
       setAddingSerial(false);
     }
@@ -313,6 +367,28 @@ export default function SerialNumbers() {
                     Add
                   </button>
                 </form>
+
+                {duplicateConflict && (
+                  <div className="mt-3 p-3.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs animate-in fade-in duration-150">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-slate-900 block">{duplicateConflict.reason}</span>
+                        <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                          If this unit is physically in stock, click "Force Add to Stock" to override and assign it to <strong>{selectedProduct.name}</strong> as Available.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleForceAddSerialNumber(duplicateConflict.serial, duplicateConflict.docId)}
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer self-end sm:self-auto"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Force Add to Stock</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 bg-white">
