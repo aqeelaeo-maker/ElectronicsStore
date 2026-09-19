@@ -1794,10 +1794,11 @@ export default function Sales() {
           @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
           @page {
             size: auto;
-            margin: 8mm 12mm;
+            margin: 6mm 8mm;
           }
           html, body {
-            height: 100%;
+            height: auto !important;
+            min-height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
             color: #000000;
@@ -1807,18 +1808,16 @@ export default function Sales() {
           }
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            padding: 8mm 12mm;
+            padding: 6mm 8mm;
             box-sizing: border-box;
             color: #000000;
           }
           .receipt-container {
             width: 100%;
-            max-width: 800px;
+            max-width: 100%;
             margin: 0 auto;
-            min-height: 255mm;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             box-sizing: border-box;
           }
           .invoice-main-content {
@@ -1838,30 +1837,30 @@ export default function Sales() {
             margin-bottom: 8px;
           }
           .logo-cell {
-            width: 115px;
+            width: 95px;
             vertical-align: middle;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 95px;
-            height: 95px;
-            border-radius: 14px;
+            width: 78px;
+            height: 78px;
+            border-radius: 12px;
             background-color: #f0b90b;
             color: #000000;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 36px;
+            font-size: 30px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
           }
           .logo-img {
-            width: 95px;
-            height: 95px;
-            border-radius: 14px;
+            width: 78px;
+            height: 78px;
+            border-radius: 12px;
             object-fit: contain;
             border: none;
             outline: none;
@@ -1875,12 +1874,12 @@ export default function Sales() {
             padding: 0 8px;
           }
           .right-spacer-cell {
-            width: 115px;
+            width: 95px;
             vertical-align: middle;
           }
           .company-name {
             font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
-            font-size: 44px;
+            font-size: 32px;
             font-weight: 900;
             color: #000000;
             margin: 0;
@@ -1888,8 +1887,8 @@ export default function Sales() {
             text-align: center;
             letter-spacing: 0.01em;
             text-decoration: underline;
-            text-underline-offset: 7px;
-            text-decoration-thickness: 3px;
+            text-underline-offset: 5px;
+            text-decoration-thickness: 2.5px;
             text-decoration-color: #000000;
           }
           .details-cell {
@@ -1900,8 +1899,8 @@ export default function Sales() {
           }
           .company-left-details {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
-            font-size: 16px;
-            line-height: 1.4;
+            font-size: 13px;
+            line-height: 1.35;
             color: #000000;
             text-align: left;
           }
@@ -1931,7 +1930,7 @@ export default function Sales() {
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
           }
           .items-table thead {
             background-color: #000000 !important;
@@ -1945,11 +1944,11 @@ export default function Sales() {
           .items-table th {
             background-color: #000000 !important;
             color: #ffffff !important;
-            font-size: 18px;
+            font-size: 13px;
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 10px 10px;
+            padding: 7px 10px;
             border: 1px solid #000000;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -1958,41 +1957,43 @@ export default function Sales() {
             border-bottom: 1.5px solid #000000 !important;
           }
           .items-table td {
-            padding: 7px 10px;
-            font-size: 12px;
+            padding: 6px 10px;
+            font-size: 11px;
             color: #000000;
             border-bottom: 1.5px solid #000000 !important;
           }
           .invoice-bottom-section {
             width: 100%;
-            margin-top: auto;
-            padding-top: 20px;
-            page-break-inside: avoid;
+            margin-top: 12px;
+            padding-top: 6px;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .totals-table {
-            width: 390px;
+            width: 340px;
             margin-left: auto;
             border-collapse: collapse;
-            font-size: 18px;
+            font-size: 14px;
             color: #000000;
           }
           .totals-table td {
-            padding: 6px 0;
+            padding: 4px 0;
             color: #000000;
           }
           .totals-table .total-row {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: 900;
             color: #000000;
             border-top: 2px solid #000000;
-            padding-top: 8px;
+            padding-top: 6px;
           }
           .terms-section {
-            margin-top: 14px;
+            margin-top: 12px;
             border-top: 1.5px solid #000000;
             padding-top: 6px;
             text-align: left;
-            page-break-inside: avoid;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .terms-header {
             font-size: 10px;
@@ -2010,14 +2011,17 @@ export default function Sales() {
             font-weight: 600;
           }
           .footer {
-            margin-top: 12px;
+            margin-top: 10px;
             border-top: 1.5px solid #000000;
-            padding-top: 8px;
+            padding-top: 6px;
+            padding-bottom: 10px;
             text-align: center;
             font-size: 11px;
             color: #000000;
             font-weight: 700;
             line-height: 1.4;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           @media print {
             body {
@@ -2027,14 +2031,12 @@ export default function Sales() {
             .receipt-container {
               width: 100% !important;
               max-width: 100% !important;
-              min-height: 255mm !important;
               display: flex !important;
               flex-direction: column !important;
-              justify-content: space-between !important;
             }
             .invoice-bottom-section {
-              margin-top: auto !important;
               page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
           }
         </style>
@@ -2213,7 +2215,10 @@ export default function Sales() {
       const htmlContent = generateSaleInvoiceHtml(sale);
       const safeCustomerName = (sale.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
       const filename = `Invoice_${sale.invoiceNo}_${safeCustomerName}`;
-      await downloadHtmlAsPdf(htmlContent, filename);
+      await downloadHtmlAsPdf(htmlContent, filename, {
+        orientation: 'portrait',
+        margin: [6, 6, 8, 6]
+      });
       toast.success(`Invoice #${sale.invoiceNo} downloaded successfully!`);
     } catch (err) {
       console.error('Failed to download invoice PDF:', err);

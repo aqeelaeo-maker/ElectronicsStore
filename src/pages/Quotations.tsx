@@ -841,16 +841,44 @@ export default function Quotations() {
         <meta charset="utf-8">
         <title>Quotation - ${quote.quotationNo}</title>
         <style>
-          @page { size: A4; margin: 12mm 16mm; }
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 12mm 16mm; }
-          .quote-container { width: 100%; max-width: 800px; margin: 0 auto; }
-          table { width: 100%; border-collapse: collapse; }
+          @page { size: A4; margin: 6mm 8mm; }
+          html, body {
+            height: auto !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            color: #0f172a;
+            background-color: #ffffff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+            margin: 0;
+            padding: 6mm 8mm;
+            box-sizing: border-box;
+          }
+          .quote-container {
+            width: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+            box-sizing: border-box;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .avoid-break, .signatures-block, .totals-box, .notes-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
         </style>
       </head>
       <body>
         <div class="quote-container">
           <!-- Header -->
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0a382c; padding-bottom: 14px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0a382c; padding-bottom: 12px; margin-bottom: 14px;">
             <div>
               <h1 style="font-size: 22px; font-weight: 900; margin: 0; color: #0a382c;">${storeDetails.name || 'ElectroManage'}</h1>
               <p style="font-size: 11px; color: #475569; margin: 3px 0 0 0;">${storeDetails.address || 'Commercial Electronics Hub'}</p>
@@ -867,15 +895,15 @@ export default function Quotations() {
           </div>
 
           <!-- Customer & Info Cards -->
-          <div style="display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px;">
-            <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
+          <div style="display: flex; justify-content: space-between; gap: 14px; margin-bottom: 14px;">
+            <div style="flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 9px 12px;">
               <div style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 4px;">Prepared For (Customer)</div>
               <div style="font-size: 13px; font-weight: 800; color: #0f172a;">${quote.customerName || 'Walk In Customer'}</div>
               ${quote.customerMobile ? `<div style="font-size: 10.5px; color: #475569; margin-top: 2px;">Phone: <b>${quote.customerMobile}</b></div>` : ''}
               ${quote.customerEmail ? `<div style="font-size: 10.5px; color: #475569; margin-top: 1px;">Email: ${quote.customerEmail}</div>` : ''}
               ${quote.customerCity ? `<div style="font-size: 10.5px; color: #475569; margin-top: 1px;">City: ${quote.customerCity}</div>` : ''}
             </div>
-            <div style="width: 220px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
+            <div style="width: 220px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 9px 12px;">
               <div style="font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; margin-bottom: 4px;">Quotation Status</div>
               <div style="font-size: 12px; font-weight: 800; color: #0a382c; text-transform: uppercase;">${quote.status}</div>
               <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Items: <b>${quote.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0} units</b></div>
@@ -884,7 +912,7 @@ export default function Quotations() {
           </div>
 
           <!-- Items Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px;">
             <thead>
               <tr style="background-color: #0a382c; color: #ffffff;">
                 <th style="padding: 7px 10px; font-size: 10px; font-weight: 800; text-align: center; width: 35px;">#</th>
@@ -901,7 +929,7 @@ export default function Quotations() {
           </table>
 
           <!-- Totals Section -->
-          <div style="display: flex; justify-content: flex-end; margin-bottom: 18px;">
+          <div class="totals-box avoid-break" style="display: flex; justify-content: flex-end; margin-bottom: 14px; page-break-inside: avoid !important; break-inside: avoid !important;">
             <div style="width: 280px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
               <div style="display: flex; justify-content: space-between; padding: 7px 12px; font-size: 11px; background: #ffffff; border-bottom: 1px solid #f1f5f9;">
                 <span style="color: #64748b;">Subtotal:</span>
@@ -911,7 +939,7 @@ export default function Quotations() {
                 <span style="color: #64748b;">Total Discount:</span>
                 <span style="font-weight: 700; color: #e11d48;">- PKR ${discount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
-              <div style="display: flex; justify-content: space-between; padding: 9px 12px; font-size: 13px; font-weight: 900; background: #ecfdf5; color: #065f46;">
+              <div style="display: flex; justify-content: space-between; padding: 8px 12px; font-size: 13px; font-weight: 900; background: #ecfdf5; color: #065f46;">
                 <span>Estimated Total:</span>
                 <span>PKR ${quote.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
@@ -919,8 +947,8 @@ export default function Quotations() {
           </div>
 
           <!-- Notes & Terms -->
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 30px; font-size: 10px; color: #475569; line-height: 1.5;">
-            <div style="font-weight: 800; color: #0f172a; margin-bottom: 4px; text-transform: uppercase; font-size: 9.5px;">Terms & Conditions</div>
+          <div class="notes-section avoid-break" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 9px 12px; margin-bottom: 16px; font-size: 10px; color: #475569; line-height: 1.45; page-break-inside: avoid !important; break-inside: avoid !important;">
+            <div style="font-weight: 800; color: #0f172a; margin-bottom: 3px; text-transform: uppercase; font-size: 9.5px;">Terms & Conditions</div>
             <div>• This document is an estimate and does not serve as a sales invoice or claim of stock reservation.</div>
             <div>• Quoted prices are valid until <b>${formatDateDisplay(quote.validUntil)}</b> and are subject to stock availability upon confirmation.</div>
             ${quote.notes ? `<div>• Note: ${quote.notes}</div>` : ''}
@@ -928,7 +956,7 @@ export default function Quotations() {
           </div>
 
           <!-- Signatures -->
-          <div style="display: flex; justify-content: space-between; margin-top: 40px; padding-top: 10px;">
+          <div class="signatures-block quotation-signatures avoid-break" style="display: flex; justify-content: space-between; margin-top: 18px; padding-top: 6px; padding-bottom: 12px; page-break-inside: avoid !important; break-inside: avoid !important;">
             <div style="text-align: center; width: 180px;">
               <div style="border-top: 1px solid #94a3b8; margin-bottom: 4px;"></div>
               <div style="font-size: 10.5px; font-weight: 700; color: #475569;">Customer Acceptance</div>
@@ -988,7 +1016,10 @@ export default function Quotations() {
       const htmlContent = generateQuotationHtml(quote);
       const safeCustomerName = (quote.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
       const filename = `Quotation_${quote.quotationNo}_${safeCustomerName}`;
-      await downloadHtmlAsPdf(htmlContent, filename);
+      await downloadHtmlAsPdf(htmlContent, filename, {
+        orientation: 'portrait',
+        margin: [6, 6, 8, 6]
+      });
       toast.success(`Quotation #${quote.quotationNo} downloaded successfully!`);
     } catch (err) {
       console.error('Failed to download quotation PDF:', err);

@@ -955,13 +955,12 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               white-space: nowrap;
             }
             .summary-val {
-              font-size: 12px;
+              font-size: 11px;
               font-weight: 800;
               font-family: monospace;
               color: #0f172a;
               white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
+              letter-spacing: -0.2px;
             }
             .table-container {
               width: 100% !important;
@@ -1056,14 +1055,14 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             </div>
           </div>
 
-          <!-- Summary Cards Grid (Initial Balance, Purchases, Paid, Pending on Bills, Net Balance) -->
+          <!-- Summary Cards Grid (Initial Balance, Total Invoiced, Total Paid, Return Value, Pending Invoices, Net Balance) -->
           <div class="summary-cards-grid">
             <div class="summary-card">
               <div class="summary-label">Initial Balance</div>
               <div class="summary-val">PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">Total Purchases</div>
+              <div class="summary-label">Total Invoiced</div>
               <div class="summary-val">PKR ${financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card">
@@ -1071,12 +1070,16 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               <div class="summary-val" style="color: #15803d;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">Pending Bills</div>
+              <div class="summary-label">Return Value</div>
+              <div class="summary-val" style="color: #7e22ce;">PKR 0.00</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-label">Pending Invoices</div>
               <div class="summary-val" style="color: #b45309;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card" style="border: 1.5px solid #0a382c; background: #f0fdf4;">
               <div class="summary-label" style="color: #0a382c;">Net Balance</div>
-              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 12px;">
+              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 11px;">
                 PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>

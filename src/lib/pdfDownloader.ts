@@ -80,13 +80,15 @@ export async function downloadHtmlAsPdf(
   // Base PDF layout and typography rules to guarantee visibility and clean pagination
   const basePdfStyles = `
     <style>
-      .pdf-export-wrapper, body {
+      html, body, .pdf-export-wrapper {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
         color: #0f172a !important;
         background-color: #ffffff !important;
         box-sizing: border-box !important;
         width: 100% !important;
         max-width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
         opacity: 1 !important;
@@ -96,6 +98,9 @@ export async function downloadHtmlAsPdf(
       }
       .pdf-export-wrapper * {
         box-sizing: border-box !important;
+      }
+      .pdf-export-wrapper {
+        padding-bottom: 24px !important;
       }
       table {
         width: 100% !important;
@@ -118,7 +123,8 @@ export async function downloadHtmlAsPdf(
       tfoot {
         display: table-footer-group !important;
       }
-      .avoid-break, .header-banner, .net-balance-banner, .signatures-block, .summary-cards-grid {
+      .avoid-break, .header-banner, .net-balance-banner, .signatures-block, .summary-cards-grid,
+      .invoice-bottom-section, .terms-section, .footer, .quotation-signatures, .totals-table, .totals-box, .notes-section {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
@@ -128,7 +134,7 @@ export async function downloadHtmlAsPdf(
   container.innerHTML = `
     ${basePdfStyles}
     ${stylesCombined}
-    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0; margin: 0; box-sizing: border-box; width: 100%; max-width: 100%;">
+    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0 0 24px 0; margin: 0; box-sizing: border-box; width: 100%; max-width: 100%; height: auto; min-height: auto;">
       ${bodyContent}
     </div>
   `;
@@ -163,9 +169,10 @@ export async function downloadHtmlAsPdf(
 
     const html2pdfLib: any = (html2pdf as any)?.default || html2pdf || (window as any).html2pdf;
     const measuredWidth = Math.max(a4WidthPx, container.offsetWidth || 0, container.scrollWidth || 0);
+    const measuredHeight = Math.max(container.offsetHeight || 0, container.scrollHeight || 0, 800);
 
     const opt = {
-      margin: options?.margin ?? [6, 6, 6, 6],
+      margin: options?.margin ?? [6, 6, 8, 6],
       filename: safeFilename,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: {
@@ -176,6 +183,8 @@ export async function downloadHtmlAsPdf(
         backgroundColor: '#ffffff',
         width: measuredWidth,
         windowWidth: measuredWidth,
+        height: measuredHeight,
+        windowHeight: measuredHeight,
         scrollX: 0,
         scrollY: 0
       },
@@ -186,7 +195,20 @@ export async function downloadHtmlAsPdf(
       },
       pagebreak: { 
         mode: ['css', 'legacy'],
-        avoid: ['tr', '.avoid-break', '.summary-card', '.net-balance-banner', '.signatures-block']
+        avoid: [
+          'tr',
+          '.avoid-break',
+          '.summary-card',
+          '.net-balance-banner',
+          '.signatures-block',
+          '.invoice-bottom-section',
+          '.terms-section',
+          '.footer',
+          '.quotation-signatures',
+          '.totals-table',
+          '.totals-box',
+          '.notes-section'
+        ]
       }
     };
 

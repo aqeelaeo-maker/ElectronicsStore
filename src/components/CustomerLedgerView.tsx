@@ -962,13 +962,12 @@ export default function CustomerLedgerView({
               white-space: nowrap;
             }
             .summary-val {
-              font-size: 12px;
+              font-size: 11px;
               font-weight: 800;
               font-family: monospace;
               color: #0f172a;
               white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
+              letter-spacing: -0.2px;
             }
             .table-container {
               width: 100% !important;
