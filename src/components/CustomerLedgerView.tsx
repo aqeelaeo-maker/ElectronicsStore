@@ -859,7 +859,7 @@ export default function CustomerLedgerView({
 
   // Generate Statement HTML for Printing and PDF Download
   const generateCustomerLedgerHtml = (): string => {
-    const rowsHtml = statementRows.map((r) => `
+    const rowsHtml = statementRows.length > 0 ? statementRows.map((r) => `
       <tr style="border-bottom: 1px solid #cbd5e1; ${r.type === 'Initial Balance' ? 'background-color: #f1f5f3; font-weight: bold;' : ''}">
         <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">
           ${r.date ? new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
@@ -883,7 +883,13 @@ export default function CustomerLedgerView({
           PKR ${r.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
       </tr>
-    `).join('');
+    `).join('') : `
+      <tr>
+        <td colspan="8" style="padding: 24px 8px; text-align: center; color: #64748b; font-style: italic; font-size: 11px;">
+          No transactions or ledger entries recorded for this customer.
+        </td>
+      </tr>
+    `;
 
     const statementHtml = `
       <!DOCTYPE html>
@@ -895,7 +901,7 @@ export default function CustomerLedgerView({
               size: A4 portrait;
               margin: 10mm;
             }
-            body {
+            body, .pdf-export-wrapper {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
               color: #0f172a;
               background-color: #ffffff;
@@ -928,16 +934,20 @@ export default function CustomerLedgerView({
               color: #0f172a;
             }
             .summary-cards-grid {
-              display: grid;
-              grid-template-columns: repeat(6, 1fr);
-              gap: 8px;
+              display: flex;
+              flex-wrap: nowrap;
+              gap: 6px;
               margin-bottom: 14px;
+              width: 100%;
             }
             .summary-card {
+              flex: 1 1 0;
+              min-width: 0;
               border: 1px solid #cbd5e1;
               background: #f8fafc;
-              padding: 7px 9px;
+              padding: 6px 8px;
               border-radius: 6px;
+              box-sizing: border-box;
             }
             .summary-label {
               font-size: 9px;
@@ -945,12 +955,14 @@ export default function CustomerLedgerView({
               text-transform: uppercase;
               color: #64748b;
               margin-bottom: 3px;
+              white-space: nowrap;
             }
             .summary-val {
               font-size: 12px;
               font-weight: 800;
               font-family: monospace;
               color: #0f172a;
+              white-space: nowrap;
             }
             .table-container {
               width: 100%;
@@ -1052,12 +1064,12 @@ export default function CustomerLedgerView({
               <div class="summary-val" style="color: #7e22ce;">PKR ${financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card">
-              <div class="summary-label">Pending on Invoices</div>
+              <div class="summary-label">Pending Invoices</div>
               <div class="summary-val" style="color: #b45309;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
             <div class="summary-card" style="border: 1.5px solid #0a382c; background: #f0fdf4;">
-              <div class="summary-label" style="color: #0a382c;">Net Account Balance</div>
-              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 13px;">
+              <div class="summary-label" style="color: #0a382c;">Net Balance</div>
+              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 12px;">
                 PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
@@ -1067,14 +1079,14 @@ export default function CustomerLedgerView({
           <table class="table-container">
             <thead>
               <tr>
-                <th style="width: 13%;">Date & Time</th>
-                <th style="width: 10%;">Type</th>
-                <th style="width: 13%;">Ref / Invoice #</th>
-                <th style="width: 25%;">Particulars / Notes</th>
-                <th style="width: 11%; text-align: right;">Invoice Total (Debit)</th>
-                <th style="width: 11%; text-align: right;">Paid (Credit)</th>
-                <th style="width: 13%; text-align: right;">Invoice Balance (Pending)</th>
-                <th style="width: 14%; text-align: right;">Net Running Balance</th>
+                <th style="width: 12%;">Date & Time</th>
+                <th style="width: 9%;">Type</th>
+                <th style="width: 12%;">Ref / Invoice #</th>
+                <th style="width: 26%;">Particulars / Notes</th>
+                <th style="width: 11%; text-align: right;">Invoice Total (Dr)</th>
+                <th style="width: 10%; text-align: right;">Paid (Cr)</th>
+                <th style="width: 10%; text-align: right;">Invoice Balance</th>
+                <th style="width: 10%; text-align: right;">Net Running Bal</th>
               </tr>
             </thead>
             <tbody>
@@ -1133,20 +1145,48 @@ export default function CustomerLedgerView({
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      window.print();
-      return;
-    }
+    try {
+      const statementHtml = generateCustomerLedgerHtml();
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      document.body.appendChild(printFrame);
 
-    const statementHtml = generateCustomerLedgerHtml();
-    printWindow.document.open();
-    printWindow.document.write(statementHtml);
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 400);
+      const frameDoc = printFrame.contentWindow?.document || printFrame.contentDocument;
+      if (frameDoc) {
+        frameDoc.open();
+        frameDoc.write(statementHtml);
+        frameDoc.close();
+        setTimeout(() => {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }, 1500);
+        }, 400);
+      } else {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(statementHtml);
+          printWindow.document.close();
+          setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+          }, 400);
+        } else {
+          window.print();
+        }
+      }
+    } catch {
+      window.print();
+    }
   };
 
   const [isDownloadingLedger, setIsDownloadingLedger] = useState(false);
@@ -1174,7 +1214,7 @@ export default function CustomerLedgerView({
       className="w-full max-w-full space-y-6 animate-in fade-in duration-200"
     >
       {/* Top Navigation & Action Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-4">
           <button
             type="button"
@@ -1229,29 +1269,29 @@ export default function CustomerLedgerView({
         </div>
 
         {/* Header Action Buttons */}
-        <div className="flex items-center gap-2 sm:gap-3 w-full lg:w-auto flex-wrap">
+        <div className="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto flex-wrap shrink-0">
           <button
             type="button"
             onClick={() => setShowReceiveForm(!showReceiveForm)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-950/10 transition-all cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a382c] hover:bg-[#0d4a3b] text-white text-xs sm:text-sm font-bold shadow-md shadow-emerald-950/10 transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
             <Banknote className="w-4 h-4 text-emerald-300 shrink-0" />
-            <span>{showReceiveForm ? 'Hide Payment Form' : 'Receive / Settle Payment'}</span>
+            <span className="whitespace-nowrap">{showReceiveForm ? 'Hide Payment Form' : 'Receive / Settle Payment'}</span>
           </button>
           <button
             type="button"
             onClick={handlePrint}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
             title="Print Full Customer Ledger Statement"
           >
             <Printer className="w-4 h-4 text-slate-600 shrink-0" />
-            <span>Print Statement</span>
+            <span className="whitespace-nowrap">Print Statement</span>
           </button>
           <button
             type="button"
             onClick={handleDownloadLedger}
             disabled={isDownloadingLedger}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
             title="Download Customer Ledger Statement as PDF"
           >
             {isDownloadingLedger ? (
@@ -1259,7 +1299,7 @@ export default function CustomerLedgerView({
             ) : (
               <Download className="w-4 h-4 shrink-0" />
             )}
-            <span>{isDownloadingLedger ? 'Downloading...' : 'Download Ledger'}</span>
+            <span className="whitespace-nowrap">{isDownloadingLedger ? 'Downloading...' : 'Download Ledger'}</span>
           </button>
         </div>
       </div>

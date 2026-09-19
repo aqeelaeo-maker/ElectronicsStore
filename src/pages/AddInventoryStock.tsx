@@ -512,7 +512,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
     if (check.isDup) {
       playScanBeep('error');
       if (check.reason?.includes('Already registered') || check.reason?.includes('Already assigned')) {
-        toast.error(`Cannot add: ${check.reason}. Click "Force Add to Stock" to bypass.`);
+        toast.error(`Cannot add: ${check.reason}. Click "Force Add" or "Add Stock Manually by Force" to override.`);
         setSingleSerialWarning(check.reason);
       } else {
         toast.error(`Cannot add: ${check.reason}`);
@@ -546,7 +546,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
       playScanBeep('error');
       setSingleSerial(trimmed);
       if (check.reason) setSingleSerialWarning(check.reason);
-      toast.error(`Cannot add "${trimmed}": ${check.reason}. You can use "Force Add to Stock" button to override.`);
+      toast.error(`Cannot add "${trimmed}": ${check.reason}. Use "Force Add" button to add stock manually by force.`);
       return false;
     }
 
@@ -1909,11 +1909,11 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
             ) : (
               <>
                 {/* Input Mode Tabs */}
-                <div className="flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+                <div className="flex flex-wrap sm:flex-nowrap p-1 bg-slate-100 rounded-xl border border-slate-200 gap-1 sm:gap-0">
                   <button
                     type="button"
                     onClick={() => setInputMode('single')}
-                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`flex-1 py-2 px-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       inputMode === 'single'
                         ? 'bg-[#0a382c] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1925,7 +1925,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   <button
                     type="button"
                     onClick={() => setInputMode('bulk')}
-                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`flex-1 py-2 px-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       inputMode === 'bulk'
                         ? 'bg-[#0a382c] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1937,7 +1937,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   <button
                     type="button"
                     onClick={() => setInputMode('sequence')}
-                    className={`flex-1 py-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`flex-1 py-2 px-2 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       inputMode === 'sequence'
                         ? 'bg-[#0a382c] text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1945,6 +1945,26 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     Range Generator
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!selectedProduct) {
+                        toast.warning('Please select a product first');
+                        return;
+                      }
+                      const target = singleSerial.trim();
+                      setAuditSerialTarget(target);
+                      setShowForceAddModal(true);
+                      if (target) {
+                        runSerialAudit(target);
+                      }
+                    }}
+                    className="py-2 px-3 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer text-rose-700 hover:text-rose-900 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/80 shrink-0 whitespace-nowrap shadow-2xs"
+                    title="Open Force Add dialog to manually add stock by force if not in stock, sales, returns, or quotations"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Force Add Stock</span>
                   </button>
                 </div>
 
@@ -1964,7 +1984,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                         />
                         <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                         <button
                           type="button"
                           onClick={() => {
@@ -1974,20 +1994,37 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                             }
                             setShowCameraScanner(true);
                           }}
-                          className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="flex-1 sm:flex-initial px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                           title="Open device camera to scan serial barcodes"
                         >
                           <Camera className="w-4 h-4" />
-                          <span>Scan with Camera</span>
+                          <span>Scan</span>
                         </button>
 
                         <button
                           type="submit"
                           disabled={!singleSerial.trim()}
-                          className="px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="px-4 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                         >
                           <Plus className="w-4 h-4" />
                           <span>Add</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!singleSerial.trim()}
+                          onClick={() => {
+                            if (!selectedProduct) {
+                              toast.warning('Please select a product first');
+                              return;
+                            }
+                            handleForceAddSerial(singleSerial.trim());
+                          }}
+                          className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                          title="Add stock manually by force (bypasses 'Already registered' duplicate error)"
+                        >
+                          <Zap className="w-4 h-4" />
+                          <span>Force Add</span>
                         </button>
                       </div>
                     </div>
@@ -2001,7 +2038,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                               Cannot add: {singleSerialWarning}
                             </span>
                             <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                              If this item is physically present in your store and not in active stock, sales, returns, or quotations, you can override and force add it to stock.
+                              If this serial number is not in active stock, sales, return items, or quotations, you can bypass this error and add stock manually by force.
                             </p>
                           </div>
                         </div>
@@ -2023,10 +2060,10 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
                             type="button"
                             onClick={() => handleForceAddSerial(singleSerial.trim())}
                             className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                            title="Force add this serial number into stock"
+                            title="Add stock manually by force"
                           >
                             <Zap className="w-3.5 h-3.5" />
-                            <span>Force Add to Stock</span>
+                            <span>Add Stock Manually by Force</span>
                           </button>
                         </div>
                       </div>
@@ -2297,9 +2334,9 @@ SN-4029103"
                   <Zap className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900">Force Add Stock (Serial Override)</h3>
+                  <h3 className="text-sm font-black text-slate-900">Add Stock Manually by Force</h3>
                   <p className="text-xs text-slate-500">
-                    Bypass duplicate restrictions and manually force intake to stock
+                    Bypass "Cannot add: Already registered" error if serial is not in stock, sales, return items, or quotations
                   </p>
                 </div>
               </div>
@@ -2535,7 +2572,7 @@ SN-4029103"
                 className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
               >
                 <Zap className="w-4 h-4" />
-                <span>Force Add to Stock</span>
+                <span>Add Stock Manually by Force</span>
               </button>
             </div>
           </div>

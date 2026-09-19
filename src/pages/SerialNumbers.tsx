@@ -361,10 +361,20 @@ export default function SerialNumbers() {
                   <button
                     type="submit"
                     disabled={addingSerial || !newSerialNumber.trim()}
-                    className="flex items-center px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl transition-all text-xs font-bold disabled:opacity-50 shadow-md shadow-emerald-950/10"
+                    className="flex items-center px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl transition-all text-xs font-bold disabled:opacity-50 shadow-md shadow-emerald-950/10 whitespace-nowrap cursor-pointer"
                   >
                     <Plus className="w-4 h-4 mr-1.5" />
                     Add
+                  </button>
+                  <button
+                    type="button"
+                    disabled={addingSerial || !newSerialNumber.trim()}
+                    onClick={() => handleForceAddSerialNumber(newSerialNumber.trim(), duplicateConflict?.docId)}
+                    className="flex items-center px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-all text-xs font-black disabled:opacity-50 shadow-xs whitespace-nowrap cursor-pointer"
+                    title="Add stock manually by force (bypasses 'Already registered' error)"
+                  >
+                    <Zap className="w-4 h-4 mr-1.5" />
+                    Force Add
                   </button>
                 </form>
 
@@ -375,17 +385,17 @@ export default function SerialNumbers() {
                       <div>
                         <span className="font-bold text-slate-900 block">{duplicateConflict.reason}</span>
                         <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                          If this unit is physically in stock, click "Force Add to Stock" to override and assign it to <strong>{selectedProduct.name}</strong> as Available.
+                          If this serial number is not in stock, sales, returns, or quotations, click below to override and add it manually by force as Available.
                         </p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleForceAddSerialNumber(duplicateConflict.serial, duplicateConflict.docId)}
-                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer self-end sm:self-auto"
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer self-end sm:self-auto whitespace-nowrap"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      <span>Force Add to Stock</span>
+                      <span>Add Stock Manually by Force</span>
                     </button>
                   </div>
                 )}

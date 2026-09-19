@@ -10,7 +10,7 @@ export interface DownloadPdfOptions {
 
 /**
  * Downloads an HTML string or element as a high-quality PDF.
- * Ensures proper styling, font rendering, and clean cleanup.
+ * Ensures proper styling, font rendering, crisp non-empty output, and clean cleanup.
  */
 export async function downloadHtmlAsPdf(
   htmlContent: string,
@@ -18,25 +18,49 @@ export async function downloadHtmlAsPdf(
   options?: DownloadPdfOptions
 ): Promise<void> {
   const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  const isLandscape = options?.orientation === 'landscape';
+  const a4WidthPx = isLandscape ? 1123 : 794;
 
-  // Create a container with opacity instead of negative coordinates so html2canvas computes accurate geometry
+  // Create an offscreen host wrapper positioned out of view so the user doesn't see a layout flicker.
+  // The host holds the container in the DOM so that fonts, styles, and image dimensions can calculate properly.
+  const host = document.createElement('div');
+  host.id = `pdf-export-host-${Date.now()}`;
+  host.style.position = 'fixed';
+  host.style.left = '-99999px';
+  host.style.top = '0';
+  host.style.width = `${a4WidthPx}px`;
+  host.style.height = 'auto';
+  host.style.overflow = 'visible';
+  host.style.zIndex = '-99999';
+  host.style.pointerEvents = 'none';
+
+  // Inside the offscreen host, the target container itself MUST have:
+  // 1. opacity: 1 (NEVER < 1, because html2canvas multiplies opacity, resulting in invisible blank pages)
+  // 2. position: relative or static (NEVER position: fixed, which breaks page flow & height calculation in html2pdf)
+  // 3. zIndex: 1 (NEVER negative z-index)
+  // 4. width matching standard A4 dimensions (794px portrait, 1123px landscape)
   const container = document.createElement('div');
   container.id = `pdf-export-container-${Date.now()}`;
-  container.style.position = 'fixed';
+  container.style.position = 'relative';
   container.style.left = '0';
   container.style.top = '0';
-  container.style.width = options?.orientation === 'landscape' ? '1123px' : '794px'; // standard A4 width
-  container.style.opacity = '0.01';
-  container.style.pointerEvents = 'none';
-  container.style.zIndex = '-99999';
+  container.style.width = `${a4WidthPx}px`;
+  container.style.minHeight = '100px';
   container.style.backgroundColor = '#ffffff';
   container.style.color = '#000000';
+  container.style.opacity = '1';
+  container.style.margin = '0';
+  container.style.padding = '0';
+  container.style.boxSizing = 'border-box';
 
-  // Extract <style> blocks and body contents to ensure CSS applies properly
+  // Extract <style> blocks from htmlContent
   const styleMatches = htmlContent.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
-  const stylesCombined = styleMatches.join('\n');
-  
-  // Extract body content or use full content if not a full HTML page
+  let stylesCombined = styleMatches.join('\n');
+
+  // Ensure body styles also apply to .pdf-export-wrapper
+  stylesCombined = stylesCombined.replace(/\bbody\s*\{/gi, 'body, .pdf-export-wrapper {');
+
+  // Extract body content or clean HTML if full page markup is provided
   let bodyContent = htmlContent;
   const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if (bodyMatch && bodyMatch[1]) {
@@ -50,37 +74,87 @@ export async function downloadHtmlAsPdf(
       .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
   }
 
+  // Base PDF layout and typography rules to guarantee visibility and clean pagination
+  const basePdfStyles = `
+    <style>
+      .pdf-export-wrapper, body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 12px !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .pdf-export-wrapper * {
+        box-sizing: border-box !important;
+      }
+      table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto !important;
+      }
+      tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      thead {
+        display: table-header-group !important;
+      }
+      tfoot {
+        display: table-footer-group !important;
+      }
+      .avoid-break, .header-banner, .net-balance-banner, .signatures-block, .summary-cards-grid {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    </style>
+  `;
+
   container.innerHTML = `
+    ${basePdfStyles}
     ${stylesCombined}
-    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0; margin: 0; box-sizing: border-box; width: 100%;">
+    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 12px; margin: 0; box-sizing: border-box; width: 100%;">
       ${bodyContent}
     </div>
   `;
 
-  document.body.appendChild(container);
+  host.appendChild(container);
+  document.body.appendChild(host);
 
   try {
-    // Wait for any embedded images (logos, stamps) to load
+    // Wait for any embedded images (logos, stamps) to load with a timeout safety
     const images = Array.from(container.querySelectorAll('img'));
     if (images.length > 0) {
       await Promise.all(
         images.map((img) => {
           if (img.complete) return Promise.resolve();
           return new Promise((resolve) => {
-            img.onload = resolve;
-            img.onerror = resolve;
+            const timeout = setTimeout(resolve, 2000);
+            img.onload = () => {
+              clearTimeout(timeout);
+              resolve(null);
+            };
+            img.onerror = () => {
+              clearTimeout(timeout);
+              resolve(null);
+            };
           });
         })
       );
     }
 
-    // Small delay to allow fonts and CSS layout to settle
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Delay to allow fonts and CSS layout to fully compute
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const html2pdfLib: any = (html2pdf as any)?.default || html2pdf || (window as any).html2pdf;
 
     const opt = {
-      margin: options?.margin ?? [6, 8, 6, 8],
+      margin: options?.margin ?? [6, 6, 6, 6],
       filename: safeFilename,
       image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: {
@@ -88,14 +162,20 @@ export async function downloadHtmlAsPdf(
         useCORS: true,
         letterRendering: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: a4WidthPx,
+        scrollX: 0,
+        scrollY: 0
       },
       jsPDF: {
         unit: 'mm',
         format: options?.format ?? 'a4',
         orientation: options?.orientation ?? 'portrait'
       },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      pagebreak: { 
+        mode: ['css', 'legacy'],
+        avoid: ['tr', '.avoid-break', '.summary-card', '.net-balance-banner', '.signatures-block']
+      }
     };
 
     await html2pdfLib().set(opt).from(container).save();
@@ -103,8 +183,9 @@ export async function downloadHtmlAsPdf(
     console.error('Failed to generate PDF via html2pdf:', error);
     throw error;
   } finally {
-    if (document.body.contains(container)) {
-      document.body.removeChild(container);
+    if (document.body.contains(host)) {
+      document.body.removeChild(host);
     }
   }
 }
+
