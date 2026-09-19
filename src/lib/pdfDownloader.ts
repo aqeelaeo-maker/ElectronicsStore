@@ -18,7 +18,9 @@ export async function downloadHtmlAsPdf(
   options?: DownloadPdfOptions
 ): Promise<void> {
   const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
-  const isLandscape = options?.orientation === 'landscape';
+  const detectedLandscape = options?.orientation === 'landscape' || /size:\s*A4\s+landscape/i.test(htmlContent);
+  const orientation = options?.orientation || (detectedLandscape ? 'landscape' : 'portrait');
+  const isLandscape = orientation === 'landscape';
   const a4WidthPx = isLandscape ? 1123 : 794;
 
   // Create an offscreen host wrapper positioned out of view so the user doesn't see a layout flicker.
@@ -45,6 +47,7 @@ export async function downloadHtmlAsPdf(
   container.style.left = '0';
   container.style.top = '0';
   container.style.width = `${a4WidthPx}px`;
+  container.style.maxWidth = `${a4WidthPx}px`;
   container.style.minHeight = '100px';
   container.style.backgroundColor = '#ffffff';
   container.style.color = '#000000';
@@ -83,8 +86,9 @@ export async function downloadHtmlAsPdf(
         background-color: #ffffff !important;
         box-sizing: border-box !important;
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
-        padding: 12px !important;
+        padding: 0 !important;
         opacity: 1 !important;
         visibility: visible !important;
         -webkit-print-color-adjust: exact !important;
@@ -95,8 +99,14 @@ export async function downloadHtmlAsPdf(
       }
       table {
         width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
         border-collapse: collapse !important;
         page-break-inside: auto !important;
+        box-sizing: border-box !important;
+      }
+      th, td {
+        box-sizing: border-box !important;
       }
       tr {
         page-break-inside: avoid !important;
@@ -118,7 +128,7 @@ export async function downloadHtmlAsPdf(
   container.innerHTML = `
     ${basePdfStyles}
     ${stylesCombined}
-    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 12px; margin: 0; box-sizing: border-box; width: 100%;">
+    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0; margin: 0; box-sizing: border-box; width: 100%; max-width: 100%;">
       ${bodyContent}
     </div>
   `;
@@ -152,6 +162,7 @@ export async function downloadHtmlAsPdf(
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     const html2pdfLib: any = (html2pdf as any)?.default || html2pdf || (window as any).html2pdf;
+    const measuredWidth = Math.max(a4WidthPx, container.offsetWidth || 0, container.scrollWidth || 0);
 
     const opt = {
       margin: options?.margin ?? [6, 6, 6, 6],
@@ -163,14 +174,15 @@ export async function downloadHtmlAsPdf(
         letterRendering: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: a4WidthPx,
+        width: measuredWidth,
+        windowWidth: measuredWidth,
         scrollX: 0,
         scrollY: 0
       },
       jsPDF: {
         unit: 'mm',
         format: options?.format ?? 'a4',
-        orientation: options?.orientation ?? 'portrait'
+        orientation: isLandscape ? 'landscape' : 'portrait'
       },
       pagebreak: { 
         mode: ['css', 'legacy'],

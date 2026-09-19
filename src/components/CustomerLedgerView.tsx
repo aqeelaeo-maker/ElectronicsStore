@@ -861,25 +861,25 @@ export default function CustomerLedgerView({
   const generateCustomerLedgerHtml = (): string => {
     const rowsHtml = statementRows.length > 0 ? statementRows.map((r) => `
       <tr style="border-bottom: 1px solid #cbd5e1; ${r.type === 'Initial Balance' ? 'background-color: #f1f5f3; font-weight: bold;' : ''}">
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; font-size: 9.5px; white-space: nowrap;">
           ${r.date ? new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
         </td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0;">
-          <span style="display: inline-block; padding: 2px 6px; font-size: 9px; font-weight: 700; border-radius: 4px; ${
+        <td style="padding: 6px 4px; border-right: 1px solid #e2e8f0; text-align: center;">
+          <span style="display: inline-block; padding: 2px 5px; font-size: 8.5px; font-weight: 700; border-radius: 4px; white-space: nowrap; ${
             r.type === 'Initial Balance' ? 'background-color: #d1e7dd; color: #0a382c;' :
             r.type === 'Invoice' ? 'background-color: #e2e8f0; color: #1e293b;' :
             r.type === 'Return' ? 'background-color: #f3e8ff; color: #6b21a8;' :
             'background-color: #dcfce7; color: #15803d;'
           }">${r.type}</span>
         </td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-family: monospace; font-weight: bold; font-size: 10px;">${r.refNo}</td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">${r.description}</td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 10px;">${r.debit > 0 ? 'PKR ' + r.debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #15803d; font-size: 10px;">${r.credit > 0 ? 'PKR ' + r.credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-        <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 10px; color: ${r.invoiceBalance > 0 ? '#b45309' : '#475569'};">
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; font-family: monospace; font-weight: bold; font-size: 9.5px; word-break: break-all;">${r.refNo}</td>
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; font-size: 9.5px; word-break: break-word; overflow-wrap: break-word; line-height: 1.35;">${r.description}</td>
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 9.5px; white-space: nowrap;">${r.debit > 0 ? 'PKR ' + r.debit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: #15803d; font-size: 9.5px; white-space: nowrap;">${r.credit > 0 ? 'PKR ' + r.credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td style="padding: 6px 5px; border-right: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 9.5px; color: ${r.invoiceBalance > 0 ? '#b45309' : '#475569'}; white-space: nowrap;">
           ${r.invoiceBalance !== undefined ? 'PKR ' + r.invoiceBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
         </td>
-        <td style="padding: 6px 8px; text-align: right; font-weight: 900; font-family: monospace; font-size: 10px; ${r.runningBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+        <td style="padding: 6px 5px; text-align: right; font-weight: 900; font-family: monospace; font-size: 9.5px; white-space: nowrap; ${r.runningBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
           PKR ${r.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </td>
       </tr>
@@ -898,8 +898,8 @@ export default function CustomerLedgerView({
           <title>Customer Account Statement - ${customer.name}</title>
           <style>
             @page {
-              size: A4 portrait;
-              margin: 10mm;
+              size: A4 landscape;
+              margin: 8mm;
             }
             body, .pdf-export-wrapper {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -909,6 +909,8 @@ export default function CustomerLedgerView({
               padding: 0;
               font-size: 11px;
               line-height: 1.35;
+              width: 100%;
+              box-sizing: border-box;
             }
             .header-banner {
               display: flex;
@@ -936,23 +938,25 @@ export default function CustomerLedgerView({
             .summary-cards-grid {
               display: flex;
               flex-wrap: nowrap;
-              gap: 6px;
+              gap: 8px;
               margin-bottom: 14px;
               width: 100%;
+              box-sizing: border-box;
             }
             .summary-card {
               flex: 1 1 0;
               min-width: 0;
               border: 1px solid #cbd5e1;
               background: #f8fafc;
-              padding: 6px 8px;
+              padding: 7px 9px;
               border-radius: 6px;
               box-sizing: border-box;
             }
             .summary-label {
-              font-size: 9px;
+              font-size: 8.5px;
               font-weight: 700;
               text-transform: uppercase;
+              letter-spacing: 0.3px;
               color: #64748b;
               margin-bottom: 3px;
               white-space: nowrap;
@@ -963,22 +967,35 @@ export default function CustomerLedgerView({
               font-family: monospace;
               color: #0f172a;
               white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
             .table-container {
-              width: 100%;
-              border-collapse: collapse;
-              border: 1px solid #0f172a;
-              margin-bottom: 14px;
+              width: 100% !important;
+              max-width: 100% !important;
+              table-layout: fixed !important;
+              border-collapse: collapse !important;
+              border: 1px solid #0f172a !important;
+              margin-bottom: 14px !important;
+              box-sizing: border-box !important;
+            }
+            .table-container th,
+            .table-container td {
+              box-sizing: border-box !important;
             }
             .table-container th {
               background-color: #f1f5f9;
               font-weight: 800;
-              font-size: 9.5px;
+              font-size: 9px;
               text-transform: uppercase;
-              letter-spacing: 0.4px;
-              padding: 6px 7px;
+              letter-spacing: 0.3px;
+              padding: 6px 5px;
               border-bottom: 1.5px solid #0f172a;
               border-right: 1px solid #cbd5e1;
+            }
+            .table-container th:last-child,
+            .table-container td:last-child {
+              border-right: none !important;
             }
             .net-balance-banner {
               border: 2px solid #0a382c;
@@ -1079,14 +1096,14 @@ export default function CustomerLedgerView({
           <table class="table-container">
             <thead>
               <tr>
-                <th style="width: 12%;">Date & Time</th>
-                <th style="width: 9%;">Type</th>
-                <th style="width: 12%;">Ref / Invoice #</th>
-                <th style="width: 26%;">Particulars / Notes</th>
-                <th style="width: 11%; text-align: right;">Invoice Total (Dr)</th>
-                <th style="width: 10%; text-align: right;">Paid (Cr)</th>
-                <th style="width: 10%; text-align: right;">Invoice Balance</th>
-                <th style="width: 10%; text-align: right;">Net Running Bal</th>
+                <th style="width: 10%;">Date & Time</th>
+                <th style="width: 7%;">Type</th>
+                <th style="width: 10%;">Ref / Invoice #</th>
+                <th style="width: 25%;">Particulars / Notes</th>
+                <th style="width: 12%; text-align: right;">Invoice Total (Dr)</th>
+                <th style="width: 12%; text-align: right;">Paid (Cr)</th>
+                <th style="width: 12%; text-align: right;">Invoice Balance</th>
+                <th style="width: 12%; text-align: right;">Net Running Bal</th>
               </tr>
             </thead>
             <tbody>
@@ -1094,11 +1111,11 @@ export default function CustomerLedgerView({
             </tbody>
             <tfoot>
               <tr style="background-color: #f1f5f9; font-weight: 800; border-top: 1.5px solid #0f172a;">
-                <td colspan="4" style="padding: 7px 8px; text-align: right; text-transform: uppercase; font-size: 9.5px; border-right: 1px solid #cbd5e1;">Totals:</td>
-                <td style="padding: 7px 8px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 7px 8px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 7px 8px; text-align: right; color: #b45309; border-right: 1px solid #cbd5e1; font-size: 9.5px;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 7px 8px; text-align: right; font-family: monospace; font-size: 11px; font-weight: 900; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+                <td colspan="4" style="padding: 6px 5px; text-align: right; text-transform: uppercase; font-size: 9px; border-right: 1px solid #cbd5e1;">Totals:</td>
+                <td style="padding: 6px 5px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; color: #b45309; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; font-family: monospace; font-size: 9.5px; font-weight: 900; white-space: nowrap; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
                   PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
@@ -1198,7 +1215,11 @@ export default function CustomerLedgerView({
       const statementHtml = generateCustomerLedgerHtml();
       const dateStr = new Date().toISOString().split('T')[0];
       const safeCustomerName = (customer.name || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
-      await downloadHtmlAsPdf(statementHtml, `Customer_Ledger_${safeCustomerName}_${dateStr}`);
+      await downloadHtmlAsPdf(
+        statementHtml, 
+        `Customer_Ledger_${safeCustomerName}_${dateStr}`,
+        { orientation: 'landscape', margin: [6, 6, 6, 6] }
+      );
       toast.success('Customer Ledger downloaded successfully!');
     } catch (err) {
       console.error('Failed to download ledger PDF:', err);
