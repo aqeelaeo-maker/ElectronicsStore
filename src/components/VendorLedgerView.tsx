@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Package,
   Copy,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -37,6 +38,7 @@ import {
 import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
 
 // Helper to strip any undefined values and prevent Firestore rejection
 function cleanDataForFirestore(obj: any): any {
@@ -849,14 +851,8 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
     });
   }, [purchases, payments, currentVendorData, initialBalance]);
 
-  // Handle Print Statement with Full High-Resolution A4 Statement
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      window.print();
-      return;
-    }
-
+  // Generate Statement HTML for Printing and PDF Download
+  const generateVendorLedgerHtml = (): string => {
     const rowsHtml = statementRows.map((r) => `
       <tr style="border-bottom: 1px solid #cbd5e1; ${r.type === 'Initial Balance' ? 'background-color: #f1f5f3; font-weight: bold;' : ''}">
         <td style="padding: 6px 8px; border-right: 1px solid #e2e8f0; font-size: 10px;">
@@ -1123,6 +1119,17 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
       </html>
     `;
 
+    return statementHtml;
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const statementHtml = generateVendorLedgerHtml();
     printWindow.document.open();
     printWindow.document.write(statementHtml);
     printWindow.document.close();
@@ -1130,6 +1137,26 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
       printWindow.focus();
       printWindow.print();
     }, 400);
+  };
+
+  const [isDownloadingLedger, setIsDownloadingLedger] = useState(false);
+
+  const handleDownloadLedger = async () => {
+    try {
+      setIsDownloadingLedger(true);
+      const vendorName = currentVendorData.companyName || currentVendorData.name || 'Vendor';
+      toast.info(`Preparing PDF for ${vendorName}'s Ledger Statement...`);
+      const statementHtml = generateVendorLedgerHtml();
+      const dateStr = new Date().toISOString().split('T')[0];
+      const safeVendorName = vendorName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      await downloadHtmlAsPdf(statementHtml, `Vendor_Ledger_${safeVendorName}_${dateStr}`);
+      toast.success('Vendor Ledger downloaded successfully!');
+    } catch (err) {
+      console.error('Failed to download vendor ledger PDF:', err);
+      toast.error('Failed to download vendor ledger PDF');
+    } finally {
+      setIsDownloadingLedger(false);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -1222,6 +1249,20 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
           >
             <Printer className="w-4 h-4 text-slate-600" />
             <span className="hidden sm:inline">Print Statement</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadLedger}
+            disabled={isDownloadingLedger}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            title="Download Vendor Ledger Statement as PDF"
+          >
+            {isDownloadingLedger ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">{isDownloadingLedger ? 'Downloading...' : 'Download Ledger'}</span>
           </button>
         </div>
       </div>

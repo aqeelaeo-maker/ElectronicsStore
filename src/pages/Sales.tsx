@@ -43,7 +43,8 @@ import {
   Phone,
   ShieldCheck,
   Tag,
-  Calculator
+  Calculator,
+  Download
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -51,6 +52,7 @@ import { useAuth } from '../contexts/AuthContext';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import SalesReturnModal, { printReturnReceipt, SaleReturnRecord } from '../components/SalesReturnModal';
 import { Pagination } from '../components/Pagination';
+import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
 
 interface Product {
   id: string;
@@ -1734,23 +1736,8 @@ export default function Sales() {
     return `${day}-${month}-${year}`;
   };
 
-  const printInvoice = (sale: Sale) => {
-    // Create a temporary hidden iframe for printing
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) {
-      toast.error('Failed to initialize print process');
-      return;
-    }
-
+  // Generate HTML for Sales Invoice Printing and PDF Download
+  const generateSaleInvoiceHtml = (sale: Sale): string => {
     const groupedPrintItems = groupSaleItemsForPrint(sale.items || []);
     const itemsRows = groupedPrintItems && groupedPrintItems.length > 0 
       ? groupedPrintItems.map(item => `
@@ -2178,6 +2165,28 @@ export default function Sales() {
       </html>
     `;
 
+    return htmlContent;
+  };
+
+  const printInvoice = (sale: Sale) => {
+    // Create a temporary hidden iframe for printing
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      toast.error('Failed to initialize print process');
+      return;
+    }
+
+    const htmlContent = generateSaleInvoiceHtml(sale);
+
     doc.open();
     doc.write(htmlContent);
     doc.close();
@@ -2191,6 +2200,27 @@ export default function Sales() {
         document.body.removeChild(iframe);
       }, 5000);
     }, 500);
+  };
+
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
+
+  // Download Sales Invoice as high-quality PDF
+  const handleDownloadInvoice = async (sale: Sale) => {
+    try {
+      const idKey = sale.id || sale.invoiceNo || 'draft';
+      setDownloadingInvoiceId(idKey);
+      toast.info(`Preparing PDF for Invoice #${sale.invoiceNo}...`);
+      const htmlContent = generateSaleInvoiceHtml(sale);
+      const safeCustomerName = (sale.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const filename = `Invoice_${sale.invoiceNo}_${safeCustomerName}`;
+      await downloadHtmlAsPdf(htmlContent, filename);
+      toast.success(`Invoice #${sale.invoiceNo} downloaded successfully!`);
+    } catch (err) {
+      console.error('Failed to download invoice PDF:', err);
+      toast.error('Failed to download invoice PDF');
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
   };
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -3396,16 +3426,32 @@ export default function Sales() {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => printInvoice(currentDraftSale)}
-                    disabled={draftTotal <= 0}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold shadow-2xs transition-colors disabled:opacity-40"
-                    title="Print this preview"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-[#0a382c]" />
-                    Print Preview
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadInvoice(currentDraftSale)}
+                      disabled={draftTotal <= 0 || downloadingInvoiceId === (currentDraftSale.id || currentDraftSale.invoiceNo || 'draft')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold shadow-2xs transition-colors disabled:opacity-40 cursor-pointer"
+                      title="Download this invoice preview as PDF"
+                    >
+                      {downloadingInvoiceId === (currentDraftSale.id || currentDraftSale.invoiceNo || 'draft') ? (
+                        <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      Download PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => printInvoice(currentDraftSale)}
+                      disabled={draftTotal <= 0}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold shadow-2xs transition-colors disabled:opacity-40"
+                      title="Print this preview"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#0a382c]" />
+                      Print Preview
+                    </button>
+                  </div>
                 </div>
 
                 {/* Printable Document Paper Card */}
@@ -3928,6 +3974,18 @@ export default function Sales() {
                           <Printer className="w-4 h-4" />
                         </button>
                         <button 
+                          onClick={() => handleDownloadInvoice(sale)}
+                          disabled={downloadingInvoiceId === (sale.id || sale.invoiceNo)}
+                          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                          title="Download Invoice (PDF)"
+                        >
+                          {downloadingInvoiceId === (sale.id || sale.invoiceNo) ? (
+                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Download className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button 
                           onClick={() => {
                             setReturnSale(sale);
                             setShowReturnModal(true);
@@ -4281,6 +4339,18 @@ export default function Sales() {
                   >
                     <Printer className="w-4 h-4" />
                     Print Invoice
+                  </button>
+                  <button 
+                    onClick={() => handleDownloadInvoice(selectedSale)}
+                    disabled={downloadingInvoiceId === (selectedSale.id || selectedSale.invoiceNo)}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {downloadingInvoiceId === (selectedSale.id || selectedSale.invoiceNo) ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Download Invoice
                   </button>
                   <button 
                     onClick={() => setShowDetailModal(false)}
