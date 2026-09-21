@@ -864,6 +864,7 @@ export default function Quotations() {
             max-width: 100%;
             margin: 0 auto;
             box-sizing: border-box;
+            padding-bottom: 28px;
           }
           table {
             width: 100%;
@@ -956,7 +957,7 @@ export default function Quotations() {
           </div>
 
           <!-- Signatures -->
-          <div class="signatures-block quotation-signatures avoid-break" style="display: flex; justify-content: space-between; margin-top: 18px; padding-top: 6px; padding-bottom: 12px; page-break-inside: avoid !important; break-inside: avoid !important;">
+          <div class="signatures-block quotation-signatures avoid-break" style="display: flex; justify-content: space-between; margin-top: 24px; padding-top: 8px; padding-bottom: 24px; margin-bottom: 16px; page-break-inside: avoid !important; break-inside: avoid !important;">
             <div style="text-align: center; width: 180px;">
               <div style="border-top: 1px solid #94a3b8; margin-bottom: 4px;"></div>
               <div style="font-size: 10.5px; font-weight: 700; color: #475569;">Customer Acceptance</div>

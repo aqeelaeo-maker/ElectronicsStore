@@ -1819,9 +1819,11 @@ export default function Sales() {
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
+            padding-bottom: 28px;
           }
           .invoice-main-content {
             width: 100%;
+            padding-bottom: 16px;
           }
           .invoice-header-table {
             width: 100%;
@@ -1966,8 +1968,9 @@ export default function Sales() {
             width: 100%;
             margin-top: 12px;
             padding-top: 6px;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
+            padding-bottom: 16px;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
           }
           .totals-table {
             width: 340px;
@@ -1975,6 +1978,8 @@ export default function Sales() {
             border-collapse: collapse;
             font-size: 14px;
             color: #000000;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .totals-table td {
             padding: 4px 0;
@@ -1991,6 +1996,7 @@ export default function Sales() {
             margin-top: 12px;
             border-top: 1.5px solid #000000;
             padding-top: 6px;
+            padding-bottom: 8px;
             text-align: left;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -2011,15 +2017,16 @@ export default function Sales() {
             font-weight: 600;
           }
           .footer {
-            margin-top: 10px;
+            margin-top: 12px;
             border-top: 1.5px solid #000000;
-            padding-top: 6px;
-            padding-bottom: 10px;
+            padding-top: 8px;
+            padding-bottom: 24px;
+            margin-bottom: 16px;
             text-align: center;
             font-size: 11px;
             color: #000000;
             font-weight: 700;
-            line-height: 1.4;
+            line-height: 1.45;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
@@ -2033,10 +2040,11 @@ export default function Sales() {
               max-width: 100% !important;
               display: flex !important;
               flex-direction: column !important;
+              padding-bottom: 24px !important;
             }
             .invoice-bottom-section {
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
             }
           }
         </style>

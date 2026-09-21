@@ -353,6 +353,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
       totalPurchased: totalReportedPurchases,
       totalPaid: totalReportedPaid,
       totalPending: totalPendingFromPurchases,
+      totalReturnValue: 0,
       currentBalance: netAccountPayable
     };
   }, [purchases, payments, currentVendorData, initialBalance]);
@@ -928,26 +929,27 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               text-align: right;
               color: #0f172a;
             }
-            .summary-cards-grid {
-              display: flex;
-              flex-wrap: nowrap;
-              gap: 8px;
-              margin-bottom: 14px;
-              width: 100%;
-              box-sizing: border-box;
+            .summary-cards-table {
+              width: 100% !important;
+              max-width: 100% !important;
+              table-layout: fixed !important;
+              border-collapse: separate !important;
+              border-spacing: 7px 0 !important;
+              margin-bottom: 14px !important;
+              box-sizing: border-box !important;
             }
-            .summary-card {
-              flex: 1 1 0;
-              min-width: 0;
+            .summary-card-cell {
               border: 1px solid #cbd5e1;
-              background: #f8fafc;
-              padding: 7px 9px;
+              background-color: #f8fafc;
+              padding: 8px 9px;
               border-radius: 6px;
+              vertical-align: top;
+              text-align: left;
               box-sizing: border-box;
             }
             .summary-label {
               font-size: 8.5px;
-              font-weight: 700;
+              font-weight: 800;
               text-transform: uppercase;
               letter-spacing: 0.3px;
               color: #64748b;
@@ -994,18 +996,18 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               background-color: #f0fdf4;
               padding: 12px 16px;
               border-radius: 6px;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
               margin-top: 14px;
-              page-break-inside: avoid;
+              margin-bottom: 14px;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
             .signatures-block {
-              display: flex;
-              justify-content: space-between;
-              margin-top: 36px;
+              margin-top: 28px;
               padding-top: 10px;
-              page-break-inside: avoid;
+              padding-bottom: 24px;
+              margin-bottom: 16px;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
             }
             .signature-line {
               width: 220px;
@@ -1038,52 +1040,56 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
           </div>
 
           <!-- Vendor Details & Account Reference -->
-          <div style="display: flex; justify-content: space-between; border: 1px solid #cbd5e1; background: #fafafa; padding: 9px 12px; border-radius: 6px; margin-bottom: 12px;">
-            <div>
-              <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Vendor / Supplier Information</div>
-              <div style="font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 2px;">${currentVendorData.companyName || currentVendorData.name}</div>
-              ${currentVendorData.contactPerson ? `<div style="font-size: 10px; color: #334155; margin-top: 2px;">Contact Person: <strong>${currentVendorData.contactPerson}</strong></div>` : ''}
-              <div style="font-size: 10px; color: #334155; margin-top: 2px;">Phone / Mobile: <strong>${currentVendorData.mobile || currentVendorData.phone || '—'}</strong></div>
-              ${currentVendorData.email ? `<div style="font-size: 10px; color: #334155;">Email: ${currentVendorData.email}</div>` : ''}
-              ${currentVendorData.city ? `<div style="font-size: 10px; color: #334155;">City: ${currentVendorData.city}</div>` : ''}
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Account Reference</div>
-              <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px;">ID: ${currentVendorData.id}</div>
-              <div style="font-size: 10px; color: #334155; margin-top: 2px;">Total Stock Bills: <strong>${purchases.length}</strong></div>
-              <div style="font-size: 10px; color: #334155;">Total Transactions: <strong>${statementRows.length}</strong></div>
-            </div>
-          </div>
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background: #fafafa; border-radius: 6px; margin-bottom: 12px;">
+            <tr>
+              <td style="padding: 9px 12px; vertical-align: top; text-align: left;">
+                <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Vendor / Supplier Information</div>
+                <div style="font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 2px;">${currentVendorData.companyName || currentVendorData.name}</div>
+                ${currentVendorData.contactPerson ? `<div style="font-size: 10px; color: #334155; margin-top: 2px;">Contact Person: <strong>${currentVendorData.contactPerson}</strong></div>` : ''}
+                <div style="font-size: 10px; color: #334155; margin-top: 2px;">Phone / Mobile: <strong>${currentVendorData.mobile || currentVendorData.phone || '—'}</strong></div>
+                ${currentVendorData.email ? `<div style="font-size: 10px; color: #334155;">Email: ${currentVendorData.email}</div>` : ''}
+                ${currentVendorData.city ? `<div style="font-size: 10px; color: #334155;">City: ${currentVendorData.city}</div>` : ''}
+              </td>
+              <td style="padding: 9px 12px; vertical-align: top; text-align: right; width: 220px;">
+                <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #64748b;">Account Reference</div>
+                <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 2px;">ID: ${currentVendorData.id}</div>
+                <div style="font-size: 10px; color: #334155; margin-top: 2px;">Total Stock Bills: <strong>${purchases.length}</strong></div>
+                <div style="font-size: 10px; color: #334155;">Total Transactions: <strong>${statementRows.length}</strong></div>
+              </td>
+            </tr>
+          </table>
 
-          <!-- Summary Cards Grid (Initial Balance, Total Invoiced, Total Paid, Return Value, Pending Invoices, Net Balance) -->
-          <div class="summary-cards-grid">
-            <div class="summary-card">
-              <div class="summary-label">Initial Balance</div>
-              <div class="summary-val">PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Invoiced</div>
-              <div class="summary-val">PKR ${financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Total Paid</div>
-              <div class="summary-val" style="color: #15803d;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Return Value</div>
-              <div class="summary-val" style="color: #7e22ce;">PKR 0.00</div>
-            </div>
-            <div class="summary-card">
-              <div class="summary-label">Pending Invoices</div>
-              <div class="summary-val" style="color: #b45309;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            <div class="summary-card" style="border: 1.5px solid #0a382c; background: #f0fdf4;">
-              <div class="summary-label" style="color: #0a382c;">Net Balance</div>
-              <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 11px;">
-                PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-          </div>
+          <!-- Summary Cards Table (Initial Balance, Total Invoiced, Total Paid, Return Value, Pending Invoices, Net Balance) -->
+          <table class="summary-cards-table avoid-break">
+            <tr>
+              <td class="summary-card-cell" style="width: 16.666%;">
+                <div class="summary-label">Initial Balance</div>
+                <div class="summary-val">PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </td>
+              <td class="summary-card-cell" style="width: 16.666%;">
+                <div class="summary-label">Total Invoiced</div>
+                <div class="summary-val">PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </td>
+              <td class="summary-card-cell" style="width: 16.666%; border-color: #bbf7d0; background-color: #f0fdf4;">
+                <div class="summary-label" style="color: #166534;">Total Paid</div>
+                <div class="summary-val" style="color: #15803d;">PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </td>
+              <td class="summary-card-cell" style="width: 16.666%; border-color: #e9d5ff; background-color: #faf5ff;">
+                <div class="summary-label" style="color: #6b21a8;">Return Value</div>
+                <div class="summary-val" style="color: #7e22ce;">PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </td>
+              <td class="summary-card-cell" style="width: 16.666%; border-color: #fde68a; background-color: #fffbeb;">
+                <div class="summary-label" style="color: #92400e;">Pending Invoices</div>
+                <div class="summary-val" style="color: #b45309;">PKR ${(financialTotals.totalPending || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </td>
+              <td class="summary-card-cell" style="width: 16.666%; border: 1.5px solid #0a382c; background-color: #f0fdf4;">
+                <div class="summary-label" style="color: #0a382c;">Net Balance</div>
+                <div class="summary-val" style="color: ${financialTotals.currentBalance > 0 ? '#991b1b' : '#065f46'}; font-size: 11.5px;">
+                  PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </td>
+            </tr>
+          </table>
 
           <!-- Statement Table -->
           <table class="table-container">
@@ -1105,48 +1111,56 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             <tfoot>
               <tr style="background-color: #f1f5f9; font-weight: 800; border-top: 1.5px solid #0f172a;">
                 <td colspan="4" style="padding: 6px 5px; text-align: right; text-transform: uppercase; font-size: 9px; border-right: 1px solid #cbd5e1;">Totals:</td>
-                <td style="padding: 6px 5px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 5px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 5px; text-align: right; color: #b45309; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 5px; text-align: right; color: #b45309; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${(financialTotals.totalPending || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="padding: 6px 5px; text-align: right; font-family: monospace; font-size: 9.5px; font-weight: 900; white-space: nowrap; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
-                  PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
             </tfoot>
           </table>
 
           <!-- Closing Net Account Balance Banner -->
-          <div class="net-balance-banner">
-            <div>
-              <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
-                Account Settlement Status
-              </div>
-              <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">
-                ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE PAYABLE TO VENDOR' : financialTotals.currentBalance < 0 ? 'DEBIT ADVANCE BALANCE OVERPAID TO VENDOR' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING PAYABLE'}
-              </div>
-              <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                Initial Balance: PKR ${initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Purchases: PKR ${financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Paid: PKR ${financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
-                Net Account Balance
-              </div>
-              <div style="font-size: 20px; font-weight: 900; font-family: monospace; margin-top: 2px; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
-                PKR ${financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-          </div>
+          <table class="net-balance-banner avoid-break" style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: middle; text-align: left;">
+                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
+                  Account Settlement Status
+                </div>
+                <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px;">
+                  ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE PAYABLE TO VENDOR' : financialTotals.currentBalance < 0 ? 'DEBIT ADVANCE BALANCE OVERPAID TO VENDOR' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING PAYABLE'}
+                </div>
+                <div style="font-size: 10px; color: #475569; margin-top: 3px;">
+                  Initial Balance: PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Purchases: PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Paid: PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </td>
+              <td style="vertical-align: middle; text-align: right; width: 260px;">
+                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
+                  Net Account Balance
+                </div>
+                <div style="font-size: 20px; font-weight: 900; font-family: monospace; margin-top: 2px; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+                  PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </td>
+            </tr>
+          </table>
 
           <!-- Signatures -->
-          <div class="signatures-block">
-            <div class="signature-line">
-              Authorized Store Signature
-            </div>
-            <div class="signature-line">
-              Vendor / Supplier Signature
-            </div>
-          </div>
+          <table class="signatures-block avoid-break" style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 50%; vertical-align: top; text-align: left;">
+                <div class="signature-line">
+                  Authorized Store Signature
+                </div>
+              </td>
+              <td style="width: 50%; vertical-align: top; text-align: right;">
+                <div class="signature-line" style="margin-left: auto;">
+                  Vendor / Supplier Signature
+                </div>
+              </td>
+            </tr>
+          </table>
         </body>
       </html>
     `;

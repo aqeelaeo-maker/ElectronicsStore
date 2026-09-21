@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -13,7 +13,11 @@ import {
   X,
   ShieldCheck,
   User as UserIcon,
-  FileText
+  FileText,
+  Crown,
+  Calendar,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
@@ -34,7 +38,7 @@ const allNavigation = [
 ];
 
 export default function Layout() {
-  const { user, storeId, logout, clearSessionUser, activeRole, activeUser, sessionUser, switchActiveRole, isUser } = useAuth();
+  const { user, storeId, logout, clearSessionUser, activeRole, activeUser, sessionUser, switchActiveRole, isUser, isSuperAdmin, packageExpiryDate, packageName } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
@@ -74,6 +78,26 @@ export default function Layout() {
       .substring(0, 2)
       .toUpperCase();
   };
+
+  const daysUntilExpiry = useMemo(() => {
+    if (!packageExpiryDate || packageExpiryDate === 'Lifetime' || isSuperAdmin) return null;
+    try {
+      const now = new Date();
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const cleanStr = packageExpiryDate.trim().split('T')[0];
+      const parts = cleanStr.split('-');
+      if (parts.length !== 3) return null;
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const expiryMidnight = new Date(year, month, day).getTime();
+      return Math.round((expiryMidnight - todayMidnight) / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  }, [packageExpiryDate, isSuperAdmin]);
+
+  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 2 && daysUntilExpiry >= 0;
 
   return (
     <div className="min-h-screen bg-[#f3f6f5] flex text-slate-800 relative overflow-hidden font-sans">
@@ -218,6 +242,34 @@ export default function Layout() {
           </button>
           
           <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
+             {/* Package Expiry or Super Admin Badge */}
+             {isSuperAdmin ? (
+               <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-xl text-xs font-bold text-amber-900 shadow-2xs">
+                 <Crown className="w-3.5 h-3.5 text-amber-600" />
+                 <span>Super Admin</span>
+               </div>
+             ) : packageExpiryDate ? (
+               <div className={cn(
+                 "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border shadow-2xs transition-all",
+                 isExpiringSoon
+                   ? "bg-rose-50 text-rose-950 border-rose-300 animate-pulse"
+                   : packageExpiryDate === 'Lifetime'
+                     ? "bg-amber-50 text-amber-900 border-amber-200"
+                     : "bg-emerald-50 text-emerald-900 border-emerald-200"
+               )}>
+                 {isExpiringSoon ? (
+                   <AlertTriangle className="w-3.5 h-3.5 text-rose-600 animate-bounce" />
+                 ) : (
+                   <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                 )}
+                 <span>
+                   {isExpiringSoon
+                     ? (daysUntilExpiry === 0 ? '⚠️ Expiring Today!' : `⚠️ Exp: ${daysUntilExpiry}d Left`)
+                     : (packageExpiryDate === 'Lifetime' ? 'Lifetime Package' : `Exp: ${packageExpiryDate}`)}
+                 </span>
+               </div>
+             ) : null}
+
              {/* Role Status or Admin Preview Switcher */}
              {sessionUser?.role === 'User' ? (
                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold">

@@ -1,5 +1,15 @@
 export type UserRole = 'Admin' | 'User';
 
+export interface AuthorizedStoreEmail {
+  email: string;
+  packageExpiryDate: string; // ISO format "YYYY-MM-DD" or "Lifetime"
+  packageName?: string;      // e.g. "Annual Plan", "Monthly Plan", "Trial", "Enterprise", "Lifetime"
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  notes?: string;
+}
+
 export interface StoreUser {
   id: string;
   name: string;
@@ -17,14 +27,14 @@ export interface StoreUser {
 export const DEFAULT_STORE_USERS: StoreUser[] = [
   {
     id: 'user-admin',
-    name: 'Admin',
+    name: 'Super Admin',
     username: 'admin',
     password: 'admin123',
-    email: 'admin@electromanage.com',
+    email: 'aqeelaeo@gmail.com',
     role: 'Admin',
     status: 'Active',
     phone: '+92 300 0000000',
-    notes: 'Full administrator access to all modules, financial data, inventory, and settings',
+    notes: 'Super Admin (aqeelaeo@gmail.com) - Full administrator access and sole authority to authorize new stores',
     createdAt: new Date().toISOString()
   },
   {

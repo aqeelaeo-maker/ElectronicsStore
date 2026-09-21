@@ -100,7 +100,8 @@ export async function downloadHtmlAsPdf(
         box-sizing: border-box !important;
       }
       .pdf-export-wrapper {
-        padding-bottom: 24px !important;
+        padding-bottom: 48px !important;
+        margin-bottom: 24px !important;
       }
       table {
         width: 100% !important;
@@ -123,8 +124,8 @@ export async function downloadHtmlAsPdf(
       tfoot {
         display: table-footer-group !important;
       }
-      .avoid-break, .header-banner, .net-balance-banner, .signatures-block, .summary-cards-grid,
-      .invoice-bottom-section, .terms-section, .footer, .quotation-signatures, .totals-table, .totals-box, .notes-section {
+      .avoid-break, .header-banner, .net-balance-banner, .signatures-block, .summary-cards-table,
+      .terms-section, .footer, .quotation-signatures, .totals-table, .totals-box, .notes-section {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
@@ -134,7 +135,7 @@ export async function downloadHtmlAsPdf(
   container.innerHTML = `
     ${basePdfStyles}
     ${stylesCombined}
-    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0 0 24px 0; margin: 0; box-sizing: border-box; width: 100%; max-width: 100%; height: auto; min-height: auto;">
+    <div class="pdf-export-wrapper" style="background-color: #ffffff; color: #000000; padding: 0 0 48px 0; margin: 0 0 24px 0; box-sizing: border-box; width: 100%; max-width: 100%; height: auto; min-height: auto;">
       ${bodyContent}
     </div>
   `;
@@ -164,12 +165,20 @@ export async function downloadHtmlAsPdf(
       );
     }
 
+    // Wait for custom web fonts to be fully rendered before snapshotting
+    if ((document as any).fonts?.ready) {
+      try {
+        await (document as any).fonts.ready;
+      } catch {
+        // Fallback gracefully if fonts.ready rejects
+      }
+    }
+
     // Delay to allow fonts and CSS layout to fully compute
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const html2pdfLib: any = (html2pdf as any)?.default || html2pdf || (window as any).html2pdf;
     const measuredWidth = Math.max(a4WidthPx, container.offsetWidth || 0, container.scrollWidth || 0);
-    const measuredHeight = Math.max(container.offsetHeight || 0, container.scrollHeight || 0, 800);
 
     const opt = {
       margin: options?.margin ?? [6, 6, 8, 6],
@@ -183,8 +192,6 @@ export async function downloadHtmlAsPdf(
         backgroundColor: '#ffffff',
         width: measuredWidth,
         windowWidth: measuredWidth,
-        height: measuredHeight,
-        windowHeight: measuredHeight,
         scrollX: 0,
         scrollY: 0
       },
@@ -199,9 +206,9 @@ export async function downloadHtmlAsPdf(
           'tr',
           '.avoid-break',
           '.summary-card',
+          '.summary-cards-table',
           '.net-balance-banner',
           '.signatures-block',
-          '.invoice-bottom-section',
           '.terms-section',
           '.footer',
           '.quotation-signatures',

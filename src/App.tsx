@@ -25,8 +25,8 @@ const Placeholder = ({ title }: { title: string }) => (
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, sessionUser, loading, role, status, logout } = useAuth();
-
+  const { user, sessionUser, loading, role, status, logout, isSuperAdmin, isPackageExpired, packageExpiryDate } = useAuth();
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden">
@@ -41,7 +41,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (status === 'Pending' && role !== 'Super Admin') {
+  if (status === 'Pending' && !isSuperAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
         {/* Aero Glassmorphism Glowing Spheres - Gray / White monochrome */}
@@ -49,18 +49,56 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-slate-600/5 blur-[130px] pointer-events-none" />
 
         <div className="glass-panel p-8 rounded-2xl shadow-2xl max-w-md text-center relative z-10 border border-white/10">
-          <h2 className="text-2xl font-extrabold text-white mb-3">Account Pending</h2>
-          <p className="text-slate-300 text-sm mb-6 leading-relaxed">Your account is pending authorization by the Super Admin. Please wait for approval to access your store.</p>
+          <h2 className="text-2xl font-extrabold text-white mb-3">Store Approval Pending</h2>
+          <p className="text-slate-300 text-sm mb-6 leading-relaxed">Your account is pending authorization by the Super Admin (<strong>aqeelaeo@gmail.com</strong>). Please wait for approval to open your store.</p>
           <div className="flex justify-center gap-4">
             <button 
               onClick={() => window.location.reload()}
-              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 font-bold rounded-xl shadow-md shadow-white/5 transition-all text-sm"
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 font-bold rounded-xl shadow-md shadow-white/5 transition-all text-sm cursor-pointer"
             >
               Check Status
             </button>
             <button 
               onClick={logout}
-              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition-all text-sm"
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition-all text-sm cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPackageExpired && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-rose-500/10 blur-[130px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] rounded-full bg-rose-600/10 blur-[130px] pointer-events-none" />
+
+        <div className="glass-panel p-8 rounded-2xl shadow-2xl max-w-md text-center relative z-10 border border-rose-500/30">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center mx-auto mb-4 text-rose-400">
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-extrabold text-white mb-2">Store Package Expired</h2>
+          <p className="text-slate-300 text-sm mb-3 leading-relaxed">
+            Your store subscription package expired on <strong className="text-rose-300">{packageExpiryDate}</strong>.
+          </p>
+          <p className="text-slate-400 text-xs mb-6 leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-white/5">
+            Only the Super Admin (<strong>aqeelaeo@gmail.com</strong>) has authority to renew or extend package expiry dates.
+          </p>
+          <div className="flex justify-center gap-4">
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-950 font-bold rounded-xl shadow-md transition-all text-sm cursor-pointer"
+            >
+              Check Status
+            </button>
+            <button 
+              onClick={logout}
+              className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-700 transition-all text-sm cursor-pointer"
             >
               Sign Out
             </button>

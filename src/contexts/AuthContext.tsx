@@ -23,6 +23,11 @@ interface AuthContextType {
   setStoreUserCredentials: (userId: string, newUsername: string, newPassword?: string) => Promise<void>;
   isAdmin: boolean;
   isUser: boolean;
+  isSuperAdmin: boolean;
+  superAdminEmail: string;
+  packageExpiryDate: string | null;
+  packageName: string | null;
+  isPackageExpired: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -44,6 +49,11 @@ const AuthContext = createContext<AuthContextType>({
   setStoreUserCredentials: async () => {},
   isAdmin: true,
   isUser: false,
+  isSuperAdmin: false,
+  superAdminEmail: 'aqeelaeo@gmail.com',
+  packageExpiryDate: 'Lifetime',
+  packageName: 'Super Admin Access',
+  isPackageExpired: false,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -73,8 +83,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
     return DEFAULT_STORE_USERS;
   });
-  const [storeId, setStoreId] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(() => {
+    return localStorage.getItem('app_store_id') || 'electronicsstore-main';
+  });
   const [status, setStatus] = useState<string | null>(null);
+  const [packageExpiryDate, setPackageExpiryDate] = useState<string | null>(() => {
+    return localStorage.getItem('app_package_expiry') || null;
+  });
+  const [packageName, setPackageName] = useState<string | null>(() => {
+    return localStorage.getItem('app_package_name') || null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -91,29 +109,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             // If the user is the super admin, ensure they have the correct role
             if (currentUser.email === 'aqeelaeo@gmail.com' && data.role !== 'Super Admin') {
-              await setDoc(userDocRef, { ...data, role: 'Super Admin', status: 'Active' }, { merge: true });
+              await setDoc(userDocRef, { ...data, role: 'Super Admin', status: 'Active', packageExpiryDate: 'Lifetime', packageName: 'Super Admin Lifetime' }, { merge: true });
               setRawRole('Super Admin');
               currentStatus = 'Active';
+              setPackageExpiryDate('Lifetime');
+              setPackageName('Super Admin Lifetime');
+              localStorage.setItem('app_package_expiry', 'Lifetime');
             } else {
               setRawRole(data.role || 'Viewer');
               
-              // Check if pending user is now authorized
-              if (currentStatus === 'Pending') {
-                try {
-                  const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
-                  if (settingsDoc.exists() && settingsDoc.data().authorizedEmails) {
-                    const authorizedEmails = settingsDoc.data().authorizedEmails || [];
-                    if (authorizedEmails.includes(currentUser.email)) {
-                      currentStatus = 'Active';
-                      await setDoc(userDocRef, { status: 'Active' }, { merge: true });
-                    }
+              // Resolve package expiry date from settings/general or user doc
+              let resolvedExpiry = data.packageExpiryDate || null;
+              let resolvedPackageName = data.packageName || 'Annual Plan';
+
+              // Check if user is in authorizedEmails or authorizedEmailDetails
+              try {
+                const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
+                if (settingsDoc.exists()) {
+                  const sData = settingsDoc.data();
+                  const authDetails = Array.isArray(sData.authorizedEmailDetails) ? sData.authorizedEmailDetails : [];
+                  const authEmails = Array.isArray(sData.authorizedEmails) ? sData.authorizedEmails : [];
+                  
+                  const matchedDetail = authDetails.find((d: any) => d?.email?.toLowerCase() === currentUser.email?.toLowerCase());
+                  if (matchedDetail) {
+                    resolvedExpiry = matchedDetail.packageExpiryDate || resolvedExpiry;
+                    resolvedPackageName = matchedDetail.packageName || resolvedPackageName;
                   }
-                } catch (err) {
-                  console.error("Error checking authorization for pending user", err);
+
+                  const isAuthorized = authEmails.some((e: string) => e?.toLowerCase() === currentUser.email?.toLowerCase());
+                  if (isAuthorized && currentStatus === 'Pending') {
+                    currentStatus = 'Active';
+                    await setDoc(userDocRef, { 
+                      status: 'Active',
+                      packageExpiryDate: resolvedExpiry,
+                      packageName: resolvedPackageName
+                    }, { merge: true });
+                  }
                 }
+              } catch (err) {
+                console.error("Error checking authorization and package expiry for user", err);
+              }
+
+              if (currentUser.email === 'aqeelaeo@gmail.com') {
+                resolvedExpiry = 'Lifetime';
+                resolvedPackageName = 'Super Admin Lifetime';
+              }
+
+              setPackageExpiryDate(resolvedExpiry);
+              setPackageName(resolvedPackageName);
+              if (resolvedExpiry) {
+                localStorage.setItem('app_package_expiry', resolvedExpiry);
+                localStorage.setItem('app_package_name', resolvedPackageName);
               }
             }
-            setStoreId(data.storeId || currentUser.uid);
+            const activeStoreId = data.storeId || currentUser.uid;
+            setStoreId(activeStoreId);
+            localStorage.setItem('app_store_id', activeStoreId);
             setStatus(currentStatus);
           } else {
             // Create new user profile
@@ -121,16 +172,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const newUserRole = isSuperAdmin ? 'Super Admin' : 'Store Admin';
             const newStoreId = currentUser.uid; // Each user gets their own store by default
 
-            // Check if email is authorized
+            // Check if email is authorized and get package expiry date
             let isAuthorized = false;
+            let resolvedExpiry = isSuperAdmin ? 'Lifetime' : null;
+            let resolvedPackageName = isSuperAdmin ? 'Super Admin Lifetime' : 'Annual Plan';
+
             try {
               const settingsDoc = await getDoc(doc(db, 'settings', 'general'));
-              if (settingsDoc.exists() && settingsDoc.data().authorizedEmails) {
-                const authorizedEmails = settingsDoc.data().authorizedEmails || [];
-                isAuthorized = authorizedEmails.includes(currentUser.email);
+              if (settingsDoc.exists()) {
+                const sData = settingsDoc.data();
+                const authEmails = Array.isArray(sData.authorizedEmails) ? sData.authorizedEmails : [];
+                isAuthorized = authEmails.some((e: string) => e?.toLowerCase() === currentUser.email?.toLowerCase());
+
+                const authDetails = Array.isArray(sData.authorizedEmailDetails) ? sData.authorizedEmailDetails : [];
+                const matchedDetail = authDetails.find((d: any) => d?.email?.toLowerCase() === currentUser.email?.toLowerCase());
+                if (matchedDetail) {
+                  resolvedExpiry = matchedDetail.packageExpiryDate;
+                  resolvedPackageName = matchedDetail.packageName || resolvedPackageName;
+                }
               }
             } catch (err) {
-              console.error("Error fetching authorized emails", err);
+              console.error("Error fetching authorized emails and package expiry", err);
             }
 
             const newStatus = isSuperAdmin || isAuthorized ? 'Active' : 'Pending';
@@ -141,23 +203,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               role: newUserRole,
               storeId: newStoreId,
               status: newStatus,
+              packageExpiryDate: resolvedExpiry,
+              packageName: resolvedPackageName,
               createdAt: serverTimestamp()
             });
 
             setRawRole(newUserRole);
             setStoreId(newStoreId);
+            setPackageExpiryDate(resolvedExpiry);
+            setPackageName(resolvedPackageName);
+            localStorage.setItem('app_store_id', newStoreId);
+            if (resolvedExpiry) {
+              localStorage.setItem('app_package_expiry', resolvedExpiry);
+            }
             setStatus(newStatus);
           }
         } catch (error) {
           console.error("Error fetching user role:", error);
           setRawRole('Viewer');
           setStoreId(currentUser.uid);
+          localStorage.setItem('app_store_id', currentUser.uid);
           setStatus('Pending');
         }
       } else {
         setRawRole(null);
-        setStoreId(null);
         setStatus(null);
+        // Retain saved storeId for store terminal/offline sessions
+        setStoreId(prev => prev || localStorage.getItem('app_store_id') || 'electronicsstore-main');
       }
       setLoading(false);
     });
@@ -173,6 +245,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onSnapshot(storeRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+
+        // Real-time package expiry sync from store document
+        if (data.packageExpiryDate && user?.email !== 'aqeelaeo@gmail.com') {
+          setPackageExpiryDate(data.packageExpiryDate);
+          localStorage.setItem('app_package_expiry', data.packageExpiryDate);
+          if (data.packageName) {
+            setPackageName(data.packageName);
+            localStorage.setItem('app_package_name', data.packageName);
+          }
+        }
+
         if (Array.isArray(data.storeUsers) && data.storeUsers.length > 0) {
           const sanitized: StoreUser[] = data.storeUsers.map((u: any) => ({
             ...u,
@@ -309,6 +392,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Success: Establish session
+    const currentStoreId = storeId || localStorage.getItem('app_store_id') || 'electronicsstore-main';
+    setStoreId(currentStoreId);
+    localStorage.setItem('app_store_id', currentStoreId);
+
     setSessionUser(matched);
     setActiveUser(matched);
     setActiveRole(matched.role);
@@ -369,6 +456,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = effectiveRole === 'Admin';
   const isUser = effectiveRole === 'User';
 
+  const SUPER_ADMIN_EMAIL = 'aqeelaeo@gmail.com';
+  // Super Admin settings should strictly be shown ONLY to aqeelaeo@gmail.com
+  const currentEmail = (user?.email || sessionUser?.email || '').trim().toLowerCase();
+  const isSuperAdmin = currentEmail === SUPER_ADMIN_EMAIL;
+
+  // Check if store package has expired (Super Admin never expires)
+  const isPackageExpired = Boolean(
+    !isSuperAdmin &&
+    packageExpiryDate &&
+    packageExpiryDate !== 'Lifetime' &&
+    new Date(packageExpiryDate + 'T23:59:59').getTime() < Date.now()
+  );
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -388,7 +488,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loginWithCredentials,
       setStoreUserCredentials,
       isAdmin,
-      isUser
+      isUser,
+      isSuperAdmin,
+      superAdminEmail: SUPER_ADMIN_EMAIL,
+      packageExpiryDate: isSuperAdmin ? 'Lifetime' : packageExpiryDate,
+      packageName: isSuperAdmin ? 'Super Admin Lifetime' : packageName,
+      isPackageExpired
     }}>
       {children}
     </AuthContext.Provider>

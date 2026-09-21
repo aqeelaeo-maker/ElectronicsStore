@@ -19,7 +19,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, where, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
@@ -78,12 +78,77 @@ function StatCard({
 }
 
 export default function Dashboard() {
-  const { storeId, role, isUser, isAdmin } = useAuth();
+  const { storeId, role, isUser, isAdmin, isSuperAdmin, packageExpiryDate: authPackageExpiry } = useAuth();
+  const [storeExpiryDate, setStoreExpiryDate] = useState<string | null>(authPackageExpiry || null);
   const [sales, setSales] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [stockPriceBasis, setStockPriceBasis] = useState<'cost' | 'retail'>('cost');
+
+  // Keep storeExpiryDate in sync if authPackageExpiry changes
+  useEffect(() => {
+    if (authPackageExpiry) {
+      setStoreExpiryDate(authPackageExpiry);
+    }
+  }, [authPackageExpiry]);
+
+  // Real-time listener for store's packageExpiryDate from store doc
+  useEffect(() => {
+    if (!storeId) return;
+    const storeRef = doc(db, 'stores', storeId);
+    const unsubscribeStore = onSnapshot(storeRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.packageExpiryDate) {
+          setStoreExpiryDate(data.packageExpiryDate);
+        }
+      }
+    }, (error) => {
+      console.warn('Dashboard store expiry listener notice:', error);
+    });
+
+    return () => unsubscribeStore();
+  }, [storeId]);
+
+  const effectiveExpiryDate = storeExpiryDate || authPackageExpiry;
+
+  // Calculate calendar days remaining until package expiry
+  const daysLeft = useMemo(() => {
+    if (!effectiveExpiryDate || effectiveExpiryDate === 'Lifetime') return null;
+
+    try {
+      const now = new Date();
+      // Normalize today's date to midnight
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      // Clean string (e.g. YYYY-MM-DD)
+      const cleanStr = effectiveExpiryDate.trim().split('T')[0];
+      const parts = cleanStr.split('-');
+      if (parts.length !== 3) return null;
+
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const expiryMidnight = new Date(year, month, day).getTime();
+
+      const diffMs = expiryMidnight - todayMidnight;
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch (e) {
+      return null;
+    }
+  }, [effectiveExpiryDate]);
+
+  // Warning message only appears before 2 days of expiry date of that store (daysLeft <= 2 and daysLeft >= 0)
+  const showExpiryWarning = daysLeft !== null && daysLeft <= 2 && daysLeft >= 0 && effectiveExpiryDate !== 'Lifetime';
+
+  const expiryMessage = useMemo(() => {
+    if (daysLeft === null) return '';
+    if (daysLeft === 0) return 'Your Package will Expire in 0 Days';
+    if (daysLeft === 1) return 'Your Package will Expire in 1 Day';
+    return `Your Package will Expire in ${daysLeft} Days`;
+  }, [daysLeft]);
 
   useEffect(() => {
     if (!storeId) return;
@@ -103,6 +168,9 @@ export default function Dashboard() {
         return timeB - timeA;
       });
       setSales(data);
+    }, (error) => {
+      console.warn('Dashboard sales listener notice:', error);
+      setLoading(false);
     });
 
     // Listen to Products
@@ -110,6 +178,9 @@ export default function Dashboard() {
       const data: any[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
       setProducts(data);
+    }, (error) => {
+      console.warn('Dashboard products listener notice:', error);
+      setLoading(false);
     });
 
     // Listen to Customers
@@ -117,6 +188,9 @@ export default function Dashboard() {
       const data: any[] = [];
       snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
       setCustomers(data);
+      setLoading(false);
+    }, (error) => {
+      console.warn('Dashboard customers listener notice:', error);
       setLoading(false);
     });
 
@@ -338,6 +412,15 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {/* Only one line blinking message in red */}
+      {showExpiryWarning && (
+        <div id="dashboard-package-expiry-warning" className="pt-1">
+          <p className="text-base sm:text-lg font-black text-red-600 animate-text-blink tracking-wide">
+            {expiryMessage}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>

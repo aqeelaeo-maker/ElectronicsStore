@@ -14,7 +14,14 @@ import {
   CheckCircle2,
   KeyRound,
   LogOut,
-  Sparkles
+  Sparkles,
+  Copy,
+  Check,
+  ExternalLink,
+  Globe,
+  AlertTriangle,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,6 +39,7 @@ export default function Login() {
     loading: authLoading 
   } = useAuth();
 
+  const [activeTab, setActiveTab] = useState<'credentials' | 'google'>('credentials');
   const [selectedRole, setSelectedRole] = useState<UserRole>('Admin');
   const [usernameOrEmail, setUsernameOrEmail] = useState('admin');
   const [password, setPassword] = useState('');
@@ -39,7 +47,16 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [bypassGoogle, setBypassGoogle] = useState(false);
+  
+  // Specific Firebase Domain Authorization Error State
+  const [domainAuthError, setDomainAuthError] = useState<{
+    code: string;
+    hostname: string;
+    origin: string;
+    projectId: string;
+  } | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
+  const [copiedWildcard, setCopiedWildcard] = useState(false);
 
   // If already logged in to an active store session, redirect to dashboard
   useEffect(() => {
@@ -75,16 +92,27 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setErrorMessage(null);
+    setDomainAuthError(null);
     try {
       const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       toast.success(`Google Account authenticated (${result.user.email || 'Verified'}). Please choose your login role.`);
-      // Note: We do NOT auto-login as admin or redirect!
-      // The user is now given the option for Admin and User login.
+      setActiveTab('credentials');
     } catch (error: any) {
       console.error('Google Sign-in error:', error);
       if (error.code === 'auth/popup-closed-by-user') {
         setErrorMessage('Google Sign-In popup was closed before completion. Please try again.');
+      } else if (error.code === 'auth/unauthorized-domain' || error.message?.includes('unauthorized-domain')) {
+        const hostname = typeof window !== 'undefined' ? window.location.hostname : 'run.app';
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        setDomainAuthError({
+          code: 'auth/unauthorized-domain',
+          hostname,
+          origin,
+          projectId: 'electronicsstore-bf494'
+        });
+        setErrorMessage('Google Sign-In was blocked because this application domain is not yet added to your Firebase Authorized Domains list.');
       } else {
         setErrorMessage(error.message || 'Failed to authenticate with Google.');
       }
@@ -94,11 +122,47 @@ export default function Login() {
     }
   };
 
+  const copyToClipboard = async (text: string, type: 'domain' | 'wildcard') => {
+    let success = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        success = true;
+      }
+    } catch {}
+
+    if (!success) {
+      try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.position = 'fixed';
+        el.style.opacity = '0';
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        success = document.execCommand('copy');
+        document.body.removeChild(el);
+      } catch {}
+    }
+
+    if (success) {
+      if (type === 'domain') {
+        setCopiedDomain(true);
+        setTimeout(() => setCopiedDomain(false), 2500);
+      } else {
+        setCopiedWildcard(true);
+        setTimeout(() => setCopiedWildcard(false), 2500);
+      }
+      toast.success(`Copied "${text}" to clipboard!`);
+    } else {
+      toast.info(`Please copy manually: ${text}`);
+    }
+  };
+
   const handleSignOutGoogle = async () => {
     setLoading(true);
     try {
       await signOutGoogle();
-      setBypassGoogle(false);
       toast.info('Signed out of Google account');
     } catch (err) {
       console.error('Sign out error:', err);
@@ -145,8 +209,6 @@ export default function Login() {
     }
   };
 
-  const isGoogleAuthenticated = Boolean(user) || bypassGoogle;
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#f3f6f5] flex items-center justify-center">
@@ -154,6 +216,8 @@ export default function Login() {
       </div>
     );
   }
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'run.app';
 
   return (
     <div className="min-h-screen bg-[#f3f6f5] flex flex-col justify-center py-10 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
@@ -177,99 +241,86 @@ export default function Login() {
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-lg relative z-10 px-4 sm:px-0">
         <div className="glass-panel py-7 px-5 shadow-xl rounded-2xl sm:px-8 bg-white border border-slate-200">
 
-          {/* STEP 1: If NOT signed in with Google */}
-          {!isGoogleAuthenticated ? (
-            <div className="space-y-5">
-              <div className="text-center pb-3 border-b border-slate-100">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-extrabold uppercase tracking-wider mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Step 1: Store Terminal Authentication</span>
-                </div>
-                <h3 className="text-lg font-black text-slate-900">
-                  Sign in with Google First
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Authenticate your store account with Google. After sign-in, you will be given the option to log in as Admin or User.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-rose-800 text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                  <div className="flex-1 font-medium">{errorMessage}</div>
-                </div>
+          {/* Mode Switch Tabs */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl mb-6">
+            <button
+              type="button"
+              onClick={() => { setActiveTab('credentials'); setErrorMessage(null); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                activeTab === 'credentials'
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
               )}
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Store Login</span>
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-100 text-emerald-800 font-black uppercase">
+                Instant
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('google'); setErrorMessage(null); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer relative",
+                activeTab === 'google'
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              )}
+            >
+              <Globe className="w-3.5 h-3.5 text-blue-600" />
+              <span>Google Account</span>
+              {user ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              ) : domainAuthError ? (
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-100 text-amber-800 font-black uppercase">
+                  Action
+                </span>
+              ) : null}
+            </button>
+          </div>
 
-              {/* Primary Google Sign In Button */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={loading}
-                  className="w-full inline-flex justify-center items-center gap-3 py-3 px-4 border border-slate-300 rounded-xl shadow-xs bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 hover:border-slate-400 transition-all disabled:opacity-50 cursor-pointer group"
-                >
-                  <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                  <span>{loading ? 'Authenticating...' : 'Sign in with Google'}</span>
-                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
-                </button>
-              </div>
-
-              {/* Direct Bypass Fallback */}
-              <div className="pt-2 border-t border-slate-100 text-center">
-                <button
-                  type="button"
-                  onClick={() => setBypassGoogle(true)}
-                  className="text-xs font-semibold text-slate-500 hover:text-[#0a382c] transition-colors cursor-pointer"
-                >
-                  Or enter Store Credentials directly (Bypass Google) &rarr;
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* STEP 2: AFTER SIGN IN WITH GOOGLE - GIVE SIGN IN OPTION FOR ADMIN AND USER LOGIN */
-            <div className="space-y-5">
-              
-              {/* Google Verified Banner */}
-              <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                        Google Authenticated
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-900 truncate">
-                      {user?.email || user?.displayName || 'Authorized Google Account'}
-                    </p>
-                  </div>
+          {/* Google Verified Banner if user is signed in with Google */}
+          {user && (
+            <div className="p-3 mb-5 rounded-xl bg-emerald-50/80 border border-emerald-200/80 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4" />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleSignOutGoogle}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all shrink-0 cursor-pointer shadow-2xs"
-                  title="Switch or sign out of Google account"
-                >
-                  <LogOut className="w-3 h-3 text-slate-400" />
-                  <span>Switch</span>
-                </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                      Google Authenticated
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    {user.email || user.displayName || 'Authorized Google Account'}
+                  </p>
+                </div>
               </div>
 
-              {/* Header */}
+              <button
+                type="button"
+                onClick={handleSignOutGoogle}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Switch or sign out of Google account"
+              >
+                <LogOut className="w-3 h-3 text-slate-400" />
+                <span>Switch</span>
+              </button>
+            </div>
+          )}
+
+          {/* TAB 1: STORE CREDENTIALS LOGIN */}
+          {activeTab === 'credentials' && (
+            <div className="space-y-5">
               <div>
                 <h3 className="text-base font-black text-slate-900">
-                  Select Login Option
+                  Select Role & Sign In
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Choose your role below and enter your credentials to access the store system.
+                  Sign in with Admin credentials for full control or User credentials for POS & sales.
                 </p>
               </div>
 
@@ -364,7 +415,7 @@ export default function Login() {
                 </div>
               )}
 
-              {/* Credential Login Form for the Chosen Role */}
+              {/* Credential Login Form */}
               <form onSubmit={handleLogin} className="space-y-4 pt-1">
                 <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                   <KeyRound className="w-3.5 h-3.5 text-slate-500" />
@@ -445,7 +496,7 @@ export default function Login() {
                   </label>
 
                   <span className="text-[11px] text-slate-400 font-medium">
-                    Admin sets credentials in Settings
+                    Default: {selectedRole === 'Admin' ? 'admin / admin123' : 'user / user123'}
                   </span>
                 </div>
 
@@ -476,6 +527,190 @@ export default function Login() {
                   </button>
                 </div>
               </form>
+
+              {/* Notice to switch to Google Auth for Cloud Sync */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span className="text-slate-500">Want terminal authorization & Cloud Sync?</span>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('google'); setErrorMessage(null); }}
+                  className="font-bold text-[#0a382c] hover:underline cursor-pointer inline-flex items-center gap-1"
+                >
+                  <span>Google Auth</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: GOOGLE AUTHENTICATION & FIREBASE DOMAIN AUTHORIZATION */}
+          {activeTab === 'google' && (
+            <div className="space-y-5">
+              <div className="text-center pb-3 border-b border-slate-100">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-extrabold uppercase tracking-wider mb-2">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Cloud Database & Terminal Authorization</span>
+                </div>
+                <h3 className="text-lg font-black text-slate-900">
+                  Google Account Sign-In
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Authenticate your store account with Google to sync with Firebase Cloud Database and verify terminal owner access.
+                </p>
+              </div>
+
+              {/* General Error Message Alert (if not domain error) */}
+              {errorMessage && !domainAuthError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-rose-800 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                  <div className="flex-1 font-medium">{errorMessage}</div>
+                </div>
+              )}
+
+              {/* ACTIONABLE FIREBASE DOMAIN AUTHORIZATION GUIDE PANEL */}
+              {domainAuthError && (
+                <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-300/90 shadow-sm space-y-3.5 text-slate-800">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-amber-950">
+                          Firebase Domain Authorization Required
+                        </h4>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-200 text-amber-900 font-extrabold">
+                          auth/unauthorized-domain
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-900/90 mt-1 leading-relaxed">
+                        Firebase Authentication blocks Google Sign-In because this application URL is not yet listed under <strong>Authorized domains</strong> in your Firebase Console.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Domain Copy Box */}
+                  <div className="bg-white p-3 rounded-lg border border-amber-200/90 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                      <span>Exact Domain to Add:</span>
+                      <span className="text-[10px] text-slate-400">Current App Host</span>
+                    </div>
+                    <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-200 text-xs font-mono text-slate-900 select-all overflow-x-auto">
+                      <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-semibold flex-1 break-all">{currentHost}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(currentHost, 'domain')}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold rounded shadow-2xs transition-colors cursor-pointer shrink-0"
+                      >
+                        {copiedDomain ? <Check className="w-3 h-3 text-emerald-200" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedDomain ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500">
+                      <span>Or wildcard for all Cloud Run previews:</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard('run.app', 'wildcard')}
+                        className="inline-flex items-center gap-1 font-mono text-[10px] font-bold text-blue-700 hover:text-blue-900 cursor-pointer underline"
+                      >
+                        {copiedWildcard ? 'Copied run.app!' : 'Copy "run.app"'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3 Step Quick Resolution */}
+                  <div className="space-y-1.5 text-[11px] text-amber-950 font-medium bg-amber-100/50 p-3 rounded-lg border border-amber-200/60">
+                    <div className="font-bold text-slate-900 text-xs mb-1">Quick 3-Step Setup:</div>
+                    <div className="flex items-start gap-2">
+                      <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</span>
+                      <span>Open Firebase Console Settings:</span>
+                    </div>
+                    <a
+                      href="https://console.firebase.google.com/project/electronicsstore-bf494/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-800 hover:text-blue-950 bg-white px-2.5 py-1 rounded border border-blue-200 hover:border-blue-400 transition-colors shadow-2xs my-1"
+                    >
+                      <span>Open Firebase Authorized Domains Settings</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+
+                    <div className="flex items-start gap-2 pt-1">
+                      <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</span>
+                      <span>Under <strong>Authorized domains</strong>, click <strong>Add domain</strong> and paste the copied domain (or <code>run.app</code>).</span>
+                    </div>
+
+                    <div className="flex items-start gap-2 pt-1">
+                      <span className="w-4 h-4 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</span>
+                      <span>Click <strong>Add</strong>, then return here and click <strong>Retry Google Sign-In</strong>.</span>
+                    </div>
+                  </div>
+
+                  {/* Actions inside warning panel */}
+                  <div className="pt-1 flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGoogleLogin}
+                      disabled={loading}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
+                      <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+                      <span>{loading ? 'Retrying...' : 'Retry Google Sign-In'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('credentials'); setErrorMessage(null); }}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Continue with Store Login</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Primary Google Sign In Button */}
+              {!domainAuthError && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    disabled={loading}
+                    className="w-full inline-flex justify-center items-center gap-3 py-3 px-4 border border-slate-300 rounded-xl shadow-xs bg-white text-sm font-bold text-slate-800 hover:bg-slate-50 hover:border-slate-400 transition-all disabled:opacity-50 cursor-pointer group"
+                  >
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    <span>{loading ? 'Authenticating...' : 'Sign in with Google'}</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </div>
+              )}
+
+              {/* Informational Box */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-600 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                  <Info className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Store Terminal Access:</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Store cashiers and managers can log in instantly using the <strong>Store Login</strong> tab with credentials configured by the Admin, without needing Google OAuth setup.
+                </p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('credentials'); setErrorMessage(null); }}
+                    className="font-bold text-[#0a382c] hover:underline cursor-pointer text-xs"
+                  >
+                    &larr; Switch to Store Login Tab (Instant Access)
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

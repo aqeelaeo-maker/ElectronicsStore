@@ -48,3 +48,36 @@
   background: rgba(0, 0, 0, 0.2);
 }
 
+/* Blinking warning message animations */
+@keyframes warningPulseBlink {
+  0%, 100% {
+    opacity: 1;
+    border-color: #ef4444;
+    background-color: #fff1f2;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25);
+  }
+  50% {
+    opacity: 0.55;
+    border-color: #f87171;
+    background-color: #ffe4e6;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-warning-blink {
+  animation: warningPulseBlink 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes textFlashBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.1;
+  }
+}
+
+.animate-text-blink {
+  animation: textFlashBlink 0.9s ease-in-out infinite;
+}
+

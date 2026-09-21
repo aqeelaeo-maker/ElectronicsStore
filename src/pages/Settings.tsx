@@ -3,8 +3,23 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, CreditCard, FileText, Layers, Plus, Save, ShieldAlert, Store, Tag, Trash2 } from 'lucide-react';
+import { 
+  Building2, 
+  CreditCard, 
+  FileText, 
+  Layers, 
+  Plus, 
+  Save, 
+  Store, 
+  Tag, 
+  Trash2,
+  Crown,
+  Users,
+  LayoutGrid
+} from 'lucide-react';
 import UserManagementSettings from '../components/UserManagementSettings';
+import SuperAdminSettings from '../components/SuperAdminSettings';
+import { cn } from '../lib/utils';
 
 export interface BankAccount {
   bankName: string;
@@ -94,9 +109,17 @@ const compressImage = (base64Str: string, maxWidth = 250, maxHeight = 250): Prom
 };
 
 export default function Settings() {
-  const { role, storeId } = useAuth();
-  const [authorizedEmails, setAuthorizedEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
+  const { role, storeId, isSuperAdmin, superAdminEmail } = useAuth();
+  const [activeTab, setActiveTab] = useState<'store' | 'superadmin' | 'staff' | 'all'>(
+    isSuperAdmin ? 'superadmin' : 'store'
+  );
+
+  // If user is not super admin, ensure they cannot be on the superadmin tab
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab === 'superadmin') {
+      setActiveTab('store');
+    }
+  }, [isSuperAdmin, activeTab]);
 
   const [newBankName, setNewBankName] = useState('');
   const [newAccountNumber, setNewAccountNumber] = useState('');
@@ -120,21 +143,11 @@ export default function Settings() {
   });
 
   const [loading, setLoading] = useState(true);
-  const [savingGeneral, setSavingGeneral] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        if (role === 'Super Admin') {
-          const generalRef = doc(db, 'settings', 'general');
-          const generalSnap = await getDoc(generalRef);
-          
-          if (generalSnap.exists() && generalSnap.data().authorizedEmails) {
-            setAuthorizedEmails(generalSnap.data().authorizedEmails);
-          }
-        }
-
         if (storeId) {
           const storeRef = doc(db, 'stores', storeId);
           const storeSnap = await getDoc(storeRef);
@@ -201,36 +214,6 @@ export default function Settings() {
 
     fetchSettings();
   }, [role, storeId]);
-
-  const handleSaveGeneral = async () => {
-    setSavingGeneral(true);
-    try {
-      await setDoc(doc(db, 'settings', 'general'), {
-        authorizedEmails: authorizedEmails
-      }, { merge: true });
-      
-      toast.success('General settings saved successfully');
-    } catch (error) {
-      console.error('Error saving general settings:', error);
-      toast.error('Failed to save general settings');
-    } finally {
-      setSavingGeneral(false);
-    }
-  };
-
-  const handleAddEmail = () => {
-    const email = newEmail.trim();
-    if (email && !authorizedEmails.includes(email)) {
-      setAuthorizedEmails([...authorizedEmails, email]);
-      setNewEmail('');
-    } else if (authorizedEmails.includes(email)) {
-      toast.warning('Email already in list');
-    }
-  };
-
-  const handleRemoveEmail = (emailToRemove: string) => {
-    setAuthorizedEmails(authorizedEmails.filter(e => e !== emailToRemove));
-  };
 
   const handleAddBankAccount = () => {
     const bankName = newBankName.trim();
@@ -472,19 +455,105 @@ export default function Settings() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-900">Settings</h1>
-        <p className="text-sm text-slate-500 mt-1">Manage system configurations and store details</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Settings</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage system configurations, store details, and permissions</p>
+        </div>
+
+        {isSuperAdmin && (
+          <div className="flex items-center gap-2 self-start sm:self-center px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold shadow-2xs">
+            <Crown className="w-4 h-4 text-amber-500" />
+            <span>Super Admin ({superAdminEmail}) as Admin</span>
+          </div>
+        )}
       </div>
 
-      {/* User Management Section (Admin & User Roles) */}
-      <UserManagementSettings />
+      {/* Settings Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/80 overflow-x-auto">
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('superadmin')}
+            className={cn(
+              "flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap",
+              activeTab === 'superadmin'
+                ? "bg-[#0a382c] text-white shadow-md shadow-emerald-950/20"
+                : "text-slate-700 hover:text-slate-950 bg-amber-50/80 border border-amber-200/80"
+            )}
+          >
+            <Crown className="w-4 h-4 text-amber-400" />
+            <span>Super Admin Settings</span>
+            <span className={cn(
+              "px-1.5 py-0.2 rounded text-[9px] font-black uppercase",
+              activeTab === 'superadmin' ? "bg-amber-400 text-slate-950" : "bg-amber-200 text-amber-900"
+            )}>
+              Master
+            </span>
+          </button>
+        )}
 
-      <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 bg-white border border-slate-200">
-        <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
-          <Store className="w-5 h-5 text-[#0a382c]" />
-          <h2 className="text-lg font-bold text-slate-900">Store Profile</h2>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('store')}
+          className={cn(
+            "flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+            activeTab === 'store'
+              ? "bg-white text-slate-900 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Store className="w-4 h-4 text-[#0a382c]" />
+          <span>Store & Business Info</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('staff')}
+          className={cn(
+            "flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+            activeTab === 'staff'
+              ? "bg-white text-slate-900 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <Users className="w-4 h-4 text-blue-600" />
+          <span>Staff Accounts & Roles</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('all')}
+          className={cn(
+            "flex items-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+            activeTab === 'all'
+              ? "bg-white text-slate-900 shadow-xs"
+              : "text-slate-600 hover:text-slate-900"
+          )}
+        >
+          <LayoutGrid className="w-4 h-4 text-slate-500" />
+          <span>All Settings</span>
+        </button>
+      </div>
+
+      {/* SUPER ADMIN SETTINGS VIEW - STRICTLY ONLY FOR aqeelaeo@gmail.com */}
+      {isSuperAdmin && (activeTab === 'superadmin' || activeTab === 'all') && (
+        <SuperAdminSettings />
+      )}
+
+      {/* STAFF ACCOUNTS VIEW */}
+      {(activeTab === 'staff' || activeTab === 'all') && (
+        <UserManagementSettings />
+      )}
+
+      {/* STORE & BUSINESS PROFILE VIEW */}
+      {(activeTab === 'store' || activeTab === 'all') && (
+        <>
+          <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 bg-white border border-slate-200">
+            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
+              <Store className="w-5 h-5 text-[#0a382c]" />
+              <h2 className="text-lg font-bold text-slate-900">Store Profile</h2>
+            </div>
         
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -936,7 +1005,7 @@ export default function Settings() {
             <button
               onClick={handleSaveStore}
               disabled={savingStore}
-              className="flex items-center px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md transition-colors text-xs font-black disabled:opacity-50 shadow-emerald-950/10"
+              className="flex items-center px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-md transition-colors text-xs font-black disabled:opacity-50 shadow-emerald-950/10 cursor-pointer"
             >
               <Save className="w-4 h-4 mr-2" />
               {savingStore ? 'Saving...' : 'Save Store Details'}
@@ -944,80 +1013,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
-
-      {role === 'Super Admin' && (
-        <div className="glass-panel shadow-sm rounded-2xl p-6 sm:p-8 mt-6 bg-white border border-slate-200">
-          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
-            <ShieldAlert className="w-5 h-5 text-rose-500" />
-            <h2 className="text-lg font-bold text-slate-900">Store Authorization (Super Admin Only)</h2>
-          </div>
-          
-          <div className="space-y-6">
-            <div>
-              <label htmlFor="newEmail" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Authorized Emails
-              </label>
-              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                Users with these emails will be automatically approved to create and open their stores.
-              </p>
-              
-              <div className="flex items-center gap-3 mb-4">
-                <input
-                  type="email"
-                  id="newEmail"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="email@example.com"
-                  className="glass-input flex-1 block w-full rounded-xl py-2.5 px-4 text-xs font-semibold text-slate-800"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddEmail();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddEmail}
-                  className="px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-white rounded-xl shadow-sm transition-colors text-xs font-bold"
-                >
-                  Add
-                </button>
-              </div>
-
-              {authorizedEmails.length > 0 ? (
-                <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-[#f8faf9]">
-                  {authorizedEmails.map((email, index) => (
-                    <li key={index} className="flex justify-between items-center py-3 px-4 hover:bg-slate-50 transition-colors">
-                      <span className="text-sm font-bold text-slate-850">{email}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEmail(email)}
-                        className="text-red-500 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                        title="Remove email"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-slate-500 italic py-2">No authorized emails added yet.</p>
-              )}
-            </div>
-            
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={handleSaveGeneral}
-                disabled={savingGeneral}
-                className="flex items-center px-5 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-xs font-bold disabled:opacity-50 shadow-sm"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {savingGeneral ? 'Saving...' : 'Save Authorized Emails'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
