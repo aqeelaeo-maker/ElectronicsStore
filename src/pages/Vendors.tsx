@@ -72,13 +72,13 @@ export default function Vendors() {
   useEffect(() => {
     if (!storeId) return;
 
-    const qPurchases = query(collection(db, 'inventory_history'), where('storeId', '==', storeId));
+    const qPurchases = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId));
     const unsubPurchases = onSnapshot(qPurchases, (snapshot) => {
       const list: any[] = [];
       snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
       setPurchases(list);
     }, (err) => {
-      console.error('Error fetching inventory history for vendors:', err);
+      console.error('Error fetching inventory logs for vendors:', err);
     });
 
     const qPayments = query(collection(db, 'vendorPayments'), where('storeId', '==', storeId));

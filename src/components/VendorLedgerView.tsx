@@ -22,7 +22,11 @@ import {
   Package,
   Copy,
   Check,
-  Download
+  Download,
+  Edit,
+  Trash2,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   collection, 
@@ -33,7 +37,8 @@ import {
   serverTimestamp, 
   getDoc,
   setDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
@@ -139,6 +144,7 @@ export interface VendorPurchaseRecord {
   bankAccountNumber?: string | null;
   bankName?: string | null;
   paymentNotes?: string;
+  notes?: string;
   createdAt?: any;
 }
 
@@ -184,6 +190,37 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  // Edit & Delete modals state for Purchases
+  const [editingPurchase, setEditingPurchase] = useState<VendorPurchaseRecord | null>(null);
+  const [purchaseEditForm, setPurchaseEditForm] = useState({
+    referenceNumber: '',
+    quantityAdded: '',
+    purchasePrice: '',
+    totalCost: '',
+    paymentDone: '',
+    remainingAmount: '',
+    paymentMode: 'Credit',
+    bankAccountNumber: '',
+    bankName: '',
+    paymentStatus: 'Pending',
+    notes: ''
+  });
+  const [deletingPurchase, setDeletingPurchase] = useState<VendorPurchaseRecord | null>(null);
+
+  // Edit & Delete modals state for Vendor Payments
+  const [editingPayment, setEditingPayment] = useState<VendorPaymentRecord | null>(null);
+  const [paymentEditForm, setPaymentEditForm] = useState({
+    paidAmount: '',
+    paymentDate: '',
+    paymentMode: 'Cash' as 'Cash' | 'Online',
+    bankAccountNumber: '',
+    bankName: '',
+    referenceNo: '',
+    notes: ''
+  });
+  const [deletingPayment, setDeletingPayment] = useState<VendorPaymentRecord | null>(null);
+  const [processingAction, setProcessingAction] = useState(false);
 
   // Listen to vendor document in real-time
   useEffect(() => {
@@ -688,6 +725,426 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
     }
   };
 
+  // Handlers for Editing & Deleting Purchases
+  const handleOpenEditPurchase = (purchase: VendorPurchaseRecord) => {
+    const cost = purchase.totalCost !== undefined 
+      ? purchase.totalCost 
+      : ((purchase.purchasePrice || 0) * (purchase.quantityAdded || 1));
+    const paid = purchase.paymentDone !== undefined 
+      ? purchase.paymentDone 
+      : (purchase.paymentStatus === 'Paid' ? cost : 0);
+    const remaining = purchase.remainingAmount !== undefined 
+      ? purchase.remainingAmount 
+      : Math.max(0, cost - paid);
+
+    setPurchaseEditForm({
+      referenceNumber: purchase.referenceNumber || '',
+      quantityAdded: (purchase.quantityAdded || 1).toString(),
+      purchasePrice: (purchase.purchasePrice || 0).toString(),
+      totalCost: cost.toString(),
+      paymentDone: paid.toString(),
+      remainingAmount: remaining.toString(),
+      paymentMode: purchase.paymentMode || 'Credit',
+      bankAccountNumber: purchase.bankAccountNumber || '',
+      bankName: purchase.bankName || '',
+      paymentStatus: purchase.paymentStatus || (remaining === 0 ? 'Paid' : (paid > 0 ? 'Partially Paid' : 'Pending')),
+      notes: purchase.paymentNotes || purchase.notes || ''
+    });
+    setEditingPurchase(purchase);
+  };
+
+  const handleSaveEditPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPurchase || !activeStoreId) return;
+
+    const qty = parseFloat(purchaseEditForm.quantityAdded) || 1;
+    const price = parseFloat(purchaseEditForm.purchasePrice) || 0;
+    const cost = parseFloat(purchaseEditForm.totalCost) || (qty * price);
+    const paid = parseFloat(purchaseEditForm.paymentDone) || 0;
+
+    if (cost < 0 || price < 0 || qty <= 0) {
+      toast.error('Please enter valid quantities and costs');
+      return;
+    }
+    if (paid > cost) {
+      toast.error('Payment amount cannot exceed total bill cost');
+      return;
+    }
+
+    const remaining = Math.max(0, Number((cost - paid).toFixed(2)));
+    const calculatedStatus = remaining === 0 ? 'Paid' : (paid > 0 ? 'Partially Paid' : 'Pending');
+
+    const matchedBank = purchaseEditForm.paymentMode === 'Online'
+      ? bankAccounts.find(b => b.accountNumber === purchaseEditForm.bankAccountNumber)
+      : null;
+
+    setProcessingAction(true);
+    try {
+      const oldCost = editingPurchase.totalCost !== undefined 
+        ? editingPurchase.totalCost 
+        : ((editingPurchase.purchasePrice || 0) * (editingPurchase.quantityAdded || 1));
+      const oldPaid = editingPurchase.paymentDone !== undefined 
+        ? editingPurchase.paymentDone 
+        : (editingPurchase.paymentStatus === 'Paid' ? oldCost : 0);
+      const oldRemaining = editingPurchase.remainingAmount !== undefined 
+        ? editingPurchase.remainingAmount 
+        : Math.max(0, oldCost - oldPaid);
+
+      const remDelta = remaining - oldRemaining;
+
+      // Reconcile store bank account balance if Online payment
+      const wasOnline = editingPurchase.paymentMode === 'Online';
+      const isOnline = purchaseEditForm.paymentMode === 'Online';
+
+      if (activeStoreId && (wasOnline || isOnline)) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let changed = false;
+
+            // Vendor payments deduct from bank balance, so re-crediting old paid
+            if (wasOnline && editingPurchase.bankAccountNumber && oldPaid > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === editingPurchase.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal + oldPaid).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            // Deduct new paid amount
+            if (isOnline && purchaseEditForm.bankAccountNumber && paid > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === purchaseEditForm.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal - paid).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (changed) {
+              await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+            }
+          }
+        } catch (bErr) {
+          console.warn('Bank account update error on purchase edit:', bErr);
+        }
+      }
+
+      // Update inventoryLogs document
+      const purRef = doc(db, 'inventoryLogs', editingPurchase.id);
+      await updateDoc(purRef, cleanDataForFirestore({
+        referenceNumber: purchaseEditForm.referenceNumber.trim() || editingPurchase.referenceNumber || null,
+        quantityAdded: qty,
+        purchasePrice: price,
+        totalCost: cost,
+        paymentDone: paid,
+        remainingAmount: remaining,
+        paymentStatus: calculatedStatus,
+        paymentMode: purchaseEditForm.paymentMode,
+        bankAccountNumber: isOnline && matchedBank ? matchedBank.accountNumber : null,
+        bankName: isOnline && matchedBank ? matchedBank.bankName : null,
+        paymentNotes: purchaseEditForm.notes.trim() || null,
+        updatedAt: serverTimestamp()
+      }));
+
+      // Update vendor balance
+      if (vendor?.id && Math.abs(remDelta) > 0.001) {
+        try {
+          const vRef = doc(db, 'vendors', vendor.id);
+          const curBal = typeof currentVendorData.balance === 'number' ? currentVendorData.balance : (parseFloat(currentVendorData.balance as any) || 0);
+          const newBal = Math.max(0, Number((curBal + remDelta).toFixed(2)));
+          await updateDoc(vRef, {
+            balance: newBal,
+            remainingAmount: newBal,
+            updatedAt: serverTimestamp()
+          });
+        } catch (vErr) {
+          console.warn('Vendor balance update error on purchase edit:', vErr);
+        }
+      }
+
+      toast.success(`Purchase record ${editingPurchase.referenceNumber || editingPurchase.id} updated successfully!`);
+      setEditingPurchase(null);
+    } catch (err: any) {
+      console.error('Error updating purchase:', err);
+      toast.error(`Failed to update purchase: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleExecuteDeletePurchase = async () => {
+    if (!deletingPurchase || !activeStoreId) return;
+
+    setProcessingAction(true);
+    try {
+      const cost = deletingPurchase.totalCost !== undefined 
+        ? deletingPurchase.totalCost 
+        : ((deletingPurchase.purchasePrice || 0) * (deletingPurchase.quantityAdded || 1));
+      const paid = deletingPurchase.paymentDone !== undefined 
+        ? deletingPurchase.paymentDone 
+        : (deletingPurchase.paymentStatus === 'Paid' ? cost : 0);
+      const remaining = deletingPurchase.remainingAmount !== undefined 
+        ? deletingPurchase.remainingAmount 
+        : Math.max(0, cost - paid);
+
+      // Revert store bank account if Online
+      if (deletingPurchase.paymentMode === 'Online' && deletingPurchase.bankAccountNumber && paid > 0 && activeStoreId) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === deletingPurchase.bankAccountNumber) {
+                const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                return { ...acc, balance: Number((curBal + paid).toFixed(2)) };
+              }
+              return acc;
+            });
+            await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+          }
+        } catch (bErr) {
+          console.warn('Bank balance restore error on purchase delete:', bErr);
+        }
+      }
+
+      // Deduct remaining debt from vendor
+      if (vendor?.id && remaining > 0) {
+        try {
+          const vRef = doc(db, 'vendors', vendor.id);
+          const curBal = typeof currentVendorData.balance === 'number' ? currentVendorData.balance : (parseFloat(currentVendorData.balance as any) || 0);
+          const newBal = Math.max(0, Number((curBal - remaining).toFixed(2)));
+          await updateDoc(vRef, {
+            balance: newBal,
+            remainingAmount: newBal,
+            updatedAt: serverTimestamp()
+          });
+        } catch (vErr) {
+          console.warn('Vendor balance update error on purchase delete:', vErr);
+        }
+      }
+
+      await deleteDoc(doc(db, 'inventoryLogs', deletingPurchase.id));
+      toast.success(`Purchase record ${deletingPurchase.referenceNumber || deletingPurchase.id} deleted successfully!`);
+      setDeletingPurchase(null);
+    } catch (err: any) {
+      console.error('Error deleting purchase:', err);
+      toast.error(`Failed to delete purchase: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  // Handlers for Editing & Deleting Payments
+  const handleOpenEditPayment = (payment: VendorPaymentRecord) => {
+    const amt = payment.paidAmount !== undefined ? payment.paidAmount : (payment.paymentDone || 0);
+    const dateVal = payment.paymentDate 
+      ? payment.paymentDate.split('T')[0] 
+      : (payment.createdAt?.toMillis ? new Date(payment.createdAt.toMillis()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+
+    setPaymentEditForm({
+      paidAmount: amt.toString(),
+      paymentDate: dateVal,
+      paymentMode: (payment.paymentMode === 'Online' ? 'Online' : 'Cash'),
+      bankAccountNumber: payment.bankAccountNumber || '',
+      bankName: payment.bankName || '',
+      referenceNo: payment.referenceNo || payment.referenceNumber || '',
+      notes: payment.notes || ''
+    });
+    setEditingPayment(payment);
+  };
+
+  const handleSaveEditPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment || !activeStoreId) return;
+
+    const newAmount = parseFloat(paymentEditForm.paidAmount);
+    if (isNaN(newAmount) || newAmount <= 0) {
+      toast.error('Please enter a valid payment amount greater than zero');
+      return;
+    }
+
+    const matchedBank = paymentEditForm.paymentMode === 'Online'
+      ? bankAccounts.find(b => b.accountNumber === paymentEditForm.bankAccountNumber)
+      : null;
+
+    setProcessingAction(true);
+    try {
+      const oldAmount = editingPayment.paidAmount !== undefined ? editingPayment.paidAmount : (editingPayment.paymentDone || 0);
+      const delta = newAmount - oldAmount; // paying more reduces vendor debt, paying less increases debt
+
+      const wasOnline = editingPayment.paymentMode === 'Online';
+      const isOnline = paymentEditForm.paymentMode === 'Online';
+
+      // Reconcile bank balance if Online
+      if (activeStoreId && (wasOnline || isOnline)) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let changed = false;
+
+            if (wasOnline && editingPayment.bankAccountNumber && oldAmount > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === editingPayment.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal + oldAmount).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (isOnline && paymentEditForm.bankAccountNumber && newAmount > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === paymentEditForm.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal - newAmount).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (changed) {
+              await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+            }
+          }
+        } catch (bErr) {
+          console.warn('Bank balance reconcile error on vendor payment edit:', bErr);
+        }
+      }
+
+      const paymentRef = doc(db, 'vendorPayments', editingPayment.id);
+      const updatePayload = cleanDataForFirestore({
+        paidAmount: newAmount,
+        paymentDone: newAmount,
+        paymentDate: paymentEditForm.paymentDate,
+        date: paymentEditForm.paymentDate,
+        paymentMode: paymentEditForm.paymentMode,
+        bankAccountNumber: isOnline && matchedBank ? matchedBank.accountNumber : null,
+        bankName: isOnline && matchedBank ? matchedBank.bankName : null,
+        referenceNo: paymentEditForm.referenceNo.trim() || editingPayment.referenceNo || null,
+        notes: paymentEditForm.notes.trim() || null,
+        updatedAt: serverTimestamp()
+      });
+
+      await updateDoc(paymentRef, updatePayload);
+
+      if (vendor?.id) {
+        try {
+          const subColRef = doc(collection(db, 'vendors', vendor.id, 'payments'), editingPayment.id);
+          await updateDoc(subColRef, updatePayload).catch(() => {});
+        } catch (_) {}
+      }
+
+      // Update vendor balance
+      if (vendor?.id && Math.abs(delta) > 0.001) {
+        try {
+          const vRef = doc(db, 'vendors', vendor.id);
+          const curBal = typeof currentVendorData.balance === 'number' ? currentVendorData.balance : (parseFloat(currentVendorData.balance as any) || 0);
+          const newBal = Math.max(0, Number((curBal - delta).toFixed(2)));
+          const curPaid = typeof currentVendorData.totalPaid === 'number' ? currentVendorData.totalPaid : 0;
+          const newTotalPaid = Math.max(0, Number((curPaid + delta).toFixed(2)));
+          await updateDoc(vRef, {
+            balance: newBal,
+            remainingAmount: newBal,
+            totalPaid: newTotalPaid,
+            updatedAt: serverTimestamp()
+          });
+        } catch (vErr) {
+          console.warn('Vendor balance update error on payment edit:', vErr);
+        }
+      }
+
+      toast.success('Vendor payment voucher updated successfully!');
+      setEditingPayment(null);
+    } catch (err: any) {
+      console.error('Error updating payment:', err);
+      toast.error(`Failed to update payment: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleExecuteDeletePayment = async () => {
+    if (!deletingPayment || !activeStoreId) return;
+
+    setProcessingAction(true);
+    try {
+      const paid = deletingPayment.paidAmount !== undefined ? deletingPayment.paidAmount : (deletingPayment.paymentDone || 0);
+
+      // Restore vendor balance (adding back paid amount to debt)
+      if (vendor?.id && paid > 0) {
+        try {
+          const vRef = doc(db, 'vendors', vendor.id);
+          const curBal = typeof currentVendorData.balance === 'number' ? currentVendorData.balance : (parseFloat(currentVendorData.balance as any) || 0);
+          const newBal = Number((curBal + paid).toFixed(2));
+          const curPaid = typeof currentVendorData.totalPaid === 'number' ? currentVendorData.totalPaid : 0;
+          const newTotalPaid = Math.max(0, Number((curPaid - paid).toFixed(2)));
+          await updateDoc(vRef, {
+            balance: newBal,
+            remainingAmount: newBal,
+            totalPaid: newTotalPaid,
+            updatedAt: serverTimestamp()
+          });
+        } catch (vErr) {
+          console.warn('Vendor balance update error on payment delete:', vErr);
+        }
+      }
+
+      // Revert store bank account if Online
+      if (deletingPayment.paymentMode === 'Online' && deletingPayment.bankAccountNumber && paid > 0 && activeStoreId) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === deletingPayment.bankAccountNumber) {
+                const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                return { ...acc, balance: Number((curBal + paid).toFixed(2)) };
+              }
+              return acc;
+            });
+            await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+          }
+        } catch (bErr) {
+          console.warn('Bank balance restore error on payment delete:', bErr);
+        }
+      }
+
+      await deleteDoc(doc(db, 'vendorPayments', deletingPayment.id));
+      if (vendor?.id) {
+        try {
+          const subColRef = doc(collection(db, 'vendors', vendor.id, 'payments'), deletingPayment.id);
+          await deleteDoc(subColRef).catch(() => {});
+        } catch (_) {}
+      }
+
+      toast.success(`Payment voucher ${deletingPayment.referenceNo || deletingPayment.referenceNumber || deletingPayment.id} deleted successfully!`);
+      setDeletingPayment(null);
+    } catch (err: any) {
+      console.error('Error deleting payment:', err);
+      toast.error(`Failed to delete payment: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
   // Date filtering helper
   const filterByDate = (dateStr?: string) => {
     if (dateFilter === 'all' || !dateStr) return true;
@@ -755,6 +1212,8 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
     runningBalance: number; // Cumulative net account balance payable
     mode: string;
     bankInfo?: string;
+    rawPurchase?: VendorPurchaseRecord;
+    rawPayment?: VendorPaymentRecord;
   };
 
   // Combined Running Account Statement
@@ -807,7 +1266,8 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
         debit: 0,
         billBalance: pending,
         mode: p.paymentMode || 'Credit',
-        bankInfo: p.bankName ? `${p.bankName} (${p.bankAccountNumber})` : undefined
+        bankInfo: p.bankName ? `${p.bankName} (${p.bankAccountNumber})` : undefined,
+        rawPurchase: p
       });
     });
 
@@ -830,7 +1290,8 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
         debit: amount,
         billBalance: 0,
         mode: p.paymentMode || 'Cash',
-        bankInfo: p.bankName ? `${p.bankName} (${p.bankAccountNumber})` : undefined
+        bankInfo: p.bankName ? `${p.bankName} (${p.bankAccountNumber})` : undefined,
+        rawPayment: p
       });
     });
 
@@ -1783,15 +2244,35 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button
-                            type="button"
-                            onClick={() => setViewingPurchase(purchase)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer mr-2"
-                            title="Quick View Purchase Details"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            View
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingPurchase(purchase)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                              title="Quick View Purchase Details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPurchase(purchase)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors cursor-pointer border border-blue-200"
+                              title="Edit Purchase Record"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPurchase(purchase)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer border border-rose-200"
+                              title="Delete Purchase Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1883,15 +2364,35 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button
-                            type="button"
-                            onClick={() => printPaymentVoucher(payment)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] font-bold transition-colors cursor-pointer border border-emerald-200"
-                            title="Print Voucher"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-emerald-700" />
-                            Print
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => printPaymentVoucher(payment)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] font-bold transition-colors cursor-pointer border border-emerald-200 text-xs"
+                              title="Print Voucher"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                              Print
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPayment(payment)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition-colors cursor-pointer border border-blue-200 text-xs"
+                              title="Edit Payment Voucher"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPayment(payment)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition-colors cursor-pointer border border-rose-200 text-xs"
+                              title="Delete Payment Voucher"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1917,19 +2418,20 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                   <th className="px-6 py-4 text-right">Bill Balance (Pending)</th>
                   <th className="px-6 py-4 text-right">Running Balance (Payable)</th>
                   <th className="px-6 py-4">Mode / Channel</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
+                    <td colSpan={10} className="px-6 py-12 text-center text-slate-400">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0a382c] mx-auto mb-2"></div>
                       Generating running statement...
                     </td>
                   </tr>
                 ) : statementRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400 italic">
+                    <td colSpan={10} className="px-6 py-12 text-center text-slate-400 italic">
                       No account transactions found for this vendor.
                     </td>
                   </tr>
@@ -1979,6 +2481,71 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                           {row.mode} {row.bankInfo ? `• ${row.bankInfo}` : ''}
                         </span>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {row.type === 'Purchase' && row.rawPurchase ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingPurchase(row.rawPurchase!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                              title="Quick View Purchase Details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPurchase(row.rawPurchase!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors cursor-pointer border border-blue-200"
+                              title="Edit Purchase Record"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPurchase(row.rawPurchase!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer border border-rose-200"
+                              title="Delete Purchase Record"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              Delete
+                            </button>
+                          </div>
+                        ) : row.type === 'Payment' && row.rawPayment ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => printPaymentVoucher(row.rawPayment!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-[#0a382c] font-bold transition-colors cursor-pointer border border-emerald-200 text-xs"
+                              title="Print Voucher"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                              Print
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPayment(row.rawPayment!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold transition-colors cursor-pointer border border-blue-200 text-xs"
+                              title="Edit Payment Voucher"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-blue-600" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingPayment(row.rawPayment!)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition-colors cursor-pointer border border-rose-200 text-xs"
+                              title="Delete Payment Voucher"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              Delete
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 text-xs font-bold">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -2001,6 +2568,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                     <td className={`px-6 py-4 text-right font-mono font-black text-base ${financialTotals.currentBalance > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
                       PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
+                    <td></td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -2148,7 +2716,19 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               </div>
             </div>
 
-            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end">
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const toEdit = viewingPurchase;
+                  setViewingPurchase(null);
+                  handleOpenEditPurchase(toEdit);
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                Edit Purchase
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingPurchase(null)}
@@ -2156,6 +2736,506 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PURCHASE MODAL */}
+      {editingPurchase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-6 py-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <Edit className="w-5 h-5 text-blue-200" />
+                <div>
+                  <h3 className="font-bold text-base text-white">Edit Stock Purchase Bill</h3>
+                  <p className="text-xs text-blue-100 font-mono">
+                    Ref: {editingPurchase.referenceNumber || `PUR-${editingPurchase.id.slice(-6).toUpperCase()}`} • {editingPurchase.productName || 'Product'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingPurchase(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-blue-100 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPurchase} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Bill / Reference #
+                  </label>
+                  <input
+                    type="text"
+                    value={purchaseEditForm.referenceNumber}
+                    onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, referenceNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Status
+                  </label>
+                  <select
+                    value={purchaseEditForm.paymentStatus}
+                    onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, paymentStatus: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="Paid">Paid</option>
+                    <option value="Partially Paid">Partially Paid</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Quantity Added
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    required
+                    value={purchaseEditForm.quantityAdded}
+                    onChange={(e) => {
+                      const newQty = e.target.value;
+                      const p = parseFloat(purchaseEditForm.purchasePrice) || 0;
+                      const q = parseFloat(newQty) || 0;
+                      setPurchaseEditForm({
+                        ...purchaseEditForm,
+                        quantityAdded: newQty,
+                        totalCost: (q * p).toString()
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Unit Purchase Price (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={purchaseEditForm.purchasePrice}
+                    onChange={(e) => {
+                      const newPrice = e.target.value;
+                      const q = parseFloat(purchaseEditForm.quantityAdded) || 0;
+                      const p = parseFloat(newPrice) || 0;
+                      setPurchaseEditForm({
+                        ...purchaseEditForm,
+                        purchasePrice: newPrice,
+                        totalCost: (q * p).toString()
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Total Bill Cost (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={purchaseEditForm.totalCost}
+                    onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, totalCost: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Done / Paid (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={purchaseEditForm.paymentDone}
+                    onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, paymentDone: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              {/* Live Remaining Balance Calculation */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-600">Remaining Due to Vendor:</span>
+                <span className="font-mono font-black text-sm text-amber-800">
+                  PKR {Math.max(0, (parseFloat(purchaseEditForm.totalCost) || 0) - (parseFloat(purchaseEditForm.paymentDone) || 0)).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={purchaseEditForm.paymentMode}
+                    onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, paymentMode: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="Credit">Credit / Pay Later</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Online">Online / Bank Transfer</option>
+                  </select>
+                </div>
+                {purchaseEditForm.paymentMode === 'Online' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Store Bank Account
+                    </label>
+                    <select
+                      value={purchaseEditForm.bankAccountNumber}
+                      onChange={(e) => {
+                        const acc = bankAccounts.find(b => b.accountNumber === e.target.value);
+                        setPurchaseEditForm({
+                          ...purchaseEditForm,
+                          bankAccountNumber: e.target.value,
+                          bankName: acc ? acc.bankName : ''
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                    >
+                      <option value="">Select Account</option>
+                      {bankAccounts.map((b, i) => (
+                        <option key={i} value={b.accountNumber}>
+                          {b.bankName} - {b.accountNumber}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Purchase Notes & Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={purchaseEditForm.notes}
+                  onChange={(e) => setPurchaseEditForm({ ...purchaseEditForm, notes: e.target.value })}
+                  placeholder="Notes, consignment info, remarks..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingPurchase(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingAction ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE PURCHASE CONFIRMATION MODAL */}
+      {deletingPurchase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-rose-600 px-6 py-4 text-white flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete Purchase Record?</h3>
+                <p className="text-xs text-rose-100 font-mono">
+                  Ref: {deletingPurchase.referenceNumber || `PUR-${deletingPurchase.id.slice(-6).toUpperCase()}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete purchase record <span className="font-bold text-slate-900">{deletingPurchase.referenceNumber || deletingPurchase.id}</span> ({deletingPurchase.productName || 'Stock'})?
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Total Bill Cost:</span>
+                  <span className="font-bold text-slate-900 font-mono">
+                    PKR {(deletingPurchase.totalCost !== undefined ? deletingPurchase.totalCost : ((deletingPurchase.purchasePrice || 0) * (deletingPurchase.quantityAdded || 1))).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Paid Amount:</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    PKR {(deletingPurchase.paymentDone || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Remaining Due:</span>
+                  <span className="font-bold text-amber-800 font-mono">
+                    PKR {(deletingPurchase.remainingAmount || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Deleting this purchase will deduct PKR {(deletingPurchase.remainingAmount || 0).toFixed(2)} remaining payable from the vendor balance.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingPurchase(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeletePurchase}
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {processingAction ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PAYMENT MODAL */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-emerald-700 to-teal-800 px-6 py-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <Edit className="w-5 h-5 text-emerald-200" />
+                <div>
+                  <h3 className="font-bold text-base text-white">Edit Vendor Payment Voucher</h3>
+                  <p className="text-xs text-emerald-100 font-mono">Ref: {editingPayment.referenceNo || editingPayment.referenceNumber || editingPayment.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingPayment(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-emerald-100 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPayment} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Amount Paid (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={paymentEditForm.paidAmount}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paidAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-600 text-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentEditForm.paymentDate}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paymentDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={paymentEditForm.paymentMode}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paymentMode: e.target.value as 'Cash' | 'Online' })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Online">Online / Bank Transfer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Voucher / Reference #
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentEditForm.referenceNo}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, referenceNo: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+              </div>
+
+              {paymentEditForm.paymentMode === 'Online' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Disbursing Bank Account
+                  </label>
+                  <select
+                    value={paymentEditForm.bankAccountNumber}
+                    onChange={(e) => {
+                      const acc = bankAccounts.find(b => b.accountNumber === e.target.value);
+                      setPaymentEditForm({
+                        ...paymentEditForm,
+                        bankAccountNumber: e.target.value,
+                        bankName: acc ? acc.bankName : ''
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                  >
+                    <option value="">Select Account</option>
+                    {bankAccounts.map((b, i) => (
+                      <option key={i} value={b.accountNumber}>
+                        {b.bankName} - {b.accountNumber}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Notes & Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={paymentEditForm.notes}
+                  onChange={(e) => setPaymentEditForm({ ...paymentEditForm, notes: e.target.value })}
+                  placeholder="Notes, transaction reference, comments..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayment(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingAction ? 'Saving Changes...' : 'Save Voucher'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE PAYMENT CONFIRMATION MODAL */}
+      {deletingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-rose-600 px-6 py-4 text-white flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete Payment Record?</h3>
+                <p className="text-xs text-rose-100 font-mono">Ref: {deletingPayment.referenceNo || deletingPayment.referenceNumber || deletingPayment.id}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete this payment voucher to vendor <span className="font-bold text-slate-900">{currentVendorData.companyName || currentVendorData.name}</span>?
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Amount Paid:</span>
+                  <span className="font-bold text-rose-700 font-mono text-sm">
+                    PKR {(deletingPayment.paidAmount !== undefined ? deletingPayment.paidAmount : (deletingPayment.paymentDone || 0)).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Payment Mode:</span>
+                  <span className="font-bold text-slate-800">{deletingPayment.paymentMode || 'Cash'}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Payment Date:</span>
+                  <span className="font-semibold text-slate-700">
+                    {deletingPayment.paymentDate ? new Date(deletingPayment.paymentDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Deleting this payment will add PKR {(deletingPayment.paidAmount !== undefined ? deletingPayment.paidAmount : (deletingPayment.paymentDone || 0)).toFixed(2)} back to the outstanding payable balance owed to this vendor.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingPayment(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeletePayment}
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {processingAction ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   collection, 
   onSnapshot, 
@@ -806,8 +806,11 @@ export default function Sales() {
     return true;
   };
 
-  const handleWithoutSerialSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWithoutSerialSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const raw = productSearchInput.trim();
     if (!raw) return;
 
@@ -1002,8 +1005,11 @@ export default function Sales() {
 
   const handleScanSerialNumber = handleScanCode;
 
-  const handleHardwareBarcodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleHardwareBarcodeSubmit = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const trimmed = serialSearchInput.trim();
     if (!trimmed) return;
     handleScanCode(trimmed);
@@ -2247,17 +2253,101 @@ export default function Sales() {
     localStorage.setItem('pos_per_page_sales', String(val));
   };
 
-  const filteredSales = sales.filter(s => {
-    const matchesSearch = 
-      s.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      s.customerName?.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchesSearch) return false;
+  // Extract all unique serial numbers associated with a sale (from items, returns, etc.)
+  const getSaleSerialNumbers = useCallback((sale: Sale): string[] => {
+    const serialSet = new Set<string>();
 
-    if (statusFilter === 'Paid') return s.status === 'Paid';
-    if (statusFilter === 'Pending') return s.status === 'Pending';
-    if (statusFilter === 'Returns') return s.returns && s.returns.length > 0;
-    return true;
-  });
+    const addSerial = (val: any) => {
+      if (!val) return;
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed) {
+          serialSet.add(trimmed);
+          // If stored value is a serial document ID, also index its real serialNumber
+          const found = allSerials.find(s => s.id === trimmed);
+          if (found && found.serialNumber) {
+            serialSet.add(found.serialNumber.trim());
+          }
+        }
+      } else if (typeof val === 'object') {
+        if (typeof val.serialNumber === 'string') addSerial(val.serialNumber);
+        if (typeof val.id === 'string') addSerial(val.id);
+      }
+    };
+
+    if (sale.items && Array.isArray(sale.items)) {
+      for (const item of sale.items) {
+        if (Array.isArray(item.selectedSerials)) {
+          item.selectedSerials.forEach(addSerial);
+        }
+        if (Array.isArray(item.returnedSerials)) {
+          item.returnedSerials.forEach(addSerial);
+        }
+        if (Array.isArray((item as any).serials)) {
+          (item as any).serials.forEach(addSerial);
+        }
+        if (typeof (item as any).serialNumber === 'string') {
+          addSerial((item as any).serialNumber);
+        }
+      }
+    }
+
+    if (sale.returns && Array.isArray(sale.returns)) {
+      for (const ret of sale.returns) {
+        if (ret.items && Array.isArray(ret.items)) {
+          for (const retItem of ret.items) {
+            if (Array.isArray(retItem.returnedSerials)) {
+              retItem.returnedSerials.forEach(addSerial);
+            }
+            if (Array.isArray((retItem as any).selectedSerials)) {
+              (retItem as any).selectedSerials.forEach(addSerial);
+            }
+          }
+        }
+      }
+    }
+
+    if (Array.isArray((sale as any).serials)) {
+      (sale as any).serials.forEach(addSerial);
+    }
+    if (Array.isArray((sale as any).serialNumbers)) {
+      (sale as any).serialNumbers.forEach(addSerial);
+    }
+
+    return Array.from(serialSet);
+  }, [allSerials]);
+
+  const filteredSales = useMemo(() => {
+    const rawSearch = searchTerm.trim().toLowerCase();
+    const cleanSearchAlphanum = rawSearch.replace(/[^a-z0-9]/gi, '');
+
+    return sales.filter(s => {
+      if (rawSearch) {
+        const matchesInvoice = s.invoiceNo?.toLowerCase().includes(rawSearch) || false;
+        const matchesCustomer = s.customerName?.toLowerCase().includes(rawSearch) || false;
+
+        // Search by serial numbers associated with this sale
+        const serials = getSaleSerialNumbers(s);
+        const matchesSerial = serials.some(sn => {
+          const snLower = sn.toLowerCase();
+          if (snLower.includes(rawSearch)) return true;
+          // Match without punctuation/dashes (e.g. SN1234 matches SN-1234)
+          if (cleanSearchAlphanum.length >= 3) {
+            const snAlphanum = snLower.replace(/[^a-z0-9]/gi, '');
+            if (snAlphanum.includes(cleanSearchAlphanum)) return true;
+          }
+          return false;
+        });
+
+        if (!matchesInvoice && !matchesCustomer && !matchesSerial) return false;
+      }
+
+      if (statusFilter === 'Paid') return s.status === 'Paid';
+      if (statusFilter === 'Pending') return s.status === 'Pending';
+      if (statusFilter === 'Returns') return Boolean(s.returns && s.returns.length > 0);
+      return true;
+    });
+  }, [sales, searchTerm, statusFilter, getSaleSerialNumbers]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -3006,7 +3096,7 @@ export default function Sales() {
                       </div>
 
                       {/* Search / Scan Input with Live Autocomplete Dropdown */}
-                      <form onSubmit={handleHardwareBarcodeSubmit} className="relative">
+                      <div className="relative">
                         <div className="flex gap-2">
                           <div className="relative flex-1">
                             <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
@@ -3019,6 +3109,13 @@ export default function Sales() {
                               onChange={(e) => {
                                 setSerialSearchInput(e.target.value);
                                 setIsSerialDropdownOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleHardwareBarcodeSubmit(e);
+                                }
                               }}
                               autoComplete="off"
                               className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#0a382c]/20 bg-white border border-slate-200"
@@ -3038,7 +3135,8 @@ export default function Sales() {
                             )}
                           </div>
                           <button
-                            type="submit"
+                            type="button"
+                            onClick={handleHardwareBarcodeSubmit}
                             disabled={!serialSearchInput.trim()}
                             className="px-4 py-2 bg-[#0a382c] hover:bg-[#0d4a3b] disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
                           >
@@ -3097,7 +3195,7 @@ export default function Sales() {
                             )}
                           </div>
                         )}
-                      </form>
+                      </div>
                     </div>
                   )}
 
@@ -3133,7 +3231,7 @@ export default function Sales() {
                       </div>
 
                       {/* Search Input with Autocomplete Dropdown */}
-                      <form onSubmit={handleWithoutSerialSubmit} className="relative">
+                      <div className="relative">
                         <div className="flex gap-2">
                           <div className="relative flex-1">
                             <Package className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
@@ -3146,6 +3244,13 @@ export default function Sales() {
                               onChange={(e) => {
                                 setProductSearchInput(e.target.value);
                                 setIsProductDropdownOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleWithoutSerialSubmit(e);
+                                }
                               }}
                               autoComplete="off"
                               className="glass-input block w-full pl-9 pr-8 py-2 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500/20 bg-white border border-slate-200"
@@ -3165,7 +3270,8 @@ export default function Sales() {
                             )}
                           </div>
                           <button
-                            type="submit"
+                            type="button"
+                            onClick={handleWithoutSerialSubmit}
                             disabled={!productSearchInput.trim()}
                             className="px-4 py-2 bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
                           >
@@ -3225,7 +3331,7 @@ export default function Sales() {
                             )}
                           </div>
                         )}
-                      </form>
+                      </div>
                     </div>
                   )}
 
@@ -3801,17 +3907,27 @@ export default function Sales() {
 
       <div className="glass-panel rounded-2xl shadow-sm overflow-hidden bg-white">
         <div className="p-4 border-b border-slate-150 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="relative max-w-sm w-full">
+          <div className="relative max-w-md w-full">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-slate-450" />
             </div>
             <input
               type="text"
-              placeholder="Search invoices by invoice number or customer..."
+              placeholder="Search invoices by invoice number, customer, or serial number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="glass-input block w-full pl-10 pr-3 py-2 rounded-xl text-xs"
+              className="glass-input block w-full pl-10 pr-8 py-2 rounded-xl text-xs"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold p-0.5"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {/* Filter Chips */}
@@ -3923,6 +4039,53 @@ export default function Sales() {
                               )}
                             </span>
                           </div>
+
+                          {/* Serial Numbers Badge / Matched Serial Display */}
+                          {(() => {
+                            const saleSerials = getSaleSerialNumbers(sale);
+                            const q = searchTerm.trim().toLowerCase();
+                            const cleanQ = q.replace(/[^a-z0-9]/gi, '');
+                            const matchedSerials = q
+                              ? saleSerials.filter(sn => {
+                                  const snLower = sn.toLowerCase();
+                                  if (snLower.includes(q)) return true;
+                                  if (cleanQ.length >= 3 && snLower.replace(/[^a-z0-9]/gi, '').includes(cleanQ)) return true;
+                                  return false;
+                                })
+                              : [];
+
+                            if (matchedSerials.length > 0) {
+                              return (
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10.5px] font-semibold">
+                                    <Barcode className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span className="text-[9px] uppercase font-bold text-emerald-700">Matched S/N:</span>
+                                    <span className="font-mono font-bold text-emerald-950">{matchedSerials.join(', ')}</span>
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            if (saleSerials.length > 0) {
+                              return (
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <span 
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100/90 border border-slate-200/60 text-slate-600 text-[10px] font-medium"
+                                    title={`Serial Numbers in this Invoice: ${saleSerials.join(', ')}`}
+                                  >
+                                    <Barcode className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="font-mono font-medium">
+                                      {saleSerials.length <= 2 
+                                        ? saleSerials.join(', ') 
+                                        : `${saleSerials.slice(0, 2).join(', ')} +${saleSerials.length - 2} more`}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })()}
                         </div>
                       </div>
                     </td>
@@ -4432,7 +4595,7 @@ export default function Sales() {
                   <input
                     type="text"
                     autoFocus
-                    placeholder="Search invoice number, customer name..."
+                    placeholder="Search invoice number, customer name, or serial number..."
                     value={returnInvoiceSearch}
                     onChange={(e) => setReturnInvoiceSearch(e.target.value)}
                     className="glass-input w-full pl-10 pr-4 py-2.5 rounded-xl text-sm font-medium"
@@ -4453,12 +4616,21 @@ export default function Sales() {
                   {(() => {
                     const filtered = sales.filter(s => {
                       if (!returnInvoiceSearch.trim()) return true;
-                      const q = returnInvoiceSearch.toLowerCase();
-                      return (
-                        s.invoiceNo?.toLowerCase().includes(q) ||
-                        s.customerName?.toLowerCase().includes(q) ||
-                        s.paymentMode?.toLowerCase().includes(q)
-                      );
+                      const q = returnInvoiceSearch.trim().toLowerCase();
+                      const cleanQ = q.replace(/[^a-z0-9]/gi, '');
+                      const matchInv = s.invoiceNo?.toLowerCase().includes(q);
+                      const matchCust = s.customerName?.toLowerCase().includes(q);
+                      const matchMode = s.paymentMode?.toLowerCase().includes(q);
+
+                      const serials = getSaleSerialNumbers(s);
+                      const matchSerial = serials.some(sn => {
+                        const snLower = sn.toLowerCase();
+                        if (snLower.includes(q)) return true;
+                        if (cleanQ.length >= 3 && snLower.replace(/[^a-z0-9]/gi, '').includes(cleanQ)) return true;
+                        return false;
+                      });
+
+                      return matchInv || matchCust || matchMode || matchSerial;
                     });
 
                     if (filtered.length === 0) {
@@ -4511,6 +4683,33 @@ export default function Sales() {
                                   </span>
                                 )}
                               </div>
+
+                              {/* Return Modal Matched Serial Display */}
+                              {(() => {
+                                const retSerials = getSaleSerialNumbers(s);
+                                const rq = returnInvoiceSearch.trim().toLowerCase();
+                                const cleanRQ = rq.replace(/[^a-z0-9]/gi, '');
+                                const matched = rq
+                                  ? retSerials.filter(sn => {
+                                      const snLower = sn.toLowerCase();
+                                      if (snLower.includes(rq)) return true;
+                                      if (cleanRQ.length >= 3 && snLower.replace(/[^a-z0-9]/gi, '').includes(cleanRQ)) return true;
+                                      return false;
+                                    })
+                                  : [];
+                                if (matched.length > 0) {
+                                  return (
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 border border-purple-200 text-[10px] font-semibold">
+                                        <Barcode className="w-3 h-3 text-purple-700 shrink-0" />
+                                        <span>Matched S/N:</span>
+                                        <span className="font-mono font-bold">{matched.join(', ')}</span>
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           </div>
 

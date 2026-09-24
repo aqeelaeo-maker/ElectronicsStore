@@ -22,7 +22,11 @@ import {
   X,
   CreditCard,
   AlertCircle,
-  Download
+  Download,
+  Edit,
+  Trash2,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   collection, 
@@ -34,7 +38,8 @@ import {
   serverTimestamp, 
   getDoc,
   setDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
@@ -166,6 +171,34 @@ export default function CustomerLedgerView({
   
   // Quick View Invoice Modal
   const [viewingInvoice, setViewingInvoice] = useState<CustomerSaleRecord | null>(null);
+
+  // Edit & Delete modals state for Invoices
+  const [editingInvoice, setEditingInvoice] = useState<CustomerSaleRecord | null>(null);
+  const [invoiceEditForm, setInvoiceEditForm] = useState({
+    date: '',
+    total: '',
+    paidAmount: '',
+    paymentMode: 'Cash' as 'Cash' | 'Online',
+    bankAccountNumber: '',
+    bankName: '',
+    status: 'Paid',
+    notes: ''
+  });
+  const [deletingInvoice, setDeletingInvoice] = useState<CustomerSaleRecord | null>(null);
+
+  // Edit & Delete modals state for Payments
+  const [editingPayment, setEditingPayment] = useState<CustomerPaymentRecord | null>(null);
+  const [paymentEditForm, setPaymentEditForm] = useState({
+    paidAmount: '',
+    paymentDate: '',
+    paymentMode: 'Cash' as 'Cash' | 'Online',
+    bankAccountNumber: '',
+    bankName: '',
+    referenceNo: '',
+    notes: ''
+  });
+  const [deletingPayment, setDeletingPayment] = useState<CustomerPaymentRecord | null>(null);
+  const [processingAction, setProcessingAction] = useState(false);
 
   // Payment receiving form state
   const [showReceiveForm, setShowReceiveForm] = useState(false);
@@ -361,7 +394,318 @@ export default function CustomerLedgerView({
     }
   }, [customer?.id, customer?.balance, financialTotals.currentBalance, loading]);
 
-  // Thermal voucher / Receipt Print for an individual payment
+  // Handlers for Editing & Deleting Invoices
+  const handleOpenEditInvoice = (sale: CustomerSaleRecord) => {
+    const paid = sale.paidAmount !== undefined 
+      ? sale.paidAmount 
+      : (sale.status === 'Paid' ? sale.total : 0);
+    setInvoiceEditForm({
+      date: sale.date ? sale.date.split('T')[0] : new Date().toISOString().split('T')[0],
+      total: (sale.total || 0).toString(),
+      paidAmount: paid.toString(),
+      paymentMode: (sale.paymentMode === 'Online' ? 'Online' : 'Cash'),
+      bankAccountNumber: sale.bankAccountNumber || '',
+      bankName: sale.bankName || '',
+      status: sale.status || 'Paid',
+      notes: sale.notes || ''
+    });
+    setEditingInvoice(sale);
+  };
+
+  const handleSaveEditInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInvoice || !activeStoreId) return;
+
+    const totalNum = parseFloat(invoiceEditForm.total);
+    const paidNum = parseFloat(invoiceEditForm.paidAmount);
+
+    if (isNaN(totalNum) || totalNum < 0) {
+      toast.error('Please enter a valid invoice total amount');
+      return;
+    }
+    if (isNaN(paidNum) || paidNum < 0) {
+      toast.error('Please enter a valid paid amount');
+      return;
+    }
+    if (paidNum > totalNum) {
+      toast.error('Paid amount cannot exceed total invoice amount');
+      return;
+    }
+
+    const pendingNum = Math.max(0, Number((totalNum - paidNum).toFixed(2)));
+    const calculatedStatus = pendingNum === 0 ? 'Paid' : (paidNum > 0 ? 'Partial' : 'Pending');
+
+    const matchedBank = invoiceEditForm.paymentMode === 'Online'
+      ? bankAccounts.find(b => b.accountNumber === invoiceEditForm.bankAccountNumber)
+      : null;
+
+    setProcessingAction(true);
+    try {
+      const invoiceRef = doc(db, 'sales', editingInvoice.id);
+
+      // Reconcile store bank balance if Online payment amount or account changed
+      const oldPaid = editingInvoice.paidAmount !== undefined 
+        ? editingInvoice.paidAmount 
+        : (editingInvoice.status === 'Paid' ? editingInvoice.total : 0);
+      const wasOnline = editingInvoice.paymentMode === 'Online';
+      const isOnline = invoiceEditForm.paymentMode === 'Online';
+
+      if (activeStoreId && (wasOnline || isOnline)) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let changed = false;
+
+            if (wasOnline && editingInvoice.bankAccountNumber && oldPaid > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === editingInvoice.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal - oldPaid).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (isOnline && invoiceEditForm.bankAccountNumber && paidNum > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === invoiceEditForm.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal + paidNum).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (changed) {
+              await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+            }
+          }
+        } catch (bankErr) {
+          console.warn('Bank account reconcile error on invoice edit:', bankErr);
+        }
+      }
+
+      await updateDoc(invoiceRef, cleanDataForFirestore({
+        date: invoiceEditForm.date || editingInvoice.date,
+        total: totalNum,
+        paidAmount: paidNum,
+        pendingAmount: pendingNum,
+        status: calculatedStatus,
+        paymentMode: invoiceEditForm.paymentMode,
+        bankAccountNumber: isOnline && matchedBank ? matchedBank.accountNumber : null,
+        bankName: isOnline && matchedBank ? matchedBank.bankName : null,
+        notes: invoiceEditForm.notes.trim() || null,
+        updatedAt: serverTimestamp()
+      }));
+
+      toast.success(`Invoice ${editingInvoice.invoiceNo} updated successfully!`);
+      setEditingInvoice(null);
+    } catch (err: any) {
+      console.error('Error updating invoice:', err);
+      toast.error(`Failed to update invoice: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleExecuteDeleteInvoice = async () => {
+    if (!deletingInvoice || !activeStoreId) return;
+
+    setProcessingAction(true);
+    try {
+      const salePaidAmount = deletingInvoice.paidAmount !== undefined 
+        ? deletingInvoice.paidAmount 
+        : (deletingInvoice.status === 'Paid' ? deletingInvoice.total : 0);
+
+      // Revert store bank account balance if Online
+      if (deletingInvoice.paymentMode === 'Online' && deletingInvoice.bankAccountNumber && salePaidAmount > 0 && activeStoreId) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === deletingInvoice.bankAccountNumber) {
+                const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                return { ...acc, balance: Number((curBal - salePaidAmount).toFixed(2)) };
+              }
+              return acc;
+            });
+            await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+          }
+        } catch (storeErr) {
+          console.warn('Bank balance revert error on invoice delete:', storeErr);
+        }
+      }
+
+      // Delete invoice document
+      await deleteDoc(doc(db, 'sales', deletingInvoice.id));
+      toast.success(`Invoice ${deletingInvoice.invoiceNo} has been deleted successfully!`);
+      setDeletingInvoice(null);
+    } catch (err: any) {
+      console.error('Error deleting invoice:', err);
+      toast.error(`Failed to delete invoice: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  // Handlers for Editing & Deleting Payments
+  const handleOpenEditPayment = (p: CustomerPaymentRecord) => {
+    const isCredit = p.type === 'ReturnCredit' || (p.refundAmount && p.refundAmount > 0);
+    const amt = isCredit ? (p.refundAmount || 0) : (p.paidAmount || 0);
+    const dateVal = p.paymentDate 
+      ? p.paymentDate.split('T')[0] 
+      : (p.createdAt?.toMillis ? new Date(p.createdAt.toMillis()).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+
+    setPaymentEditForm({
+      paidAmount: amt.toString(),
+      paymentDate: dateVal,
+      paymentMode: (p.paymentMode === 'Online' ? 'Online' : 'Cash'),
+      bankAccountNumber: p.bankAccountNumber || '',
+      bankName: p.bankName || '',
+      referenceNo: p.referenceNo || p.invoiceNo || '',
+      notes: p.notes || ''
+    });
+    setEditingPayment(p);
+  };
+
+  const handleSaveEditPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment || !activeStoreId) return;
+
+    const newAmount = parseFloat(paymentEditForm.paidAmount);
+    if (isNaN(newAmount) || newAmount <= 0) {
+      toast.error('Please enter a valid payment amount greater than zero');
+      return;
+    }
+
+    const matchedBank = paymentEditForm.paymentMode === 'Online'
+      ? bankAccounts.find(b => b.accountNumber === paymentEditForm.bankAccountNumber)
+      : null;
+
+    setProcessingAction(true);
+    try {
+      const isCredit = editingPayment.type === 'ReturnCredit' || (editingPayment.refundAmount && editingPayment.refundAmount > 0);
+      const oldAmount = isCredit ? (editingPayment.refundAmount || 0) : (editingPayment.paidAmount || 0);
+      const wasOnline = editingPayment.paymentMode === 'Online';
+      const isOnline = paymentEditForm.paymentMode === 'Online';
+
+      // Reconcile bank balance if Online
+      if (activeStoreId && (wasOnline || isOnline)) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            let changed = false;
+
+            if (wasOnline && editingPayment.bankAccountNumber && oldAmount > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === editingPayment.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal - oldAmount).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (isOnline && paymentEditForm.bankAccountNumber && newAmount > 0) {
+              currentAccounts = currentAccounts.map((acc: any) => {
+                if (acc.accountNumber === paymentEditForm.bankAccountNumber) {
+                  changed = true;
+                  const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                  return { ...acc, balance: Number((curBal + newAmount).toFixed(2)) };
+                }
+                return acc;
+              });
+            }
+
+            if (changed) {
+              await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+            }
+          }
+        } catch (bankErr) {
+          console.warn('Bank balance reconcile error on payment edit:', bankErr);
+        }
+      }
+
+      const paymentRef = doc(db, 'customerPayments', editingPayment.id);
+      const updateData: any = {
+        paymentDate: paymentEditForm.paymentDate,
+        paymentMode: paymentEditForm.paymentMode,
+        bankAccountNumber: isOnline && matchedBank ? matchedBank.accountNumber : null,
+        bankName: isOnline && matchedBank ? matchedBank.bankName : null,
+        referenceNo: paymentEditForm.referenceNo.trim() || editingPayment.referenceNo || null,
+        notes: paymentEditForm.notes.trim() || null,
+        updatedAt: serverTimestamp()
+      };
+
+      if (isCredit) {
+        updateData.refundAmount = newAmount;
+      } else {
+        updateData.paidAmount = newAmount;
+      }
+
+      await updateDoc(paymentRef, cleanDataForFirestore(updateData));
+      toast.success('Payment receipt record updated successfully!');
+      setEditingPayment(null);
+    } catch (err: any) {
+      console.error('Error updating payment:', err);
+      toast.error(`Failed to update payment: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleExecuteDeletePayment = async () => {
+    if (!deletingPayment || !activeStoreId) return;
+
+    setProcessingAction(true);
+    try {
+      const isCredit = deletingPayment.type === 'ReturnCredit' || (deletingPayment.refundAmount && deletingPayment.refundAmount > 0);
+      const deletedAmount = isCredit ? (deletingPayment.refundAmount || 0) : (deletingPayment.paidAmount || 0);
+
+      // Revert store bank account if Online
+      if (deletingPayment.paymentMode === 'Online' && deletingPayment.bankAccountNumber && deletedAmount > 0 && activeStoreId) {
+        try {
+          const storeRef = doc(db, 'stores', activeStoreId);
+          const storeSnap = await getDoc(storeRef);
+          if (storeSnap.exists()) {
+            const storeData = storeSnap.data();
+            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
+            currentAccounts = currentAccounts.map((acc: any) => {
+              if (acc.accountNumber === deletingPayment.bankAccountNumber) {
+                const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || 0);
+                return { ...acc, balance: Number((curBal - deletedAmount).toFixed(2)) };
+              }
+              return acc;
+            });
+            await updateDoc(storeRef, { bankAccounts: currentAccounts, updatedAt: serverTimestamp() });
+          }
+        } catch (bErr) {
+          console.warn('Bank balance update error on payment delete:', bErr);
+        }
+      }
+
+      await deleteDoc(doc(db, 'customerPayments', deletingPayment.id));
+      toast.success(`Payment record ${deletingPayment.referenceNo || deletingPayment.invoiceNo || deletingPayment.id} deleted successfully!`);
+      setDeletingPayment(null);
+    } catch (err: any) {
+      console.error('Error deleting payment:', err);
+      toast.error(`Failed to delete payment: ${err.message || 'Unknown error'}`);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
   const printPaymentReceipt = (payment: CustomerPaymentRecord) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -717,6 +1061,8 @@ export default function CustomerLedgerView({
     runningBalance: number; // Cumulative net account balance
     mode: string;
     bankInfo?: string;
+    rawSale?: CustomerSaleRecord;
+    rawPayment?: CustomerPaymentRecord;
   };
 
   // Combined Running Account Statement
@@ -768,6 +1114,7 @@ export default function CustomerLedgerView({
         debit: sale.total || 0,
         credit: 0,
         invoiceBalance: pending,
+        rawSale: sale,
         mode: sale.paymentMode || 'Credit',
         bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
       });
@@ -795,6 +1142,7 @@ export default function CustomerLedgerView({
         debit: 0,
         credit: amount,
         invoiceBalance: payment.pendingAmount !== undefined ? payment.pendingAmount : (isReturn ? 0 : 0),
+        rawPayment: payment,
         mode: payment.paymentMode || 'Cash',
         bankInfo: payment.bankName ? `${payment.bankName} (${payment.bankAccountNumber})` : undefined
       });
@@ -1839,14 +2187,35 @@ export default function CustomerLedgerView({
 
                             {/* Actions */}
                             <td className="py-4 px-5 text-right whitespace-nowrap font-medium">
-                              <button
-                                type="button"
-                                onClick={() => setViewingInvoice(sale)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-slate-600" />
-                                View
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingInvoice(sale)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                                  title="View Details"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-slate-600" />
+                                  <span>View</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditInvoice(sale)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors cursor-pointer border border-blue-200"
+                                  title="Edit Invoice"
+                                >
+                                  <Edit className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingInvoice(sale)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer border border-rose-200"
+                                  title="Delete Invoice"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1871,7 +2240,7 @@ export default function CustomerLedgerView({
                       <th className="py-4 px-5 text-right whitespace-nowrap">Remaining Balance</th>
                       <th className="py-4 px-5 text-center whitespace-nowrap">Payment Method</th>
                       <th className="py-4 px-5 min-w-[200px]">Notes & Remarks</th>
-                      <th className="py-4 px-5 text-center whitespace-nowrap">Receipt</th>
+                      <th className="py-4 px-5 text-right whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
@@ -1969,17 +2338,37 @@ export default function CustomerLedgerView({
                               {p.notes || '—'}
                             </td>
 
-                            {/* Receipt Print */}
-                            <td className="py-4 px-5 text-center whitespace-nowrap">
-                              <button
-                                type="button"
-                                onClick={() => printPaymentReceipt(p)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 hover:border-[#0a382c] hover:bg-emerald-50 text-slate-700 hover:text-[#0a382c] text-xs font-semibold transition-colors cursor-pointer"
-                                title="Print Payment Voucher / Slip"
-                              >
-                                <Printer className="w-3.5 h-3.5 text-emerald-700" />
-                                <span>Receipt</span>
-                              </button>
+                            {/* Actions */}
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-medium">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => printPaymentReceipt(p)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-[#0a382c] hover:bg-emerald-50 text-slate-700 hover:text-[#0a382c] text-xs font-bold transition-colors cursor-pointer"
+                                  title="Print Payment Voucher / Slip"
+                                >
+                                  <Printer className="w-3.5 h-3.5 text-emerald-700" />
+                                  <span>Receipt</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditPayment(p)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors cursor-pointer border border-blue-200"
+                                  title="Edit Payment Record"
+                                >
+                                  <Edit className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingPayment(p)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors cursor-pointer border border-rose-200"
+                                  title="Delete Payment Record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2006,6 +2395,7 @@ export default function CustomerLedgerView({
                         <th className="py-4 px-5 text-right whitespace-nowrap">Invoice Balance</th>
                         <th className="py-4 px-5 text-right whitespace-nowrap">Net Running Balance</th>
                         <th className="py-4 px-5 text-center whitespace-nowrap">Mode / Channel</th>
+                        <th className="py-4 px-5 text-right whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -2064,6 +2454,67 @@ export default function CustomerLedgerView({
                             <td className="py-4 px-5 text-center whitespace-nowrap text-slate-600 font-semibold">
                               {row.mode} {row.bankInfo ? `(${row.bankInfo})` : ''}
                             </td>
+                            <td className="py-4 px-5 text-right whitespace-nowrap font-medium">
+                              {row.type === 'Invoice' && row.rawSale && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingInvoice(row.rawSale!)}
+                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                                    title="View Invoice"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditInvoice(row.rawSale!)}
+                                    className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
+                                    title="Edit Invoice"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingInvoice(row.rawSale!)}
+                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors"
+                                    title="Delete Invoice"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                              {(row.type === 'Payment' || row.type === 'Return') && row.rawPayment && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => printPaymentReceipt(row.rawPayment!)}
+                                    className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-colors"
+                                    title="Print Receipt"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditPayment(row.rawPayment!)}
+                                    className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
+                                    title="Edit Payment"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingPayment(row.rawPayment!)}
+                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors"
+                                    title="Delete Payment"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                              {row.type === 'Initial Balance' && (
+                                <span className="text-slate-400 font-mono">—</span>
+                              )}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -2090,6 +2541,7 @@ export default function CustomerLedgerView({
                         <td className="py-4 px-5 text-center text-slate-400 text-xs">
                           Final Net
                         </td>
+                        <td className="py-4 px-5 text-right text-slate-400 text-xs"></td>
                       </tr>
                     </tfoot>
                   </table>
@@ -2213,14 +2665,472 @@ export default function CustomerLedgerView({
               </div>
             </div>
 
-            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end">
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const toEdit = viewingInvoice;
+                  setViewingInvoice(null);
+                  handleOpenEditInvoice(toEdit);
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                Edit Invoice
+              </button>
               <button
                 type="button"
                 onClick={() => setViewingInvoice(null)}
-                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT INVOICE MODAL */}
+      {editingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-6 py-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <Edit className="w-5 h-5 text-blue-200" />
+                <div>
+                  <h3 className="font-bold text-base text-white">Edit Customer Invoice</h3>
+                  <p className="text-xs text-blue-100 font-mono">Invoice #{editingInvoice.invoiceNo}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingInvoice(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-blue-100 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditInvoice} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Invoice Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={invoiceEditForm.date}
+                    onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={invoiceEditForm.status}
+                    onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="Paid">Paid</option>
+                    <option value="Partial">Partial</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Returned">Returned</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Total Amount (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={invoiceEditForm.total}
+                    onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, total: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Paid Amount (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={invoiceEditForm.paidAmount}
+                    onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, paidAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              {/* Live Remaining Balance Calculation */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-600">Computed Remaining / Pending:</span>
+                <span className="font-mono font-black text-sm text-amber-800">
+                  PKR {Math.max(0, (parseFloat(invoiceEditForm.total) || 0) - (parseFloat(invoiceEditForm.paidAmount) || 0)).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={invoiceEditForm.paymentMode}
+                    onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, paymentMode: e.target.value as 'Cash' | 'Online' })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Online">Online / Bank Transfer</option>
+                  </select>
+                </div>
+                {invoiceEditForm.paymentMode === 'Online' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Deposit Bank Account
+                    </label>
+                    <select
+                      value={invoiceEditForm.bankAccountNumber}
+                      onChange={(e) => {
+                        const acc = bankAccounts.find(b => b.accountNumber === e.target.value);
+                        setInvoiceEditForm({
+                          ...invoiceEditForm,
+                          bankAccountNumber: e.target.value,
+                          bankName: acc ? acc.bankName : ''
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                    >
+                      <option value="">Select Account</option>
+                      {bankAccounts.map((b, i) => (
+                        <option key={i} value={b.accountNumber}>
+                          {b.bankName} - {b.accountNumber}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Invoice Notes & Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={invoiceEditForm.notes}
+                  onChange={(e) => setInvoiceEditForm({ ...invoiceEditForm, notes: e.target.value })}
+                  placeholder="Notes, references, adjustments..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingInvoice(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingAction ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE INVOICE CONFIRMATION MODAL */}
+      {deletingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-rose-600 px-6 py-4 text-white flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete Invoice?</h3>
+                <p className="text-xs text-rose-100 font-mono">Invoice #{deletingInvoice.invoiceNo}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete invoice <span className="font-bold text-slate-900">#{deletingInvoice.invoiceNo}</span>?
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Invoice Total:</span>
+                  <span className="font-bold text-slate-900 font-mono">PKR {deletingInvoice.total?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Paid Amount:</span>
+                  <span className="font-bold text-emerald-700 font-mono">
+                    PKR {(deletingInvoice.paidAmount !== undefined ? deletingInvoice.paidAmount : (deletingInvoice.status === 'Paid' ? deletingInvoice.total : 0)).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Pending Balance:</span>
+                  <span className="font-bold text-amber-800 font-mono">
+                    PKR {(deletingInvoice.pendingAmount !== undefined ? deletingInvoice.pendingAmount : (deletingInvoice.status === 'Pending' ? deletingInvoice.total : 0)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Deleting this invoice will adjust the customer balance and any online bank deposit records. This action cannot be undone.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingInvoice(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeleteInvoice}
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {processingAction ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PAYMENT MODAL */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-emerald-700 to-teal-800 px-6 py-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <Edit className="w-5 h-5 text-emerald-200" />
+                <div>
+                  <h3 className="font-bold text-base text-white">Edit Customer Payment Receipt</h3>
+                  <p className="text-xs text-emerald-100 font-mono">Ref: {editingPayment.referenceNo || editingPayment.invoiceNo || editingPayment.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingPayment(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-emerald-100 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPayment} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Amount Received (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={paymentEditForm.paidAmount}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paidAmount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-600 text-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentEditForm.paymentDate}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paymentDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={paymentEditForm.paymentMode}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, paymentMode: e.target.value as 'Cash' | 'Online' })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Online">Online / Bank Transfer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Receipt / Reference #
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentEditForm.referenceNo}
+                    onChange={(e) => setPaymentEditForm({ ...paymentEditForm, referenceNo: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+              </div>
+
+              {paymentEditForm.paymentMode === 'Online' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Deposit Bank Account
+                  </label>
+                  <select
+                    value={paymentEditForm.bankAccountNumber}
+                    onChange={(e) => {
+                      const acc = bankAccounts.find(b => b.accountNumber === e.target.value);
+                      setPaymentEditForm({
+                        ...paymentEditForm,
+                        bankAccountNumber: e.target.value,
+                        bankName: acc ? acc.bankName : ''
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 bg-white"
+                  >
+                    <option value="">Select Account</option>
+                    {bankAccounts.map((b, i) => (
+                      <option key={i} value={b.accountNumber}>
+                        {b.bankName} - {b.accountNumber}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Notes & Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={paymentEditForm.notes}
+                  onChange={(e) => setPaymentEditForm({ ...paymentEditForm, notes: e.target.value })}
+                  placeholder="Notes, transaction reference, comments..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              </div>
+
+              <div className="bg-slate-50 -mx-6 -mb-6 px-6 py-3 border-t border-slate-200 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayment(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {processingAction ? 'Saving Changes...' : 'Save Payment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE PAYMENT CONFIRMATION MODAL */}
+      {deletingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-rose-600 px-6 py-4 text-white flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete Payment Record?</h3>
+                <p className="text-xs text-rose-100 font-mono">Ref: {deletingPayment.referenceNo || deletingPayment.invoiceNo || deletingPayment.id}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to permanently delete this payment receipt for customer <span className="font-bold text-slate-900">{customer.name}</span>?
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Amount:</span>
+                  <span className="font-bold text-rose-700 font-mono text-sm">
+                    PKR {(deletingPayment.paidAmount || deletingPayment.refundAmount || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Mode:</span>
+                  <span className="font-bold text-slate-800">{deletingPayment.paymentMode || 'Cash'}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Date:</span>
+                  <span className="font-semibold text-slate-700">
+                    {deletingPayment.paymentDate ? new Date(deletingPayment.paymentDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Deleting this payment will add PKR {(deletingPayment.paidAmount || deletingPayment.refundAmount || 0).toFixed(2)} back to the customer's outstanding balance.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeletingPayment(null)}
+                  disabled={processingAction}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteDeletePayment}
+                  disabled={processingAction}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {processingAction ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
