@@ -143,6 +143,343 @@ interface SalesReturnModalProps {
   onSuccess?: () => void;
 }
 
+import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
+
+const getInitials = (name?: string) => {
+  if (!name) return 'EM';
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').toUpperCase().slice(0, 2);
+};
+
+// Generate HTML for Sales Return & Refund Receipt matching the Sales Invoice header format
+export const generateReturnReceiptHtml = (
+  sale: Sale,
+  returnRecord: SaleReturnRecord,
+  storeDetails: {
+    name: string;
+    logoUrl: string;
+    phone: string;
+    address: string;
+    email: string;
+  }
+): string => {
+  const itemsRows = returnRecord.items.map(item => `
+    <tr style="border-bottom: 1.5px solid #000000;">
+      <td style="padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
+        <div style="font-weight: 700; color: #000000; font-size: 12px;">${item.productName}</div>
+        ${(item.brand || item.modelNumber || item.category) ? `
+          <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
+            ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
+          </div>
+        ` : ''}
+        ${item.returnedSerials && item.returnedSerials.length > 0 ? `
+          <div style="font-size: 9.5px; color: #000000; margin-top: 2px; line-height: 1.25; word-break: break-word;">
+            <span style="font-weight: bold; text-transform: uppercase; font-size: 8.5px;">Returned S/N: </span>
+            <span style="font-family: monospace; font-weight: 600;">${item.returnedSerials.join(', ')}</span>
+          </div>
+        ` : ''}
+      </td>
+      <td style="padding: 7px 10px; text-align: center; font-weight: 700; font-family: monospace; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">PKR ${item.unitPrice.toFixed(2)}</td>
+      <td style="padding: 7px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
+      <td style="padding: 7px 10px; text-align: right; font-weight: 800; font-family: monospace; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">PKR ${item.refundAmount.toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Return Voucher - ${returnRecord.id}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+      <style>
+        @page {
+          size: A4 portrait;
+          margin: 6mm 8mm;
+        }
+        html, body {
+          height: auto !important;
+          min-height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          color: #000000;
+          background-color: #ffffff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        body {
+          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          margin: 0 !important;
+          padding: 0 !important;
+          box-sizing: border-box;
+          color: #000000;
+        }
+        .receipt-container {
+          width: 100%;
+          max-width: 100%;
+          margin: 0 auto;
+          min-height: 250mm;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          box-sizing: border-box;
+          background-color: #ffffff;
+          border: 1.5px solid #000000;
+          border-radius: 16px;
+          padding: 22px 24px;
+          color: #000000;
+        }
+        .invoice-header-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 0;
+          margin-bottom: 0;
+          padding: 0;
+        }
+        .header-divider-line {
+          width: 100%;
+          border-bottom: 3px solid #000000;
+          margin-top: 8px;
+          margin-bottom: 12px;
+        }
+        .logo-cell {
+          width: 96px;
+          vertical-align: top;
+          text-align: left;
+          padding: 0;
+        }
+        .logo-container {
+          width: 96px;
+          height: 96px;
+          border-radius: 12px;
+          background-color: #f0b90b;
+          color: #000000;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 36px;
+          font-weight: 900;
+          border: none;
+          outline: none;
+          box-shadow: none;
+        }
+        .logo-img {
+          width: 96px;
+          height: 96px;
+          border-radius: 12px;
+          object-fit: contain;
+          border: none;
+          outline: none;
+          box-shadow: none;
+          background: transparent;
+          display: block;
+        }
+        .center-info-cell {
+          text-align: center;
+          vertical-align: top;
+          padding: 0 12px 0 12px;
+        }
+        .right-spacer-cell {
+          width: 96px;
+          vertical-align: top;
+          text-align: right;
+        }
+        .company-name {
+          font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
+          font-size: 44px;
+          font-weight: 900;
+          color: #000000;
+          margin: -8px 0 0 0;
+          padding: 0;
+          line-height: 1.15;
+          text-align: center;
+          letter-spacing: -0.02em;
+          text-decoration: none !important;
+          border-bottom: none !important;
+        }
+        .company-title-underline {
+          display: inline-block;
+          border-bottom: none !important;
+          padding-bottom: 0;
+          line-height: 1.1;
+          text-decoration: none !important;
+        }
+        .details-cell {
+          padding-top: 2px;
+          padding-bottom: 0;
+          vertical-align: top;
+          text-align: left;
+        }
+        .company-left-details {
+          font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
+          font-size: 16px;
+          line-height: 1.35;
+          color: #000000;
+          text-align: left;
+          margin-top: 3px;
+        }
+        .left-detail-row {
+          margin-bottom: 2px;
+          color: #000000;
+        }
+        .left-detail-label {
+          font-weight: 700;
+          color: #000000;
+          margin-right: 5px;
+        }
+        .items-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 12px;
+          border: 1px solid #000000;
+        }
+        .items-table th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          font-size: 13.5px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 8px 10px;
+          border: 1px solid #000000;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .items-table td {
+          padding: 7px 10px;
+          font-size: 12px;
+          color: #000000;
+          border-bottom: 1.5px solid #000000 !important;
+        }
+        @media print {
+          body {
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .receipt-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 16px 18px !important;
+            border: 1.5px solid #000000 !important;
+            border-radius: 14px !important;
+            box-sizing: border-box !important;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="receipt-container">
+        <div>
+          <!-- Company Profile with Logo Header (Same Format Like Sales Invoice) -->
+          <table class="invoice-header-table">
+            <tr>
+              <td class="logo-cell">
+                ${storeDetails.logoUrl ? `
+                  <img src="${storeDetails.logoUrl}" alt="Logo" class="logo-img" crossorigin="anonymous" />
+                ` : `
+                  <div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>
+                `}
+              </td>
+
+              <td class="center-info-cell">
+                <h1 class="company-name">${storeDetails.name || 'ElectroManage'}</h1>
+                <div style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 5px; color: #581c87;">
+                  SALES RETURN & REFUND VOUCHER
+                </div>
+              </td>
+
+              <td class="right-spacer-cell">
+                <div style="font-size: 9.5px; color: #334155; line-height: 1.4; text-align: right;">
+                  <div>Return ID: <strong style="font-family: monospace;">${returnRecord.id}</strong></div>
+                  <div>Date: <strong>${new Date(returnRecord.returnDate).toLocaleDateString()}</strong></div>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td colspan="3" class="details-cell">
+                <div class="company-left-details">
+                  <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails.address || 'Madni Chowk Pindi Gheb'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails.phone || '0312-5653636'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails.email || 'smarttech5535@gmail.com'}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div class="header-divider-line"></div>
+
+          <!-- Meta Info -->
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 12px;">
+            <div style="line-height: 1.6;">
+              <div><strong>Customer:</strong> ${sale.customerName}</div>
+              <div><strong>Original Invoice:</strong> ${sale.invoiceNo}</div>
+              <div><strong>Original Invoice Date:</strong> ${new Date(sale.date).toLocaleDateString()}</div>
+            </div>
+            <div style="text-align: right; line-height: 1.6;">
+              <div><strong>Refund Method:</strong> ${returnRecord.refundMode}${returnRecord.bankName ? ` (${returnRecord.bankName})` : ''}</div>
+              <div><strong>Inventory Restocked:</strong> ${returnRecord.restocked ? 'Yes (Returned to Stock)' : 'No (Defective / Scrapped)'}</div>
+            </div>
+          </div>
+
+          <!-- Reason -->
+          <div style="background-color: #faf5ff; border-left: 3px solid #581c87; padding: 7px 10px; font-size: 11px; margin-bottom: 12px; border-radius: 4px;">
+            <strong style="color: #581c87;">Return Reason:</strong> ${returnRecord.reason} ${returnRecord.notes ? ` — Note: ${returnRecord.notes}` : ''}
+          </div>
+
+          <!-- Items Table -->
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="text-align: left; width: 48%;">PRODUCT RETURNED</th>
+                <th style="text-align: center; width: 18%;">UNIT PRICE</th>
+                <th style="text-align: center; width: 14%;">QTY</th>
+                <th style="text-align: right; width: 20%;">REFUND AMOUNT</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsRows}
+            </tbody>
+          </table>
+
+          <!-- Totals -->
+          <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+            <div style="width: 320px; text-align: right; line-height: 1.6; font-size: 13px;">
+              <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 2px solid #000000; padding-top: 6px; font-size: 16px; color: #000000;">
+                <span>Total Amount Refunded:</span>
+                <span style="font-family: monospace; font-weight: 900;">PKR ${returnRecord.totalRefund.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Signatures & Verification -->
+        <div style="margin-top: 30px; padding-top: 12px; border-top: 1.5px dashed #000000;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px;">
+            <div style="text-align: center; width: 160px;">
+              <div style="border-bottom: 1px solid #000000; height: 32px;"></div>
+              <div style="margin-top: 4px; font-weight: bold;">Customer Signature</div>
+            </div>
+            <div style="text-align: center; font-size: 10px; color: #4b5563;">
+              Official Sales Return & Refund Confirmation<br/>
+              Printed on ${new Date().toLocaleString()}
+            </div>
+            <div style="text-align: center; width: 160px;">
+              <div style="border-bottom: 1px solid #000000; height: 32px;"></div>
+              <div style="margin-top: 4px; font-weight: bold;">Authorized Store Stamp</div>
+            </div>
+          </div>
+          <div style="text-align: right; font-size: 9px; font-weight: 600; color: #334155; margin-top: 8px;">
+            Software developed by 0332-5059526
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 // Function to print a dedicated Sales Return & Refund Receipt
 export const printReturnReceipt = (
   sale: Sale,
@@ -170,169 +507,7 @@ export const printReturnReceipt = (
     return;
   }
 
-  const itemsRows = returnRecord.items.map(item => `
-    <tr style="border-bottom: 1.5px solid #000000;">
-      <td style="padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
-        <div style="font-weight: bold; color: #000000; font-size: 11px;">${item.productName}</div>
-        ${(item.brand || item.modelNumber || item.category) ? `
-          <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
-            ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
-          </div>
-        ` : ''}
-        ${item.returnedSerials && item.returnedSerials.length > 0 ? `
-          <div style="font-size: 9.5px; color: #000000; margin-top: 2px; line-height: 1.25; word-break: break-word;">
-            <span style="font-weight: bold; text-transform: uppercase; font-size: 8.5px;">Returned S/N: </span>
-            <span style="font-family: monospace; font-weight: 600;">${item.returnedSerials.join(', ')}</span>
-          </div>
-        ` : ''}
-      </td>
-      <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.unitPrice.toFixed(2)}</td>
-      <td style="padding: 6px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
-      <td style="padding: 6px 10px; text-align: right; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.refundAmount.toFixed(2)}</td>
-    </tr>
-  `).join('');
-
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Return Voucher - ${returnRecord.id}</title>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
-        @page {
-          size: auto;
-          margin: 8mm 12mm;
-        }
-        html, body {
-          height: 100%;
-          margin: 0 !important;
-          padding: 0 !important;
-          color: #000000;
-          background-color: #ffffff;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-        body {
-          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          padding: 8mm 12mm;
-          box-sizing: border-box;
-          color: #000000;
-        }
-        .receipt-container {
-          width: 100%;
-          max-width: 800px;
-          margin: 0 auto;
-          min-height: 255mm;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          box-sizing: border-box;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="receipt-container">
-        <div>
-          <!-- Header -->
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-            <div style="width: 100px; flex-shrink: 0;">
-              ${storeDetails.logoUrl ? `
-                <img src="${storeDetails.logoUrl}" alt="Logo" style="width: 90px; height: 90px; object-fit: contain;" />
-              ` : `
-                <div style="width: 85px; height: 85px; background-color: #0a382c; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; border-radius: 12px;">
-                  RET
-                </div>
-              `}
-            </div>
-
-            <div style="flex: 1; text-align: center;">
-              <h1 style="font-family: 'Cinzel', 'Playfair Display', Georgia, serif; font-size: 32px; font-weight: 900; margin: 0; text-decoration: underline; text-underline-offset: 6px;">
-                ${storeDetails.name || 'ElectroManage'}
-              </h1>
-              <div style="font-size: 14px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; color: #581c87;">
-                SALES RETURN & REFUND VOUCHER
-              </div>
-            </div>
-
-            <div style="width: 100px; flex-shrink: 0;"></div>
-          </div>
-
-          <!-- Contact Details -->
-          <div style="font-family: 'Carlito', Arial, sans-serif; font-size: 14px; margin-top: 2px; line-height: 1.3;">
-            <div><strong>Address:</strong> ${storeDetails.address || 'Madni Chowk Pindi Gheb'}</div>
-            <div><strong>Phone:</strong> ${storeDetails.phone || '0312-5653636'} | <strong>Email:</strong> ${storeDetails.email || 'smarttech5535@gmail.com'}</div>
-          </div>
-
-          <div style="width: 100%; border-bottom: 2px solid #000000; margin-top: 6px; margin-bottom: 12px;"></div>
-
-          <!-- Meta Info -->
-          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 14px;">
-            <div style="line-height: 1.5;">
-              <div><strong>Customer:</strong> ${sale.customerName}</div>
-              <div><strong>Original Invoice:</strong> ${sale.invoiceNo}</div>
-              <div><strong>Original Invoice Date:</strong> ${new Date(sale.date).toLocaleDateString()}</div>
-            </div>
-            <div style="text-align: right; line-height: 1.5;">
-              <div><strong>Return ID:</strong> <span style="font-family: monospace; font-weight: bold;">${returnRecord.id}</span></div>
-              <div><strong>Return Date:</strong> ${new Date(returnRecord.returnDate).toLocaleDateString()}</div>
-              <div><strong>Refund Method:</strong> ${returnRecord.refundMode}${returnRecord.bankName ? ` (${returnRecord.bankName})` : ''}</div>
-              <div><strong>Inventory Restocked:</strong> ${returnRecord.restocked ? 'Yes (Returned to Stock)' : 'No (Defective / Scrapped)'}</div>
-            </div>
-          </div>
-
-          <!-- Reason -->
-          <div style="background-color: #f3f4f6; border-left: 3px solid #581c87; padding: 6px 10px; font-size: 11px; margin-bottom: 14px;">
-            <strong>Return Reason:</strong> ${returnRecord.reason} ${returnRecord.notes ? ` — Note: ${returnRecord.notes}` : ''}
-          </div>
-
-          <!-- Items Table -->
-          <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000000; margin-bottom: 12px;">
-            <thead>
-              <tr style="background-color: #000000; color: #ffffff;">
-                <th style="padding: 6px 10px; text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase;">PRODUCT RETURNED</th>
-                <th style="padding: 6px 10px; text-align: center; font-size: 11px; font-weight: 800; text-transform: uppercase;">UNIT PRICE</th>
-                <th style="padding: 6px 10px; text-align: center; font-size: 11px; font-weight: 800; text-transform: uppercase;">QTY RETURNED</th>
-                <th style="padding: 6px 10px; text-align: right; font-size: 11px; font-weight: 800; text-transform: uppercase;">REFUND AMOUNT</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsRows}
-            </tbody>
-          </table>
-
-          <!-- Totals -->
-          <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
-            <div style="width: 280px; text-align: right; line-height: 1.6; font-size: 13px;">
-              <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 2px solid #000000; padding-top: 6px; font-size: 16px; color: #000000;">
-                <span>Total Amount Refunded:</span>
-                <span style="font-family: monospace;">PKR ${returnRecord.totalRefund.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Signatures & Verification -->
-        <div style="margin-top: 40px; padding-top: 15px; border-top: 1.5px dashed #000000;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px;">
-            <div style="text-align: center; width: 160px;">
-              <div style="border-bottom: 1px solid #000000; height: 35px;"></div>
-              <div style="margin-top: 4px; font-weight: bold;">Customer Signature</div>
-            </div>
-            <div style="text-align: center; font-size: 10px; color: #4b5563;">
-              Official Sales Return & Refund Confirmation<br/>
-              Printed on ${new Date().toLocaleString()}
-            </div>
-            <div style="text-align: center; width: 160px;">
-              <div style="border-bottom: 1px solid #000000; height: 35px;"></div>
-              <div style="margin-top: 4px; font-weight: bold;">Authorized Store Stamp</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const htmlContent = generateReturnReceiptHtml(sale, returnRecord, storeDetails);
 
   doc.open();
   doc.write(htmlContent);
@@ -345,6 +520,34 @@ export const printReturnReceipt = (
       document.body.removeChild(iframe);
     }, 1000);
   }, 350);
+};
+
+// Function to download a dedicated Sales Return & Refund Receipt as PDF
+export const downloadReturnReceiptPdf = async (
+  sale: Sale,
+  returnRecord: SaleReturnRecord,
+  storeDetails: {
+    name: string;
+    logoUrl: string;
+    phone: string;
+    address: string;
+    email: string;
+  }
+) => {
+  try {
+    toast.info(`Preparing PDF for Return #${returnRecord.id}...`);
+    const htmlContent = generateReturnReceiptHtml(sale, returnRecord, storeDetails);
+    const safeCust = (sale.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Return_Voucher_${returnRecord.id}_${safeCust}`;
+    await downloadHtmlAsPdf(htmlContent, filename, {
+      orientation: 'portrait',
+      margin: [6, 8, 8, 8]
+    });
+    toast.success(`Return Voucher #${returnRecord.id} downloaded successfully!`);
+  } catch (err) {
+    console.error('Failed to download return voucher PDF:', err);
+    toast.error('Failed to download return voucher PDF');
+  }
 };
 
 export default function SalesReturnModal({

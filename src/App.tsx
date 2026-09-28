@@ -121,8 +121,8 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           
@@ -148,8 +148,8 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </BrowserRouter>
-      <ToastContainer position="top-right" autoClose={3000} aria-label="Notifications" />
-    </AuthProvider>
+        <ToastContainer position="top-right" autoClose={3000} aria-label="Notifications" />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

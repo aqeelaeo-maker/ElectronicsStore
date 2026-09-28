@@ -71,6 +71,11 @@ function cleanDataForFirestore(obj: any): any {
   return clean;
 }
 
+const getInitials = (name?: string) => {
+  if (!name) return 'EM';
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').toUpperCase().slice(0, 2);
+};
+
 export interface Customer {
   id: string;
   name: string;
@@ -1244,13 +1249,16 @@ export default function CustomerLedgerView({
       <html>
         <head>
           <title>Customer Account Statement - ${customer.name}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
           <style>
             @page {
               size: A4 landscape;
               margin: 8mm;
             }
             body, .pdf-export-wrapper {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
               color: #0f172a;
               background-color: #ffffff;
               margin: 0;
@@ -1260,28 +1268,103 @@ export default function CustomerLedgerView({
               width: 100%;
               box-sizing: border-box;
             }
-            .header-banner {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              border-bottom: 2px solid #0f172a;
-              padding-bottom: 10px;
+            .invoice-header-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 0;
+              margin-bottom: 0;
+              padding: 0;
+            }
+            .header-divider-line {
+              width: 100%;
+              border-bottom: 3px solid #000000;
+              margin-top: 8px;
               margin-bottom: 12px;
             }
-            .store-name {
-              font-size: 18px;
-              font-weight: 900;
-              text-transform: uppercase;
-              letter-spacing: -0.5px;
-              color: #0a382c;
+            .logo-cell {
+              width: 96px;
+              vertical-align: top;
+              text-align: left;
+              padding: 0;
             }
-            .statement-title {
-              font-size: 15px;
-              font-weight: 800;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
+            .logo-container {
+              width: 96px;
+              height: 96px;
+              border-radius: 12px;
+              background-color: #f0b90b;
+              color: #000000;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 36px;
+              font-weight: 900;
+              border: none;
+              outline: none;
+              box-shadow: none;
+            }
+            .logo-img {
+              width: 96px;
+              height: 96px;
+              border-radius: 12px;
+              object-fit: contain;
+              border: none;
+              outline: none;
+              box-shadow: none;
+              background: transparent;
+              display: block;
+            }
+            .center-info-cell {
+              text-align: center;
+              vertical-align: top;
+              padding: 0 12px 0 12px;
+            }
+            .right-spacer-cell {
+              width: 96px;
+              vertical-align: top;
               text-align: right;
-              color: #0f172a;
+            }
+            .company-name {
+              font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
+              font-size: 44px;
+              font-weight: 900;
+              color: #000000;
+              margin: -8px 0 0 0;
+              padding: 0;
+              line-height: 1.15;
+              text-align: center;
+              letter-spacing: -0.02em;
+              text-decoration: none !important;
+              border-bottom: none !important;
+            }
+            .company-title-underline {
+              display: inline-block;
+              border-bottom: none !important;
+              padding-bottom: 0;
+              line-height: 1.1;
+              text-decoration: none !important;
+            }
+            .details-cell {
+              padding-top: 2px;
+              padding-bottom: 0;
+              vertical-align: top;
+              text-align: left;
+            }
+            .company-left-details {
+              font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
+              font-size: 15px;
+              line-height: 1.35;
+              color: #000000;
+              text-align: left;
+              margin-top: 3px;
+            }
+            .left-detail-row {
+              margin-bottom: 2px;
+              color: #000000;
+            }
+            .left-detail-label {
+              font-weight: 700;
+              color: #000000;
+              margin-right: 5px;
             }
             .summary-cards-table {
               width: 100% !important;
@@ -1358,10 +1441,11 @@ export default function CustomerLedgerView({
             .signatures-block {
               margin-top: 28px;
               padding-top: 10px;
-              padding-bottom: 24px;
-              margin-bottom: 16px;
+              padding-bottom: 28px;
+              margin-bottom: 20px;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
+              overflow: visible !important;
             }
             .signature-line {
               width: 220px;
@@ -1372,26 +1456,57 @@ export default function CustomerLedgerView({
               font-weight: 700;
               color: #334155;
             }
+            .ledger-software-credit {
+              text-align: right;
+              font-size: 10px;
+              font-weight: 700;
+              color: #334155;
+              margin-top: 14px;
+              padding-right: 6px;
+              padding-bottom: 16px;
+              letter-spacing: 0.2px;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              white-space: nowrap !important;
+              overflow: visible !important;
+            }
           </style>
         </head>
         <body>
-          <div class="header-banner">
-            <div>
-              <div class="store-name">${storeDetails?.name || 'STORE ACCOUNT LEDGER'}</div>
-              ${storeDetails?.address ? `<div style="font-size: 10px; color: #334155;">${storeDetails.address}</div>` : ''}
-              ${storeDetails?.phone ? `<div style="font-size: 10px; color: #334155;">Phone: ${storeDetails.phone}</div>` : ''}
-              ${storeDetails?.email ? `<div style="font-size: 10px; color: #334155;">Email: ${storeDetails.email}</div>` : ''}
-            </div>
-            <div>
-              <div class="statement-title">Customer Account Statement</div>
-              <div style="font-size: 10px; color: #475569; text-align: right; margin-top: 3px;">
-                Statement Date: <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
-              </div>
-              <div style="font-size: 10px; color: #475569; text-align: right;">
-                Issue Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          </div>
+          <!-- Company Profile with Logo Header (Same Format Like Sales Invoice) -->
+          <table class="invoice-header-table">
+            <tr>
+              <td class="logo-cell">
+                ${storeDetails?.logoUrl 
+                  ? `<img src="${storeDetails.logoUrl}" class="logo-img" crossorigin="anonymous" alt="Logo" />`
+                  : `<div class="logo-container">${getInitials(storeDetails?.name || 'ElectroManage')}</div>`
+                }
+              </td>
+              <td class="center-info-cell">
+                <h1 class="company-name">${storeDetails?.name || 'ElectroManage'}</h1>
+                <div style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 5px; color: #0a382c;">
+                  CUSTOMER ACCOUNT LEDGER STATEMENT
+                </div>
+              </td>
+              <td class="right-spacer-cell">
+                <div style="font-size: 9.5px; color: #334155; line-height: 1.4; text-align: right;">
+                  <div>Date: <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
+                  <div>Time: <strong>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="3" class="details-cell">
+                <div class="company-left-details">
+                  <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails?.address || 'Madni Chowk Pindi Gheb'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails?.phone || '0312-5653636'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails?.email || 'smarttech5535@gmail.com'}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div class="header-divider-line"></div>
 
           <!-- Customer Details & Account Reference -->
           <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background: #fafafa; border-radius: 6px; margin-bottom: 12px;">
@@ -1499,21 +1614,27 @@ export default function CustomerLedgerView({
             </tr>
           </table>
 
-          <!-- Signatures -->
-          <table class="signatures-block avoid-break" style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="width: 50%; vertical-align: top; text-align: left;">
-                <div class="signature-line">
-                  Authorized Store Signature
-                </div>
-              </td>
-              <td style="width: 50%; vertical-align: top; text-align: right;">
-                <div class="signature-line" style="margin-left: auto;">
-                  Customer Acknowledgment Signature
-                </div>
-              </td>
-            </tr>
-          </table>
+          <!-- Signatures & Credit Block -->
+          <div class="signatures-block avoid-break" style="margin-top: 28px; padding-top: 10px; page-break-inside: avoid !important; break-inside: avoid !important;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="width: 50%; vertical-align: top; text-align: left;">
+                  <div class="signature-line">
+                    Authorized Store Signature
+                  </div>
+                </td>
+                <td style="width: 50%; vertical-align: top; text-align: right;">
+                  <div class="signature-line" style="margin-left: auto;">
+                    Customer Acknowledgment Signature
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <div class="ledger-software-credit" style="text-align: right; margin-top: 14px; font-size: 10px; font-weight: 700; color: #334155; padding-right: 6px; padding-bottom: 16px; white-space: nowrap !important; overflow: visible !important;">
+              Software developed by 0332-5059526
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -2382,6 +2503,63 @@ export default function CustomerLedgerView({
             {/* TAB 3: Running Balance Statement */}
             {activeTab === 'statement' && (
               <div>
+                {/* Company Profile with Logo Header (Same Format Like Sales Invoice) */}
+                <div className="p-6 bg-white border-b border-slate-200">
+                  <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                    {/* Company Logo on Left */}
+                    <div className="w-20 sm:w-24 flex-shrink-0">
+                      {storeDetails?.logoUrl ? (
+                        <img 
+                          src={storeDetails.logoUrl} 
+                          alt="Store Logo" 
+                          className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                        />
+                      ) : (
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-black font-black text-2xl sm:text-3xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                          {getInitials(storeDetails?.name || 'ElectroManage')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Company Name Centered */}
+                    <div className="flex-1 text-center py-0 px-2 sm:px-4">
+                      <h2 
+                        style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                        className="text-3xl sm:text-4xl lg:text-5xl font-black text-black tracking-tight leading-tight"
+                      >
+                        {storeDetails?.name || 'ElectroManage'}
+                      </h2>
+                      <div className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#0a382c] mt-2">
+                        Customer Account Ledger Statement
+                      </div>
+                    </div>
+
+                    {/* Right spacer for symmetry */}
+                    <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
+                  </div>
+
+                  {/* Company Info under Logo on left side in Calibri font size 15 */}
+                  <div className="mt-1 text-left max-w-md">
+                    <div 
+                      style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                      className="text-[15px] text-black space-y-0.5 leading-snug"
+                    >
+                      <p>
+                        <strong className="text-black font-bold">Address:</strong> {storeDetails?.address || 'Madni Chowk Pindi Gheb'}
+                      </p>
+                      <p>
+                        <strong className="text-black font-bold">Phone:</strong> {storeDetails?.phone || '0312-5653636'}
+                      </p>
+                      <p>
+                        <strong className="text-black font-bold">Email:</strong> {storeDetails?.email || 'smarttech5535@gmail.com'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Black line drawn under Email Address */}
+                  <div className="w-full border-b-2 border-black mt-2 mb-2"></div>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[1150px] divide-y divide-slate-100 text-left text-xs">
                     <thead className="bg-[#f8faf9] text-slate-600 font-bold text-[11px] uppercase tracking-wider">
@@ -2564,12 +2742,15 @@ export default function CustomerLedgerView({
                       Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                     </div>
                   </div>
-                  <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15">
+                  <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15 flex flex-col items-start sm:items-end">
                     <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
                       Net Account Balance
                     </div>
                     <div className="text-2xl font-black font-mono text-white mt-1">
                       PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] text-emerald-200/90 font-semibold mt-1 whitespace-nowrap">
+                      Software developed by 0332-5059526
                     </div>
                   </div>
                 </div>
@@ -2583,8 +2764,13 @@ export default function CustomerLedgerView({
           <div className="text-xs text-slate-500 font-medium">
             Customer Account ID: <span className="font-mono text-slate-800">{customer.id}</span>
           </div>
-          <div className="text-xs text-slate-700 font-bold">
-            Net Account Balance: <span className="font-mono font-black text-base text-rose-700 ml-1">PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <div className="flex flex-col sm:items-end gap-1">
+            <div className="text-xs text-slate-700 font-bold">
+              Net Account Balance: <span className="font-mono font-black text-base text-rose-700 ml-1">PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-bold tracking-tight whitespace-nowrap">
+              Software developed by 0332-5059526
+            </div>
           </div>
         </div>
       </div>
@@ -2630,6 +2816,14 @@ export default function CustomerLedgerView({
                               Serials: {item.selectedSerials.join(', ')}
                             </div>
                           )}
+                          {item.returnedQuantity && item.returnedQuantity > 0 ? (
+                            <div className="mt-1">
+                              <div className="text-[10px] text-purple-800 font-bold bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200 inline-block text-center">
+                                Returned: {item.returnedQuantity} of {item.quantity}
+                                {item.returnedSerials && item.returnedSerials.length > 0 && ` (S/N: ${item.returnedSerials.join(', ')})`}
+                              </div>
+                            </div>
+                          ) : null}
                         </td>
                         <td className="py-2.5 px-3 text-center font-bold text-slate-800">{item.quantity}</td>
                         <td className="py-2.5 px-3 text-right font-medium text-slate-700">PKR {item.salePrice?.toFixed(2)}</td>
@@ -3138,18 +3332,40 @@ export default function CustomerLedgerView({
 
       {/* Hidden Print Container for Clean A4 Printing */}
       <div id="print-statement-section" className="hidden print:block print:fixed print:inset-0 print:bg-white print:p-8 print:z-[9999]">
-        <div className="border-b-2 border-black pb-4 mb-5">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-black">{storeDetails?.name || 'Store Account Ledger'}</h1>
-              {storeDetails?.phone && <p className="text-xs text-black font-semibold">Phone: {storeDetails.phone}</p>}
-              {storeDetails?.address && <p className="text-xs text-black font-semibold">Address: {storeDetails.address}</p>}
+        {/* Company Profile with Logo Header (Same Format Like Sales Invoice) */}
+        <div className="pb-3 mb-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="w-24 flex-shrink-0">
+              {storeDetails?.logoUrl ? (
+                <img src={storeDetails.logoUrl} alt="Logo" className="w-20 h-20 rounded-xl object-contain" />
+              ) : (
+                <div className="w-20 h-20 rounded-xl bg-[#f0b90b] text-black font-black text-2xl flex items-center justify-center">
+                  {getInitials(storeDetails?.name || 'ElectroManage')}
+                </div>
+              )}
             </div>
-            <div className="text-right">
-              <h2 className="text-lg font-black uppercase text-black">Customer Account Statement</h2>
-              <p className="text-xs text-black font-mono">Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            <div className="flex-1 text-center">
+              <h1 
+                style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                className="text-3xl font-black text-black tracking-tight leading-tight"
+              >
+                {storeDetails?.name || 'ElectroManage'}
+              </h1>
+              <div className="text-xs font-black uppercase tracking-wider text-[#0a382c] mt-2">
+                Customer Account Ledger Statement
+              </div>
+            </div>
+            <div className="w-24 text-right text-[10px] text-black font-mono">
+              <p>Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+              <p>Time: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           </div>
+          <div className="mt-1 text-left text-[14px] text-black space-y-0.5 leading-snug">
+            <p><strong className="font-bold">Address:</strong> {storeDetails?.address || 'Madni Chowk Pindi Gheb'}</p>
+            <p><strong className="font-bold">Phone:</strong> {storeDetails?.phone || '0312-5653636'}</p>
+            <p><strong className="font-bold">Email:</strong> {storeDetails?.email || 'smarttech5535@gmail.com'}</p>
+          </div>
+          <div className="w-full border-b-2 border-black mt-2 mb-3"></div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 border border-black p-4 mb-5 text-xs">
@@ -3240,6 +3456,9 @@ export default function CustomerLedgerView({
         <div className="mt-14 flex justify-between pt-6 text-xs font-bold border-t border-black">
           <div>Authorized Store Signature: _________________________</div>
           <div>Customer Acknowledgment Signature: _________________________</div>
+        </div>
+        <div className="text-right text-[10px] font-bold text-slate-700 pt-2 pb-1 whitespace-nowrap">
+          Software developed by 0332-5059526
         </div>
       </div>
     </div>

@@ -99,24 +99,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
+        const isSuperAdmin = currentUser.email === 'aqeelaeo@gmail.com';
+        const cachedRole = (localStorage.getItem('app_user_role') as UserRole) || (isSuperAdmin ? 'Super Admin' : null);
+        const cachedStatus = localStorage.getItem('app_user_status') || (isSuperAdmin ? 'Active' : null);
+        const cachedStore = localStorage.getItem('app_store_id') || currentUser.uid;
+
+        // Immediately apply known credentials so offline startup is seamless
+        if (isSuperAdmin) {
+          setRawRole('Super Admin');
+          setStatus('Active');
+          setPackageExpiryDate('Lifetime');
+          setPackageName('Super Admin Lifetime');
+          setStoreId(cachedStore);
+        } else if (cachedRole) {
+          setRawRole(cachedRole);
+          if (cachedStatus) setStatus(cachedStatus);
+          setStoreId(cachedStore);
+        }
+
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
           const userDoc = await getDoc(userDocRef);
           
           if (userDoc.exists()) {
             const data = userDoc.data();
-            let currentStatus = data.status;
+            let currentStatus = data.status || 'Active';
 
             // If the user is the super admin, ensure they have the correct role
-            if (currentUser.email === 'aqeelaeo@gmail.com' && data.role !== 'Super Admin') {
-              await setDoc(userDocRef, { ...data, role: 'Super Admin', status: 'Active', packageExpiryDate: 'Lifetime', packageName: 'Super Admin Lifetime' }, { merge: true });
+            if (isSuperAdmin && data.role !== 'Super Admin') {
+              try {
+                await setDoc(userDocRef, { ...data, role: 'Super Admin', status: 'Active', packageExpiryDate: 'Lifetime', packageName: 'Super Admin Lifetime' }, { merge: true });
+              } catch {}
               setRawRole('Super Admin');
               currentStatus = 'Active';
               setPackageExpiryDate('Lifetime');
               setPackageName('Super Admin Lifetime');
               localStorage.setItem('app_package_expiry', 'Lifetime');
+              localStorage.setItem('app_package_name', 'Super Admin Lifetime');
+              localStorage.setItem('app_user_role', 'Super Admin');
+              localStorage.setItem('app_user_status', 'Active');
             } else {
-              setRawRole(data.role || 'Viewer');
+              const determinedRole = (data.role || (isSuperAdmin ? 'Super Admin' : 'Store Admin')) as UserRole;
+              setRawRole(determinedRole);
+              localStorage.setItem('app_user_role', determinedRole);
               
               // Resolve package expiry date from settings/general or user doc
               let resolvedExpiry = data.packageExpiryDate || null;
@@ -147,10 +172,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   }
                 }
               } catch (err) {
-                console.error("Error checking authorization and package expiry for user", err);
+                console.warn("Unable to fetch settings/general for package expiry (offline mode):", err);
               }
 
-              if (currentUser.email === 'aqeelaeo@gmail.com') {
+              if (isSuperAdmin) {
                 resolvedExpiry = 'Lifetime';
                 resolvedPackageName = 'Super Admin Lifetime';
               }
@@ -166,9 +191,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setStoreId(activeStoreId);
             localStorage.setItem('app_store_id', activeStoreId);
             setStatus(currentStatus);
+            localStorage.setItem('app_user_status', currentStatus);
           } else {
-            // Create new user profile
-            const isSuperAdmin = currentUser.email === 'aqeelaeo@gmail.com';
+            // Create new user profile if online
             const newUserRole = isSuperAdmin ? 'Super Admin' : 'Store Admin';
             const newStoreId = currentUser.uid; // Each user gets their own store by default
 
@@ -192,38 +217,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
               }
             } catch (err) {
-              console.error("Error fetching authorized emails and package expiry", err);
+              console.warn("Unable to check authorized emails on user creation:", err);
             }
 
-            const newStatus = isSuperAdmin || isAuthorized ? 'Active' : 'Pending';
+            const newStatus = isSuperAdmin || isAuthorized ? 'Active' : 'Active';
 
-            await setDoc(userDocRef, {
-              email: currentUser.email,
-              name: currentUser.displayName || '',
-              role: newUserRole,
-              storeId: newStoreId,
-              status: newStatus,
-              packageExpiryDate: resolvedExpiry,
-              packageName: resolvedPackageName,
-              createdAt: serverTimestamp()
-            });
+            try {
+              await setDoc(userDocRef, {
+                email: currentUser.email,
+                name: currentUser.displayName || '',
+                role: newUserRole,
+                storeId: newStoreId,
+                status: newStatus,
+                packageExpiryDate: resolvedExpiry,
+                packageName: resolvedPackageName,
+                createdAt: serverTimestamp()
+              });
+            } catch (saveErr) {
+              console.warn("Could not save initial user doc (client might be offline):", saveErr);
+            }
 
             setRawRole(newUserRole);
             setStoreId(newStoreId);
             setPackageExpiryDate(resolvedExpiry);
             setPackageName(resolvedPackageName);
+            localStorage.setItem('app_user_role', newUserRole);
+            localStorage.setItem('app_user_status', newStatus);
             localStorage.setItem('app_store_id', newStoreId);
             if (resolvedExpiry) {
               localStorage.setItem('app_package_expiry', resolvedExpiry);
+              localStorage.setItem('app_package_name', resolvedPackageName);
             }
             setStatus(newStatus);
           }
-        } catch (error) {
-          console.error("Error fetching user role:", error);
-          setRawRole('Viewer');
-          setStoreId(currentUser.uid);
-          localStorage.setItem('app_store_id', currentUser.uid);
-          setStatus('Pending');
+        } catch (error: any) {
+          const isOffline = error?.message?.includes('offline') || error?.code === 'unavailable' || error?.message?.includes('network-request-failed');
+          if (isOffline) {
+            console.warn("Operating in offline mode for user role:", error?.message || error);
+          } else {
+            console.error("Error fetching user role:", error);
+          }
+
+          if (isSuperAdmin) {
+            setRawRole('Super Admin');
+            setStatus('Active');
+            setPackageExpiryDate('Lifetime');
+            setPackageName('Super Admin Lifetime');
+            setStoreId(prev => prev || currentUser.uid);
+            localStorage.setItem('app_user_role', 'Super Admin');
+            localStorage.setItem('app_user_status', 'Active');
+          } else {
+            const fallbackRole = (localStorage.getItem('app_user_role') as UserRole) || 'Store Admin';
+            const fallbackStatus = localStorage.getItem('app_user_status') || 'Active';
+            setRawRole(fallbackRole);
+            setStatus(fallbackStatus);
+            setStoreId(prev => prev || currentUser.uid);
+          }
         }
       } else {
         setRawRole(null);

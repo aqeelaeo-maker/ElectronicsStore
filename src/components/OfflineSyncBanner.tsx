@@ -87,7 +87,7 @@ export default function OfflineSyncBanner() {
           <div className="flex items-center gap-2 shrink-0">
             <span className="inline-flex items-center gap-1.5 bg-amber-700/80 px-2.5 py-1 rounded-full text-xs font-semibold text-amber-100 border border-amber-500/50">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              IndexedDB Storage Enabled
+              Offline Sync Ready
             </span>
           </div>
         </div>

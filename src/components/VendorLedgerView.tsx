@@ -69,6 +69,11 @@ function cleanDataForFirestore(obj: any): any {
   return clean;
 }
 
+const getInitials = (name?: string) => {
+  if (!name) return 'EM';
+  return name.split(' ').filter(Boolean).map(p => p[0]).join('').toUpperCase().slice(0, 2);
+};
+
 export interface Vendor {
   id: string;
   name?: string;
@@ -1351,13 +1356,16 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
       <html>
         <head>
           <title>Vendor Account Statement - ${currentVendorData.companyName || currentVendorData.name}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
           <style>
             @page {
               size: A4 landscape;
               margin: 8mm;
             }
             body, .pdf-export-wrapper {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
               color: #0f172a;
               background-color: #ffffff;
               margin: 0;
@@ -1367,28 +1375,103 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               width: 100%;
               box-sizing: border-box;
             }
-            .header-banner {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              border-bottom: 2px solid #0f172a;
-              padding-bottom: 10px;
+            .invoice-header-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 0;
+              margin-bottom: 0;
+              padding: 0;
+            }
+            .header-divider-line {
+              width: 100%;
+              border-bottom: 3px solid #000000;
+              margin-top: 8px;
               margin-bottom: 12px;
             }
-            .store-name {
-              font-size: 18px;
-              font-weight: 900;
-              text-transform: uppercase;
-              letter-spacing: -0.5px;
-              color: #0a382c;
+            .logo-cell {
+              width: 96px;
+              vertical-align: top;
+              text-align: left;
+              padding: 0;
             }
-            .statement-title {
-              font-size: 15px;
-              font-weight: 800;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
+            .logo-container {
+              width: 96px;
+              height: 96px;
+              border-radius: 12px;
+              background-color: #f0b90b;
+              color: #000000;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 36px;
+              font-weight: 900;
+              border: none;
+              outline: none;
+              box-shadow: none;
+            }
+            .logo-img {
+              width: 96px;
+              height: 96px;
+              border-radius: 12px;
+              object-fit: contain;
+              border: none;
+              outline: none;
+              box-shadow: none;
+              background: transparent;
+              display: block;
+            }
+            .center-info-cell {
+              text-align: center;
+              vertical-align: top;
+              padding: 0 12px 0 12px;
+            }
+            .right-spacer-cell {
+              width: 96px;
+              vertical-align: top;
               text-align: right;
-              color: #0f172a;
+            }
+            .company-name {
+              font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
+              font-size: 44px;
+              font-weight: 900;
+              color: #000000;
+              margin: -8px 0 0 0;
+              padding: 0;
+              line-height: 1.15;
+              text-align: center;
+              letter-spacing: -0.02em;
+              text-decoration: none !important;
+              border-bottom: none !important;
+            }
+            .company-title-underline {
+              display: inline-block;
+              border-bottom: none !important;
+              padding-bottom: 0;
+              line-height: 1.1;
+              text-decoration: none !important;
+            }
+            .details-cell {
+              padding-top: 2px;
+              padding-bottom: 0;
+              vertical-align: top;
+              text-align: left;
+            }
+            .company-left-details {
+              font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
+              font-size: 15px;
+              line-height: 1.35;
+              color: #000000;
+              text-align: left;
+              margin-top: 3px;
+            }
+            .left-detail-row {
+              margin-bottom: 2px;
+              color: #000000;
+            }
+            .left-detail-label {
+              font-weight: 700;
+              color: #000000;
+              margin-right: 5px;
             }
             .summary-cards-table {
               width: 100% !important;
@@ -1465,10 +1548,11 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             .signatures-block {
               margin-top: 28px;
               padding-top: 10px;
-              padding-bottom: 24px;
-              margin-bottom: 16px;
+              padding-bottom: 28px;
+              margin-bottom: 20px;
               page-break-inside: avoid !important;
               break-inside: avoid !important;
+              overflow: visible !important;
             }
             .signature-line {
               width: 220px;
@@ -1479,26 +1563,57 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               font-weight: 700;
               color: #334155;
             }
+            .ledger-software-credit {
+              text-align: right;
+              font-size: 10px;
+              font-weight: 700;
+              color: #334155;
+              margin-top: 14px;
+              padding-right: 6px;
+              padding-bottom: 16px;
+              letter-spacing: 0.2px;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              white-space: nowrap !important;
+              overflow: visible !important;
+            }
           </style>
         </head>
         <body>
-          <div class="header-banner">
-            <div>
-              <div class="store-name">${storeDetails?.name || 'STORE VENDOR LEDGER'}</div>
-              ${storeDetails?.address ? `<div style="font-size: 10px; color: #334155;">${storeDetails.address}</div>` : ''}
-              ${storeDetails?.phone ? `<div style="font-size: 10px; color: #334155;">Phone: ${storeDetails.phone}</div>` : ''}
-              ${storeDetails?.email ? `<div style="font-size: 10px; color: #334155;">Email: ${storeDetails.email}</div>` : ''}
-            </div>
-            <div>
-              <div class="statement-title">Vendor Account Statement</div>
-              <div style="font-size: 10px; color: #475569; text-align: right; margin-top: 3px;">
-                Statement Date: <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
-              </div>
-              <div style="font-size: 10px; color: #475569; text-align: right;">
-                Issue Time: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          </div>
+          <!-- Company Profile with Logo Header (Same Format Like Sales Invoice) -->
+          <table class="invoice-header-table">
+            <tr>
+              <td class="logo-cell">
+                ${storeDetails?.logoUrl 
+                  ? `<img src="${storeDetails.logoUrl}" class="logo-img" crossorigin="anonymous" alt="Logo" />`
+                  : `<div class="logo-container">${getInitials(storeDetails?.name || 'ElectroManage')}</div>`
+                }
+              </td>
+              <td class="center-info-cell">
+                <h1 class="company-name">${storeDetails?.name || 'ElectroManage'}</h1>
+                <div style="font-size: 13px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 5px; color: #0a382c;">
+                  VENDOR ACCOUNT STATEMENT
+                </div>
+              </td>
+              <td class="right-spacer-cell">
+                <div style="font-size: 9.5px; color: #334155; line-height: 1.4; text-align: right;">
+                  <div>Date: <strong>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
+                  <div>Time: <strong>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="3" class="details-cell">
+                <div class="company-left-details">
+                  <div class="left-detail-row"><span class="left-detail-label">Address:</span> ${storeDetails?.address || 'Madni Chowk Pindi Gheb'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Phone:</span> ${storeDetails?.phone || '0312-5653636'}</div>
+                  <div class="left-detail-row"><span class="left-detail-label">Email:</span> ${storeDetails?.email || 'smarttech5535@gmail.com'}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <div class="header-divider-line"></div>
 
           <!-- Vendor Details & Account Reference -->
           <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background: #fafafa; border-radius: 6px; margin-bottom: 12px;">
@@ -1607,21 +1722,27 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             </tr>
           </table>
 
-          <!-- Signatures -->
-          <table class="signatures-block avoid-break" style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="width: 50%; vertical-align: top; text-align: left;">
-                <div class="signature-line">
-                  Authorized Store Signature
-                </div>
-              </td>
-              <td style="width: 50%; vertical-align: top; text-align: right;">
-                <div class="signature-line" style="margin-left: auto;">
-                  Vendor / Supplier Signature
-                </div>
-              </td>
-            </tr>
-          </table>
+          <!-- Signatures & Credit Block -->
+          <div class="signatures-block avoid-break" style="margin-top: 28px; padding-top: 10px; page-break-inside: avoid !important; break-inside: avoid !important;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="width: 50%; vertical-align: top; text-align: left;">
+                  <div class="signature-line">
+                    Authorized Store Signature
+                  </div>
+                </td>
+                <td style="width: 50%; vertical-align: top; text-align: right;">
+                  <div class="signature-line" style="margin-left: auto;">
+                    Vendor / Supplier Signature
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <div class="ledger-software-credit" style="text-align: right; margin-top: 14px; font-size: 10px; font-weight: 700; color: #334155; padding-right: 6px; padding-bottom: 16px; white-space: nowrap !important; overflow: visible !important;">
+              Software developed by 0332-5059526
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -2405,7 +2526,65 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
 
         {/* TAB 3: RUNNING BALANCE STATEMENT */}
         {activeTab === 'statement' && (
-          <div className="overflow-x-auto">
+          <div>
+            {/* Company Profile with Logo Header (Same Format Like Sales Invoice) */}
+            <div className="p-6 bg-white border-b border-slate-200">
+              <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                {/* Company Logo on Left */}
+                <div className="w-20 sm:w-24 flex-shrink-0">
+                  {storeDetails?.logoUrl ? (
+                    <img 
+                      src={storeDetails.logoUrl} 
+                      alt="Store Logo" 
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                    />
+                  ) : (
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#f0b90b] text-black font-black text-2xl sm:text-3xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                      {getInitials(storeDetails?.name || 'ElectroManage')}
+                    </div>
+                  )}
+                </div>
+
+                {/* Company Name Centered */}
+                <div className="flex-1 text-center py-0 px-2 sm:px-4">
+                  <h2 
+                    style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                    className="text-3xl sm:text-4xl lg:text-5xl font-black text-black tracking-tight leading-tight"
+                  >
+                    {storeDetails?.name || 'ElectroManage'}
+                  </h2>
+                  <div className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#0a382c] mt-2">
+                    Vendor / Supplier Account Ledger Statement
+                  </div>
+                </div>
+
+                {/* Right spacer for symmetry */}
+                <div className="hidden sm:block w-20 sm:w-24 flex-shrink-0"></div>
+              </div>
+
+              {/* Company Info under Logo on left side in Calibri font size 15 */}
+              <div className="mt-1 text-left max-w-md">
+                <div 
+                  style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
+                  className="text-[15px] text-black space-y-0.5 leading-snug"
+                >
+                  <p>
+                    <strong className="text-black font-bold">Address:</strong> {storeDetails?.address || 'Madni Chowk Pindi Gheb'}
+                  </p>
+                  <p>
+                    <strong className="text-black font-bold">Phone:</strong> {storeDetails?.phone || '0312-5653636'}
+                  </p>
+                  <p>
+                    <strong className="text-black font-bold">Email:</strong> {storeDetails?.email || 'smarttech5535@gmail.com'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Black line drawn under Email Address */}
+              <div className="w-full border-b-2 border-black mt-2 mb-2"></div>
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] divide-y divide-slate-100 text-left text-xs">
               <thead className="bg-[#f8faf9] text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <tr>
@@ -2574,8 +2753,9 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                 </tfoot>
               )}
             </table>
+          </div>
 
-            {/* Closing Net Account Balance Banner Card */}
+          {/* Closing Net Account Balance Banner Card */}
             <div className="m-6 p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-[#0a382c]">
@@ -2592,17 +2772,35 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                   Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Purchases (PKR {financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Paid (PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                 </p>
               </div>
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end gap-1">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                   Net Account Balance
                 </span>
                 <span className={`text-2xl font-black font-mono ${financialTotals.currentBalance > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
                   PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
+                <span className="text-[11px] text-slate-600 font-bold tracking-tight mt-0.5 whitespace-nowrap">
+                  Software developed by 0332-5059526
+                </span>
               </div>
             </div>
           </div>
         )}
+
+        {/* Footer Summary Bar */}
+        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 rounded-b-2xl">
+          <div className="text-xs text-slate-500 font-medium">
+            Vendor / Supplier Account ID: <span className="font-mono text-slate-800">{currentVendorData.id}</span>
+          </div>
+          <div className="flex flex-col sm:items-end gap-1">
+            <div className="text-xs text-slate-700 font-bold">
+              Net Account Balance: <span className={`font-mono font-black text-base ml-1 ${financialTotals.currentBalance > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-bold tracking-tight whitespace-nowrap">
+              Software developed by 0332-5059526
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* QUICK VIEW PURCHASE MODAL */}
@@ -3243,18 +3441,40 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
 
       {/* Hidden Print Container for Clean A4 Printing */}
       <div id="print-vendor-statement-section" className="hidden print:block print:fixed print:inset-0 print:bg-white print:p-8 print:z-[9999]">
-        <div className="border-b-2 border-black pb-4 mb-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight text-black">{storeDetails?.name || 'Store Vendor Ledger'}</h1>
-              {storeDetails?.phone && <p className="text-xs text-black font-semibold">Phone: {storeDetails.phone}</p>}
-              {storeDetails?.address && <p className="text-xs text-black font-semibold">Address: {storeDetails.address}</p>}
+        {/* Company Profile with Logo Header (Same Format Like Sales Invoice) */}
+        <div className="pb-3 mb-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="w-24 flex-shrink-0">
+              {storeDetails?.logoUrl ? (
+                <img src={storeDetails.logoUrl} alt="Logo" className="w-20 h-20 rounded-xl object-contain" />
+              ) : (
+                <div className="w-20 h-20 rounded-xl bg-[#f0b90b] text-black font-black text-2xl flex items-center justify-center">
+                  {getInitials(storeDetails?.name || 'ElectroManage')}
+                </div>
+              )}
             </div>
-            <div className="text-right">
-              <h2 className="text-lg font-black uppercase text-black">Vendor Statement</h2>
-              <p className="text-xs text-black font-mono">Date: {new Date().toLocaleDateString()}</p>
+            <div className="flex-1 text-center">
+              <h1 
+                style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
+                className="text-3xl font-black text-black tracking-tight leading-tight"
+              >
+                {storeDetails?.name || 'ElectroManage'}
+              </h1>
+              <div className="text-xs font-black uppercase tracking-wider text-[#0a382c] mt-2">
+                Vendor / Supplier Account Ledger Statement
+              </div>
+            </div>
+            <div className="w-24 text-right text-[10px] text-black font-mono">
+              <p>Date: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+              <p>Time: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           </div>
+          <div className="mt-1 text-left text-[14px] text-black space-y-0.5 leading-snug">
+            <p><strong className="font-bold">Address:</strong> {storeDetails?.address || 'Madni Chowk Pindi Gheb'}</p>
+            <p><strong className="font-bold">Phone:</strong> {storeDetails?.phone || '0312-5653636'}</p>
+            <p><strong className="font-bold">Email:</strong> {storeDetails?.email || 'smarttech5535@gmail.com'}</p>
+          </div>
+          <div className="w-full border-b-2 border-black mt-2 mb-3"></div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 border border-black p-4 mb-6 text-xs">
@@ -3335,6 +3555,9 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
         <div className="mt-16 flex justify-between pt-8 text-xs font-bold border-t border-black">
           <div>Authorized Store Signature: _________________________</div>
           <div>Vendor / Supplier Signature: _________________________</div>
+        </div>
+        <div className="text-right text-[10px] font-bold text-slate-700 pt-2 pb-1 whitespace-nowrap">
+          Software developed by 0332-5059526
         </div>
       </div>
     </div>

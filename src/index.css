@@ -81,3 +81,291 @@
   animation: textFlashBlink 0.9s ease-in-out infinite;
 }
 
+/* ==========================================================================
+   High-Fidelity CSS Print Stylesheet
+   Forces precise A4 dimensions, eliminates browser clutter, resets margins,
+   and ensures printed invoice layout matches screen-rendered version exactly.
+   ========================================================================== */
+
+@page {
+  size: A4 portrait;
+  margin: 6mm 8mm;
+}
+
+@media print {
+  /* 1. Global Print Reset & Environment Preparation */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html,
+  body {
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  /* 2. Remove all UI clutter, sidebars, navigation, toasts, modals backdrop, and toolbars */
+  header,
+  nav,
+  aside,
+  footer,
+  .no-print,
+  .Toastify,
+  [role="dialog"] > div.fixed.inset-0.bg-slate-900\/40,
+  div[class*="backdrop-blur"],
+  div[class*="fixed inset-0 bg-slate-900"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+
+  /* If a modal is open, ensure the modal wrapper breaks out of fixed coordinates and behaves cleanly for print */
+  body:has(.printable-modal-wrapper) * {
+    visibility: hidden;
+  }
+
+  body:has(.printable-modal-wrapper) .printable-modal-wrapper,
+  body:has(.printable-modal-wrapper) .printable-modal-wrapper * {
+    visibility: visible;
+  }
+
+  body:has(.printable-modal-wrapper) .printable-modal-wrapper {
+    position: static !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  /* When printing from screen with live invoice wrapper */
+  body:has(.printable-invoice-wrapper) * {
+    visibility: hidden;
+  }
+
+  body:has(.printable-invoice-wrapper) .printable-invoice-wrapper,
+  body:has(.printable-invoice-wrapper) .printable-invoice-wrapper * {
+    visibility: visible;
+  }
+
+  body:has(.printable-invoice-wrapper) .printable-invoice-wrapper {
+    position: static !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  /* 3. Dedicated High-Fidelity Printable Receipt & Invoice Structure */
+  .receipt-container,
+  .printable-invoice-wrapper,
+  .printable-invoice-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 0 16px 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Typography consistency */
+  .company-name,
+  h1.company-name,
+  h2.company-name {
+    font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif !important;
+    font-size: 34px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    text-align: center !important;
+    letter-spacing: -0.01em !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+    text-decoration: none !important;
+    border-bottom: none !important;
+  }
+
+  .company-title-underline {
+    display: inline-block !important;
+    border-bottom: none !important;
+    text-decoration: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  .ledger-software-credit,
+  .software-credit {
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+
+  .returned-item-badge {
+    text-align: center !important;
+  }
+
+  .company-left-details,
+  .company-info-text {
+    font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif !important;
+    font-size: 16px !important;
+    line-height: 1.35 !important;
+    color: #000000 !important;
+  }
+
+  /* Exact table formatting matching screen view */
+  .items-table,
+  table.items-table,
+  .printable-invoice-wrapper table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 12px !important;
+    border: 1px solid #000000 !important;
+    page-break-inside: auto !important;
+  }
+
+  .items-table thead,
+  table.items-table thead,
+  .printable-invoice-wrapper thead {
+    background-color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .items-table thead tr,
+  table.items-table thead tr,
+  .printable-invoice-wrapper thead tr {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  .items-table th,
+  table.items-table th,
+  .printable-invoice-wrapper th {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    font-size: 13.5px !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    padding: 7px 10px !important;
+    border: 1px solid #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .items-table tbody tr,
+  table.items-table tbody tr,
+  .printable-invoice-wrapper tbody tr {
+    border-bottom: 1.5px solid #000000 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .items-table td,
+  table.items-table td,
+  .printable-invoice-wrapper td {
+    padding: 7px 10px !important;
+    font-size: 12px !important;
+    color: #000000 !important;
+    border-bottom: 1.5px solid #000000 !important;
+  }
+
+  /* Bottom Totals and Footers - Avoid breaking across pages */
+  .invoice-bottom-section,
+  .totals-table,
+  .terms-section,
+  .returns-history-section,
+  .footer,
+  .avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .totals-table {
+    width: 350px !important;
+    margin-left: auto !important;
+    border-collapse: collapse !important;
+    font-size: 13.5px !important;
+    color: #000000 !important;
+  }
+
+  .totals-table td {
+    padding: 3.5px 0 !important;
+    color: #000000 !important;
+  }
+
+  .totals-table .total-row td {
+    font-size: 15.5px !important;
+    font-weight: 900 !important;
+    color: #000000 !important;
+    border-top: 2px solid #000000 !important;
+    padding-top: 6px !important;
+  }
+
+  .header-divider-line {
+    width: 100% !important;
+    border-bottom: 2px solid #000000 !important;
+    margin-top: 5px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .terms-section {
+    margin-top: 10px !important;
+    border-top: 1.5px solid #000000 !important;
+    padding-top: 6px !important;
+    padding-bottom: 8px !important;
+    text-align: left !important;
+  }
+
+  .footer {
+    margin-top: 10px !important;
+    border-top: 2px solid #000000 !important;
+    padding-top: 8px !important;
+    padding-bottom: 12px !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    color: #000000 !important;
+    font-weight: 700 !important;
+    line-height: 1.45 !important;
+    position: relative !important;
+  }
+
+  .software-credit,
+  .ledger-software-credit {
+    margin-top: 6px !important;
+    text-align: right !important;
+    font-size: 9px !important;
+    font-weight: 600 !important;
+    color: #334155 !important;
+    letter-spacing: 0.2px !important;
+  }
+}
+

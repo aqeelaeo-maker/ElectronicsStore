@@ -50,7 +50,7 @@ import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
-import SalesReturnModal, { printReturnReceipt, SaleReturnRecord } from '../components/SalesReturnModal';
+import SalesReturnModal, { printReturnReceipt, downloadReturnReceiptPdf, SaleReturnRecord } from '../components/SalesReturnModal';
 import { Pagination } from '../components/Pagination';
 import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
 
@@ -1748,8 +1748,8 @@ export default function Sales() {
     const itemsRows = groupedPrintItems && groupedPrintItems.length > 0 
       ? groupedPrintItems.map(item => `
         <tr style="border-bottom: 1.5px solid #000000;">
-          <td style="padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
-            <div style="font-weight: bold; color: #000000; font-size: 11px;">${item.productName}</div>
+          <td style="padding: 7px 10px; text-align: left; vertical-align: top; border-bottom: 1.5px solid #000000;">
+            <div style="font-weight: 700; color: #000000; font-size: 12px;">${item.productName}</div>
             ${(item.brand || item.modelNumber || item.category) ? `
               <div style="font-size: 10px; color: #000000; margin-top: 1px; font-weight: 500;">
                 ${item.brand ? item.brand + ' • ' : ''}${item.modelNumber ? item.modelNumber + ' • ' : ''}${item.category || ''}
@@ -1761,15 +1761,20 @@ export default function Sales() {
                 <span style="font-family: monospace; font-weight: 600;">${item.selectedSerials.join(', ')}</span>
               </div>
             ` : ''}
+            ${item.returnedQuantity && item.returnedQuantity > 0 ? `
+              <div style="margin-top: 3px;">
+                <div class="returned-item-badge" style="font-size: 9.5px; color: #6b21a8; font-weight: bold; background-color: #f3e8ff; padding: 2.5px 10px; border-radius: 4px; display: inline-block; text-align: center; border: 1px solid #d8b4fe; line-height: 1.35; box-sizing: border-box; vertical-align: middle;">Returned: ${item.returnedQuantity} of ${item.quantity}${item.returnedSerials && item.returnedSerials.length > 0 ? ` (S/N: ${item.returnedSerials.join(', ')})` : ''}</div>
+              </div>
+            ` : ''}
           </td>
-          <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${item.salePrice.toFixed(2)}</td>
-          <td style="padding: 6px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
-          <td style="padding: 6px 10px; text-align: right; font-weight: 800; color: #000000; vertical-align: top; font-size: 11px; border-bottom: 1.5px solid #000000;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
+          <td style="padding: 7px 10px; text-align: center; font-weight: 700; font-family: monospace; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">PKR ${item.salePrice.toFixed(2)}</td>
+          <td style="padding: 7px 10px; text-align: center; font-weight: 800; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">${item.quantity}</td>
+          <td style="padding: 7px 10px; text-align: right; font-weight: 800; font-family: monospace; color: #000000; vertical-align: top; font-size: 12px; border-bottom: 1.5px solid #000000;">PKR ${(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}</td>
         </tr>
       `).join('')
       : `
         <tr style="border-bottom: 1.5px solid #000000;">
-          <td colspan="4" style="padding: 16px 0; text-align: center; color: #000000; font-style: italic; font-size: 11px; border-bottom: 1.5px solid #000000;">
+          <td colspan="4" style="padding: 16px 0; text-align: center; color: #000000; font-style: italic; font-size: 12px; border-bottom: 1.5px solid #000000;">
             No itemized details recorded.
           </td>
         </tr>
@@ -1781,7 +1786,6 @@ export default function Sales() {
     const totalDiscount = sale.discount !== undefined
       ? sale.discount
       : (sale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0);
-    const matchedCust = customers.find(c => c.id === sale.customerId || c.name.toLowerCase() === sale.customerName.toLowerCase());
 
     const salePaidDisplay = sale.paidAmount !== undefined 
       ? sale.paidAmount 
@@ -1796,10 +1800,41 @@ export default function Sales() {
       <head>
         <meta charset="utf-8">
         <title>Invoice - ${sale.invoiceNo}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Cinzel:wght@700;800;900&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+          @font-face {
+            font-family: 'Cinzel';
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+            src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIU7ww63mVu7gtR-kwKxNvkNOjw-jHgTYo.ttf) format('truetype');
+          }
+          @font-face {
+            font-family: 'Cinzel';
+            font-style: normal;
+            font-weight: 900;
+            font-display: swap;
+            src: url(https://fonts.gstatic.com/s/cinzel/v26/8vIU7ww63mVu7gtR-kwKxNvkNOjw-n_gTYo.ttf) format('truetype');
+          }
+          @font-face {
+            font-family: 'Carlito';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url(https://fonts.gstatic.com/s/carlito/v4/3Jn9SDPw3m-pk039PDA.ttf) format('truetype');
+          }
+          @font-face {
+            font-family: 'Carlito';
+            font-style: normal;
+            font-weight: 700;
+            font-display: swap;
+            src: url(https://fonts.gstatic.com/s/carlito/v4/3Jn4SDPw3m-pk039BIykaX0.ttf) format('truetype');
+          }
+
           @page {
-            size: auto;
+            size: A4 portrait;
             margin: 6mm 8mm;
           }
           html, body {
@@ -1814,7 +1849,8 @@ export default function Sales() {
           }
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            padding: 6mm 8mm;
+            margin: 0 !important;
+            padding: 0 !important;
             box-sizing: border-box;
             color: #000000;
           }
@@ -1824,12 +1860,17 @@ export default function Sales() {
             margin: 0 auto;
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
             box-sizing: border-box;
-            padding-bottom: 28px;
+            padding: 22px 24px;
+            background-color: #ffffff;
+            border: 1.5px solid #000000;
+            border-radius: 16px;
+            color: #000000;
           }
           .invoice-main-content {
             width: 100%;
-            padding-bottom: 16px;
+            padding-bottom: 8px;
           }
           .invoice-header-table {
             width: 100%;
@@ -1840,34 +1881,34 @@ export default function Sales() {
           }
           .header-divider-line {
             width: 100%;
-            border-bottom: 2px solid #000000;
-            margin-top: 4px;
-            margin-bottom: 8px;
+            border-bottom: 3px solid #000000;
+            margin-top: 8px;
+            margin-bottom: 12px;
           }
           .logo-cell {
-            width: 95px;
-            vertical-align: middle;
+            width: 96px;
+            vertical-align: top;
             text-align: left;
             padding: 0;
           }
           .logo-container {
-            width: 78px;
-            height: 78px;
+            width: 96px;
+            height: 96px;
             border-radius: 12px;
             background-color: #f0b90b;
             color: #000000;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 30px;
+            font-size: 36px;
             font-weight: 900;
             border: none;
             outline: none;
             box-shadow: none;
           }
           .logo-img {
-            width: 78px;
-            height: 78px;
+            width: 96px;
+            height: 96px;
             border-radius: 12px;
             object-fit: contain;
             border: none;
@@ -1878,26 +1919,32 @@ export default function Sales() {
           }
           .center-info-cell {
             text-align: center;
-            vertical-align: middle;
-            padding: 0 8px;
+            vertical-align: top;
+            padding: 0 12px 0 12px;
           }
           .right-spacer-cell {
-            width: 95px;
-            vertical-align: middle;
+            width: 96px;
+            vertical-align: top;
           }
           .company-name {
             font-family: 'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif;
-            font-size: 32px;
+            font-size: 44px;
             font-weight: 900;
             color: #000000;
-            margin: 0;
+            margin: -8px 0 0 0;
+            padding: 0;
             line-height: 1.15;
             text-align: center;
-            letter-spacing: 0.01em;
-            text-decoration: underline;
-            text-underline-offset: 5px;
-            text-decoration-thickness: 2.5px;
-            text-decoration-color: #000000;
+            letter-spacing: -0.02em;
+            text-decoration: none !important;
+            border-bottom: none !important;
+          }
+          .company-title-underline {
+            display: inline-block;
+            border-bottom: none !important;
+            padding-bottom: 0;
+            line-height: 1.1;
+            text-decoration: none !important;
           }
           .details-cell {
             padding-top: 2px;
@@ -1907,10 +1954,11 @@ export default function Sales() {
           }
           .company-left-details {
             font-family: 'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif;
-            font-size: 13px;
+            font-size: 16px;
             line-height: 1.35;
             color: #000000;
             text-align: left;
+            margin-top: 3px;
           }
           .left-detail-row {
             margin-bottom: 2px;
@@ -1926,19 +1974,18 @@ export default function Sales() {
             width: 100%;
             border-collapse: collapse;
             border-bottom: none;
-            padding-bottom: 4px;
+            padding-bottom: 2px;
             margin-bottom: 10px;
           }
           .meta-grid td {
             vertical-align: top;
-            font-size: 11px;
-            padding-bottom: 4px;
             color: #000000;
           }
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
+            border: 1px solid #000000;
           }
           .items-table thead {
             background-color: #000000 !important;
@@ -1952,11 +1999,11 @@ export default function Sales() {
           .items-table th {
             background-color: #000000 !important;
             color: #ffffff !important;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 7px 10px;
+            padding: 8px 10px;
             border: 1px solid #000000;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -1965,34 +2012,34 @@ export default function Sales() {
             border-bottom: 1.5px solid #000000 !important;
           }
           .items-table td {
-            padding: 6px 10px;
-            font-size: 11px;
+            padding: 7px 10px;
+            font-size: 12px;
             color: #000000;
             border-bottom: 1.5px solid #000000 !important;
           }
           .invoice-bottom-section {
             width: 100%;
-            margin-top: 12px;
-            padding-top: 6px;
+            margin-top: 8px;
+            padding-top: 4px;
             padding-bottom: 16px;
             page-break-inside: auto !important;
             break-inside: auto !important;
           }
           .totals-table {
-            width: 340px;
+            width: 350px;
             margin-left: auto;
             border-collapse: collapse;
-            font-size: 14px;
+            font-size: 13.5px;
             color: #000000;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
           .totals-table td {
-            padding: 4px 0;
+            padding: 3.5px 0;
             color: #000000;
           }
           .totals-table .total-row {
-            font-size: 16px;
+            font-size: 15.5px;
             font-weight: 900;
             color: #000000;
             border-top: 2px solid #000000;
@@ -2024,10 +2071,10 @@ export default function Sales() {
           }
           .footer {
             margin-top: 12px;
-            border-top: 1.5px solid #000000;
+            border-top: 2px solid #000000;
             padding-top: 8px;
-            padding-bottom: 24px;
-            margin-bottom: 16px;
+            padding-bottom: 16px;
+            margin-bottom: 12px;
             text-align: center;
             font-size: 11px;
             color: #000000;
@@ -2035,6 +2082,54 @@ export default function Sales() {
             line-height: 1.45;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            position: relative;
+          }
+          .software-credit {
+            margin-top: 6px;
+            text-align: right;
+            font-size: 9px;
+            font-weight: 600;
+            color: #334155;
+            letter-spacing: 0.2px;
+          }
+          .returns-history-section {
+            margin-top: 12px;
+            border-top: 1.5px solid #000000;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            text-align: left;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .returns-history-header {
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #581c87;
+            margin-bottom: 6px;
+          }
+          .return-voucher-card {
+            border: 1px solid #d8b4fe;
+            background-color: #faf5ff;
+            border-radius: 6px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
+            font-size: 10.5px;
+          }
+          .returned-item-badge {
+            display: inline-block;
+            text-align: center;
+            font-size: 9.5px;
+            font-weight: bold;
+            color: #6b21a8;
+            background-color: #f3e8ff;
+            border: 1px solid #d8b4fe;
+            border-radius: 4px;
+            padding: 2.5px 10px;
+            line-height: 1.35;
+            box-sizing: border-box;
+            vertical-align: middle;
           }
           @media print {
             body {
@@ -2046,7 +2141,10 @@ export default function Sales() {
               max-width: 100% !important;
               display: flex !important;
               flex-direction: column !important;
-              padding-bottom: 24px !important;
+              padding: 16px 18px !important;
+              border: 1.5px solid #000000 !important;
+              border-radius: 14px !important;
+              box-sizing: border-box !important;
             }
             .invoice-bottom-section {
               page-break-inside: auto !important;
@@ -2062,7 +2160,7 @@ export default function Sales() {
               <tr>
                 <td class="logo-cell">
                   ${storeDetails.logoUrl 
-                    ? `<img src="${storeDetails.logoUrl}" class="logo-img" alt="Logo" />`
+                    ? `<img src="${storeDetails.logoUrl}" class="logo-img" crossorigin="anonymous" alt="Logo" />`
                     : `<div class="logo-container">${getInitials(storeDetails.name || 'ElectroManage')}</div>`
                   }
                 </td>
@@ -2084,9 +2182,9 @@ export default function Sales() {
 
             <div class="header-divider-line"></div>
 
-            <table class="meta-grid">
+            <table class="meta-grid" style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
               <tr>
-                <td style="width: 50%; vertical-align: top; text-align: left;">
+                <td style="width: 52%; vertical-align: top; text-align: left; padding: 0;">
                   <table style="border-collapse: collapse; font-size: 13px; color: #000000; line-height: 1.6;">
                     <tr>
                       <td style="padding: 1px 8px 1px 0; font-weight: bold; color: #000000; white-space: nowrap; vertical-align: top;">Customer:</td>
@@ -2102,7 +2200,7 @@ export default function Sales() {
                     </tr>
                   </table>
                 </td>
-                <td style="width: 50%; vertical-align: top; text-align: right;">
+                <td style="width: 48%; vertical-align: top; text-align: right; padding: 0;">
                   <div style="display: inline-block; text-align: left;">
                     <table style="border-collapse: collapse; font-size: 13px; color: #000000; line-height: 1.6;">
                       <tr>
@@ -2125,13 +2223,13 @@ export default function Sales() {
               </tr>
             </table>
 
-            <table class="items-table">
+            <table class="items-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; border: 1px solid #000000;">
               <thead>
                 <tr style="background-color: #000000; color: #ffffff;">
-                  <th style="text-align: left; width: 50%; background-color: #000000; color: #ffffff; padding: 10px 10px; font-size: 18px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRODUCT</th>
-                  <th style="text-align: center; width: 17%; background-color: #000000; color: #ffffff; padding: 10px 10px; font-size: 18px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRICE</th>
-                  <th style="text-align: center; width: 13%; background-color: #000000; color: #ffffff; padding: 10px 10px; font-size: 18px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">QTY</th>
-                  <th style="text-align: right; width: 20%; background-color: #000000; color: #ffffff; padding: 10px 10px; font-size: 18px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">TOTAL</th>
+                  <th style="text-align: left; width: 48%; background-color: #000000; color: #ffffff; padding: 8px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRODUCT</th>
+                  <th style="text-align: center; width: 18%; background-color: #000000; color: #ffffff; padding: 8px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">PRICE</th>
+                  <th style="text-align: center; width: 14%; background-color: #000000; color: #ffffff; padding: 8px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">QTY</th>
+                  <th style="text-align: right; width: 20%; background-color: #000000; color: #ffffff; padding: 8px 10px; font-size: 14px; font-weight: 900; border: 1px solid #000000; letter-spacing: 0.05em;">TOTAL</th>
                 </tr>
               </thead>
               <tbody>
@@ -2141,28 +2239,68 @@ export default function Sales() {
           </div>
 
           <div class="invoice-bottom-section">
-            <table class="totals-table">
-              <tr>
-                <td style="color: #000000; font-weight: bold; font-size: 18px; padding: 6px 0;">Subtotal (Pre-discount):</td>
-                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 18px; padding: 6px 0;">PKR ${subtotal.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td style="color: #000000; font-weight: bold; font-size: 18px; padding: 6px 0;">Discount:</td>
-                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 18px; padding: 6px 0;">PKR ${totalDiscount.toFixed(2)}</td>
-              </tr>
-              <tr class="total-row">
-                <td style="padding-top: 8px; color: #000000; font-weight: 900; font-size: 20px;">Total Amount:</td>
-                <td style="text-align: right; padding-top: 8px; color: #000000; font-weight: 900; font-size: 20px;">PKR ${sale.total?.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td style="color: #000000; font-weight: bold; font-size: 18px; padding: 6px 0;">Paid Amount:</td>
-                <td style="text-align: right; font-weight: bold; color: #000000; font-size: 18px; padding: 6px 0;">PKR ${salePaidDisplay.toFixed(2)}</td>
-              </tr>
-              <tr style="border-top: 1.5px dashed #000000;">
-                <td style="padding-top: 6px; color: #000000; font-weight: 900; font-size: 18px;">Amount Pending:</td>
-                <td style="text-align: right; padding-top: 6px; color: #000000; font-weight: 900; font-size: 18px;">PKR ${salePendingDisplay.toFixed(2)}</td>
-              </tr>
-            </table>
+            <div style="display: flex; justify-content: flex-end; width: 100%;">
+              <table class="totals-table" style="width: 350px; margin-left: auto; border-collapse: collapse; font-size: 13.5px; color: #000000;">
+                <tr>
+                  <td style="color: #000000; font-weight: bold; font-size: 13.5px; padding: 4px 0;">Subtotal (Pre-discount):</td>
+                  <td style="text-align: right; font-weight: bold; font-family: monospace; color: #000000; font-size: 13.5px; padding: 4px 0;">PKR ${subtotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="color: #000000; font-weight: bold; font-size: 13.5px; padding: 4px 0;">Discount:</td>
+                  <td style="text-align: right; font-weight: bold; font-family: monospace; color: #000000; font-size: 13.5px; padding: 4px 0;">PKR ${totalDiscount.toFixed(2)}</td>
+                </tr>
+                <tr class="total-row" style="border-top: 2px solid #000000;">
+                  <td style="padding-top: 6px; padding-bottom: 4px; color: #000000; font-weight: 900; font-size: 15.5px;">Total Amount:</td>
+                  <td style="text-align: right; padding-top: 6px; padding-bottom: 4px; color: #000000; font-weight: 900; font-family: monospace; font-size: 15.5px;">PKR ${sale.total?.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="color: #000000; font-weight: bold; font-size: 13.5px; padding: 4px 0;">Paid Amount:</td>
+                  <td style="text-align: right; font-weight: bold; font-family: monospace; color: #000000; font-size: 13.5px; padding: 4px 0;">PKR ${salePaidDisplay.toFixed(2)}</td>
+                </tr>
+                <tr style="border-top: 1.5px dashed #000000;">
+                  <td style="padding-top: 4px; padding-bottom: 4px; color: #000000; font-weight: 900; font-size: 14px;">Amount Pending:</td>
+                  <td style="text-align: right; padding-top: 4px; padding-bottom: 4px; color: #000000; font-weight: 900; font-family: monospace; font-size: 14px;">PKR ${salePendingDisplay.toFixed(2)}</td>
+                </tr>
+                ${sale.totalRefunded && sale.totalRefunded > 0 ? `
+                  <tr style="border-top: 1px solid #d8b4fe;">
+                    <td style="padding-top: 4px; padding-bottom: 4px; color: #6b21a8; font-weight: bold; font-size: 13px;">Total Refunded:</td>
+                    <td style="text-align: right; padding-top: 4px; padding-bottom: 4px; color: #6b21a8; font-weight: bold; font-family: monospace; font-size: 13px;">- PKR ${sale.totalRefunded.toFixed(2)}</td>
+                  </tr>
+                  <tr style="border-top: 1.5px solid #000000;">
+                    <td style="padding-top: 4px; padding-bottom: 4px; color: #000000; font-weight: 900; font-size: 14px;">Net Adjusted:</td>
+                    <td style="text-align: right; padding-top: 4px; padding-bottom: 4px; color: #000000; font-weight: 900; font-family: monospace; font-size: 14px;">PKR ${Math.max(0, (sale.total || 0) - (sale.totalRefunded || 0)).toFixed(2)}</td>
+                  </tr>
+                ` : ''}
+              </table>
+            </div>
+
+            ${sale.returns && sale.returns.length > 0 ? `
+              <div class="returns-history-section">
+                <div class="returns-history-header">Sales Returns & Refunds History (${sale.returns.length})</div>
+                ${sale.returns.map(ret => `
+                  <div class="return-voucher-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                      <div>
+                        <strong style="color: #4a044e;">${ret.id}</strong> • 
+                        <span>${new Date(ret.returnDate).toLocaleDateString()}</span> • 
+                        <span style="background-color: #f3e8ff; color: #6b21a8; padding: 1px 4px; border-radius: 3px; font-weight: bold;">${ret.refundMode} ${ret.bankName ? `(${ret.bankName})` : ''}</span>
+                        ${ret.restocked ? '<span style="color: #64748b;">(Restocked)</span>' : ''}
+                      </div>
+                      <div style="font-weight: 900; font-family: monospace; color: #581c87;">
+                        Refunded: PKR ${ret.totalRefund.toFixed(2)}
+                      </div>
+                    </div>
+                    <div style="color: #475569; font-size: 10px;">
+                      <strong>Reason:</strong> ${ret.reason} ${ret.notes ? `— ${ret.notes}` : ''}
+                    </div>
+                    <div style="color: #334155; font-size: 10px; margin-top: 2px;">
+                      <strong>Items: </strong>
+                      ${ret.items.map(it => `${it.productName} (x${it.quantity})${it.returnedSerials && it.returnedSerials.length > 0 ? ` [S/N: ${it.returnedSerials.join(', ')}]` : ''}`).join(', ')}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
 
             ${storeDetails.termsAndConditions ? `
               <div class="terms-section">
@@ -2174,6 +2312,7 @@ export default function Sales() {
             <div class="footer">
               Thank you for your purchase!
               ${!storeDetails.termsAndConditions ? '<br>For any warranty claims, please present this invoice.' : ''}
+              <div class="software-credit">Software developed by 0332-5059526</div>
             </div>
           </div>
         </div>
@@ -2231,7 +2370,7 @@ export default function Sales() {
       const filename = `Invoice_${sale.invoiceNo}_${safeCustomerName}`;
       await downloadHtmlAsPdf(htmlContent, filename, {
         orientation: 'portrait',
-        margin: [6, 6, 8, 6]
+        margin: [6, 8, 8, 8]
       });
       toast.success(`Invoice #${sale.invoiceNo} downloaded successfully!`);
     } catch (err) {
@@ -2414,6 +2553,7 @@ export default function Sales() {
     const draftSubtotal = draftItems.reduce((sum, item) => sum + (item.quantity * item.salePrice), 0);
     const draftTotalDiscount = Number(invoiceDiscount) || 0;
     const draftTotal = Math.max(0, draftSubtotal - draftTotalDiscount);
+    const draftPaidAndPending = getInvoicePaidAndPending(draftTotal);
 
     const currentDraftSale: Sale = {
       id: editingSale?.id || 'draft-invoice',
@@ -2425,6 +2565,8 @@ export default function Sales() {
       discount: draftTotalDiscount,
       warranty: invoiceWarranty || 'No Warranty',
       total: draftTotal,
+      paidAmount: draftPaidAndPending.paid,
+      pendingAmount: draftPaidAndPending.pending,
       status: invoiceStatus,
       paymentMode,
       bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
@@ -3532,7 +3674,7 @@ export default function Sales() {
 
               {/* BELOW BOTH PANELS: Invoice Printable View (Dynamic Live Preview) */}
               <div className="pt-8 border-t border-slate-200 space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
                   <div>
                     <div className="flex items-center gap-2">
                       <Printer className="w-4 h-4 text-[#0a382c]" />
@@ -3574,9 +3716,9 @@ export default function Sales() {
                 </div>
 
                 {/* Printable Document Paper Card */}
-                <div className="bg-white rounded-2xl border border-black shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-black min-h-[720px] flex flex-col justify-between">
+                <div className="printable-invoice-wrapper bg-white rounded-2xl border border-black shadow-sm p-5 sm:p-6 max-w-4xl mx-auto font-sans text-black min-h-[720px] flex flex-col justify-between">
                   {/* Top Section */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 printable-invoice-content">
                     {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
                     <div>
                       {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
@@ -3596,11 +3738,11 @@ export default function Sales() {
                           )}
                         </div>
 
-                        {/* Company Name (Enlarged, Prestigious Font, Underlined, Vertically Aligned with Logo) */}
+                        {/* Company Name (Enlarged, Prestigious Font, Vertically Aligned with Logo) */}
                         <div className="flex-1 text-center py-0 sm:px-4">
                           <h2 
                             style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                            className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-black"
+                            className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-tight"
                           >
                             {storeDetails.name || 'ElectroManage'}
                           </h2>
@@ -3681,10 +3823,10 @@ export default function Sales() {
                       <table className="min-w-full text-xs border-collapse">
                         <thead>
                           <tr className="bg-black text-white">
-                            <th className="py-3 px-3.5 text-left font-black uppercase text-base sm:text-lg tracking-wider text-white bg-black">PRODUCT</th>
-                            <th className="py-3 px-3 text-center font-black uppercase text-base sm:text-lg tracking-wider text-white bg-black">PRICE</th>
-                            <th className="py-3 px-3 text-center font-black uppercase text-base sm:text-lg tracking-wider text-white bg-black">QTY</th>
-                            <th className="py-3 px-3.5 text-right font-black uppercase text-base sm:text-lg tracking-wider text-white bg-black">TOTAL</th>
+                            <th className="py-2.5 px-3 text-left font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">PRODUCT</th>
+                            <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">PRICE</th>
+                            <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">QTY</th>
+                            <th className="py-2.5 px-3 text-right font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">TOTAL</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-black text-black">
@@ -3704,6 +3846,14 @@ export default function Sales() {
                                       <span className="font-mono font-semibold">{item.selectedSerials.join(', ')}</span>
                                     </div>
                                   )}
+                                  {item.returnedQuantity && item.returnedQuantity > 0 ? (
+                                    <div className="mt-1">
+                                      <div className="text-[10px] text-purple-800 font-bold bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200 inline-block text-center">
+                                        Returned: {item.returnedQuantity} of {item.quantity}
+                                        {item.returnedSerials && item.returnedSerials.length > 0 && ` (S/N: ${item.returnedSerials.join(', ')})`}
+                                      </div>
+                                    </div>
+                                  ) : null}
                                 </td>
                                 <td className="py-2.5 px-3 text-center text-black font-semibold font-mono">PKR {item.salePrice.toFixed(2)}</td>
                                 <td className="py-2.5 px-3 text-center font-bold text-black">{item.quantity}</td>
@@ -3778,6 +3928,9 @@ export default function Sales() {
                       {!storeDetails.termsAndConditions && (
                         <p>For any warranty claims, please present this original invoice.</p>
                       )}
+                      <div className="text-right text-[9px] text-slate-600 font-semibold pt-1">
+                        Software developed by 0332-5059526
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4211,8 +4364,8 @@ export default function Sales() {
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowDetailModal(false)} />
             <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-slate-200">
-              <div className="bg-[#0a382c] px-6 py-4 text-white flex justify-between items-center">
+            <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-slate-200 printable-modal-wrapper">
+              <div className="bg-[#0a382c] px-6 py-4 text-white flex justify-between items-center no-print">
                 <div className="flex items-center gap-2">
                   <Printer className="w-4 h-4 text-emerald-300" />
                   <span className="font-extrabold text-sm tracking-wide uppercase">Sales Invoice & Receipt</span>
@@ -4225,10 +4378,10 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="bg-white p-5 sm:p-6 space-y-3">
-                {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
+              <div className="printable-invoice-content bg-white p-5 sm:p-6 space-y-3 font-sans text-black">
+                {/* Header Section (Logo, Title, Contact Info & Black Line) */}
                 <div>
-                  {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
+                  {/* Top Row: Company Logo on Left, Company Name Centered */}
                   <div className="flex items-center justify-between gap-4 pt-0 pb-0">
                     {/* Company Logo on Left */}
                     <div className="w-24 sm:w-28 flex-shrink-0">
@@ -4240,17 +4393,17 @@ export default function Sales() {
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-slate-950 flex items-center justify-center font-black text-3xl sm:text-4xl border-0 shadow-none ring-0 outline-none">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-black flex items-center justify-center font-black text-3xl sm:text-4xl border-0 shadow-none ring-0 outline-none">
                           {getInitials(storeDetails.name || 'ElectroManage')}
                         </div>
                       )}
                     </div>
 
-                    {/* Company Details (Centered with professional fonts, underlined, previous perfect size) */}
+                    {/* Company Details (Centered with prestigious Cinzel font) */}
                     <div className="flex-1 text-center py-0 sm:px-4">
                       <h3 
                         style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-950 tracking-tight leading-tight underline underline-offset-8 decoration-[3px] decoration-slate-950"
+                        className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-tight"
                       >
                         {storeDetails.name || 'ElectroManage'}
                       </h3>
@@ -4260,31 +4413,31 @@ export default function Sales() {
                     <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
                   </div>
 
-                  {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
+                  {/* Company Info under Logo on left side in Calibri font size 16 */}
                   <div className="mt-1 text-left max-w-md">
                     <div 
                       style={{ fontFamily: "'Calibri', 'Carlito', Candara, Segoe, 'Segoe UI', Arial, sans-serif" }}
-                      className="text-[16px] text-slate-800 space-y-0.5 leading-snug"
+                      className="text-[16px] text-black space-y-0.5 leading-snug"
                     >
                       <p>
-                        <strong className="text-slate-950 font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
+                        <strong className="text-black font-bold">Address:</strong> {storeDetails.address || 'Madni Chowk Pindi Gheb'}
                       </p>
                       <p>
-                        <strong className="text-slate-950 font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
+                        <strong className="text-black font-bold">Phone:</strong> {storeDetails.phone || '0312-5653636'}
                       </p>
                       <p>
-                        <strong className="text-slate-950 font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
+                        <strong className="text-black font-bold">Email:</strong> {storeDetails.email || 'smarttech5535@gmail.com'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Black line drawn under Email Address - MOVED UP */}
+                  {/* Black line drawn under Email Address */}
                   <div className="w-full border-b-2 border-black mt-1.5 mb-2.5"></div>
                 </div>
 
-                {/* Meta & Customer/Invoice details (no line under payment mode) */}
+                {/* Meta Grid: Customer & Invoice Details */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-1 text-xs sm:text-sm text-black">
-                  {/* Customer & Payment Mode */}
+                  {/* Customer, Payment Mode & Payment Status */}
                   <div className="space-y-1 text-black">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-black min-w-[90px]">Customer:</span>
@@ -4299,9 +4452,13 @@ export default function Sales() {
                         )}
                       </span>
                     </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-black min-w-[90px]">Payment Status:</span>
+                      <span className="font-bold text-black">{selectedSale.status || 'Paid'}</span>
+                    </div>
                   </div>
 
-                  {/* Invoice Details (in right corner of page, aligned vertically from left side, without 'Invoice Details' title) */}
+                  {/* Invoice Details */}
                   <div className="flex justify-start sm:justify-end text-xs sm:text-sm text-black">
                     <div className="text-left space-y-1 min-w-[170px]">
                       <div className="flex items-baseline gap-2">
@@ -4312,68 +4469,73 @@ export default function Sales() {
                         <span className="font-bold text-black min-w-[80px]">Date:</span>
                         <span className="font-bold text-black">{formatInvoiceDate(selectedSale.date)}</span>
                       </div>
+                      {selectedSale.warranty && selectedSale.warranty !== 'No Warranty' && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-bold text-black min-w-[80px]">Warranty:</span>
+                          <span className="font-bold text-black">{selectedSale.warranty}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Items details table */}
-                <div>
-                  <h4 className="text-[10px] font-black text-black uppercase tracking-wider mb-2">Itemized Bill</h4>
+                {/* Line Items Table with Black Rectangle header & White Text */}
+                <div className="overflow-x-auto border border-black rounded">
                   {selectedSale.items && selectedSale.items.length > 0 ? (
-                    <div className="border border-black rounded-lg overflow-hidden">
-                      <table className="min-w-full divide-y divide-black text-black">
-                        <thead className="bg-black text-white">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-base sm:text-lg font-black uppercase tracking-wider text-white bg-black">PRODUCT</th>
-                            <th className="px-4 py-3 text-center text-base sm:text-lg font-black uppercase tracking-wider text-white bg-black">PRICE</th>
-                            <th className="px-4 py-3 text-center text-base sm:text-lg font-black uppercase tracking-wider text-white bg-black">QTY</th>
-                            <th className="px-4 py-3 text-right text-base sm:text-lg font-black uppercase tracking-wider text-white bg-black">TOTAL</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-black text-xs text-black">
-                          {groupSaleItemsForPrint(selectedSale.items).map((item, i) => (
-                            <tr key={i} className="align-top border-b border-black">
-                              <td className="px-4 py-3">
-                                <div className="font-bold text-black">{item.productName}</div>
-                                {(item.brand || item.modelNumber) && (
-                                  <div className="text-[10px] text-black font-medium mt-0.5">
-                                    {item.brand ? item.brand + ' • ' : ''}{item.modelNumber || ''}
-                                  </div>
-                                )}
-                                {item.selectedSerials && item.selectedSerials.length > 0 && (
-                                  <div className="text-[10px] text-black mt-1 leading-snug break-words">
-                                    <span className="font-bold uppercase text-[9px] text-black">S/N: </span>
-                                    <span className="font-mono font-semibold">{item.selectedSerials.join(', ')}</span>
-                                  </div>
-                                )}
-                                {item.returnedQuantity && item.returnedQuantity > 0 ? (
-                                  <div className="text-[10px] text-purple-800 font-bold mt-1 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 inline-block">
+                    <table className="min-w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-black text-white">
+                          <th className="py-2.5 px-3 text-left font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">PRODUCT</th>
+                          <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">PRICE</th>
+                          <th className="py-2.5 px-3 text-center font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">QTY</th>
+                          <th className="py-2.5 px-3 text-right font-black uppercase text-sm sm:text-base tracking-wider text-white bg-black">TOTAL</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black text-black">
+                        {groupSaleItemsForPrint(selectedSale.items).map((item, i) => (
+                          <tr key={i} className="align-top border-b border-black">
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-black">{item.productName}</div>
+                              {(item.brand || item.modelNumber) && (
+                                <div className="text-[10px] text-black font-medium mt-0.5">
+                                  {item.brand ? item.brand + ' • ' : ''}{item.modelNumber || ''}
+                                </div>
+                              )}
+                              {item.selectedSerials && item.selectedSerials.length > 0 && (
+                                <div className="text-[10px] text-black mt-1 leading-snug break-words">
+                                  <span className="font-bold uppercase text-[9px] text-black">S/N: </span>
+                                  <span className="font-mono font-semibold">{item.selectedSerials.join(', ')}</span>
+                                </div>
+                              )}
+                              {item.returnedQuantity && item.returnedQuantity > 0 ? (
+                                <div className="mt-1">
+                                  <div className="text-[10px] text-purple-800 font-bold bg-purple-50 px-2.5 py-0.5 rounded border border-purple-200 inline-block text-center">
                                     Returned: {item.returnedQuantity} of {item.quantity}
                                     {item.returnedSerials && item.returnedSerials.length > 0 && ` (S/N: ${item.returnedSerials.join(', ')})`}
                                   </div>
-                                ) : null}
-                              </td>
-                              <td className="px-4 py-3 text-center font-semibold font-mono text-black">PKR {item.salePrice.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-center font-bold text-black">{item.quantity}</td>
-                              <td className="px-4 py-3 text-right font-bold font-mono text-black">
-                                PKR {(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-semibold font-mono text-black">PKR {item.salePrice.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-center font-bold text-black">{item.quantity}</td>
+                            <td className="py-2.5 px-3 text-right font-bold font-mono text-black">
+                              PKR {(item.subtotal || (item.quantity * item.salePrice - (item.discount || 0))).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   ) : (
-                    <div className="bg-slate-50 p-4 rounded-xl border border-black text-center">
+                    <div className="p-4 text-center">
                       <p className="text-xs text-black italic">No direct line item details recorded. This was entered as a quick-sum invoice.</p>
-                      <div className="mt-3 text-sm font-bold text-black">Total Invoice Amount: PKR {selectedSale.total?.toFixed(2)}</div>
+                      <div className="mt-2 text-sm font-bold text-black">Total Invoice Amount: PKR {selectedSale.total?.toFixed(2)}</div>
                     </div>
                   )}
                 </div>
 
-                {/* Totals panel */}
-                <div className="flex flex-col sm:flex-row justify-end items-start gap-4 pt-4 border-t-2 border-black">
-                  <div className="w-full sm:w-80 md:w-96 text-right space-y-2.5 text-black">
+                {/* Totals Summary */}
+                <div className="flex justify-end pt-3">
+                  <div className="w-80 sm:w-96 space-y-2 text-black">
                     <div className="flex justify-between font-bold text-black text-base sm:text-lg">
                       <span>Subtotal (Pre-discount):</span>
                       <span className="font-mono font-bold">
@@ -4386,19 +4548,23 @@ export default function Sales() {
                         PKR {(selectedSale.items?.reduce((sum, item) => sum + (item.discount || 0), 0) || 0).toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex justify-between text-lg sm:text-xl font-black text-black border-t-2 border-black pt-2.5">
-                      <span>Total Amount:</span>
-                      <span className="font-mono">PKR {selectedSale.total?.toFixed(2)}</span>
+                    <div className="flex justify-between items-center pt-2.5 border-t-2 border-black text-lg sm:text-xl">
+                      <span className="font-black text-black">
+                        Total Amount:
+                      </span>
+                      <span className="font-black font-mono text-lg sm:text-xl text-black">
+                        PKR {selectedSale.total?.toFixed(2)}
+                      </span>
                     </div>
                     <div className="flex justify-between font-bold text-black text-base sm:text-lg">
                       <span>Paid Amount:</span>
-                      <span className="font-mono font-bold text-emerald-800">
+                      <span className="font-mono font-bold text-black">
                         PKR {(selectedSale.paidAmount !== undefined ? selectedSale.paidAmount : (selectedSale.status === 'Paid' ? selectedSale.total : 0)).toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center font-black text-black text-base sm:text-lg border-t border-dashed border-black pt-1.5">
+                    <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-black font-black text-base sm:text-lg">
                       <span>Amount Pending:</span>
-                      <span className={`font-mono font-black ${(selectedSale.pendingAmount !== undefined ? selectedSale.pendingAmount : (selectedSale.status === 'Pending' ? selectedSale.total : 0)) > 0 ? 'text-amber-900' : 'text-slate-900'}`}>
+                      <span className="font-mono font-black text-black">
                         PKR {(selectedSale.pendingAmount !== undefined ? selectedSale.pendingAmount : (selectedSale.status === 'Pending' ? selectedSale.total : 0)).toFixed(2)}
                       </span>
                     </div>
@@ -4410,7 +4576,7 @@ export default function Sales() {
                         </div>
                         <div className="flex justify-between font-black text-black text-base sm:text-lg">
                           <span>Net Adjusted:</span>
-                          <span className="font-mono">PKR {Math.max(0, (selectedSale.total || 0) - (selectedSale.totalRefunded || 0)).toFixed(2)}</span>
+                          <span className="font-mono font-black">PKR {Math.max(0, (selectedSale.total || 0) - (selectedSale.totalRefunded || 0)).toFixed(2)}</span>
                         </div>
                       </>
                     ) : null}
@@ -4451,7 +4617,16 @@ export default function Sales() {
                                 title="Print Return Voucher"
                               >
                                 <Printer className="w-3 h-3 text-purple-700" />
-                                Print Voucher
+                                Print
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => downloadReturnReceiptPdf(selectedSale, ret, storeDetails)}
+                                className="px-2 py-1 bg-purple-50 border border-purple-300 hover:bg-purple-100 text-purple-800 font-bold rounded-lg text-[10px] flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Download Return Voucher as PDF"
+                              >
+                                <Download className="w-3 h-3 text-purple-700" />
+                                Download PDF
                               </button>
                             </div>
                           </div>
@@ -4491,10 +4666,13 @@ export default function Sales() {
                   {!storeDetails.termsAndConditions && (
                     <p>For any warranty claims, please present this original invoice.</p>
                   )}
+                  <div className="text-right text-[9px] text-slate-600 font-semibold pt-1">
+                    Software developed by 0332-5059526
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-[#f8faf9] px-6 py-4 flex justify-between items-center border-t border-slate-150">
+              <div className="bg-[#f8faf9] px-6 py-4 flex justify-between items-center border-t border-slate-150 no-print">
                 <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Authorized Receipt
                 </div>

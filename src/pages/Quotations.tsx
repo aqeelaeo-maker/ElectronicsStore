@@ -855,8 +855,8 @@ export default function Quotations() {
           body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #0f172a;
-            margin: 0;
-            padding: 6mm 8mm;
+            margin: 0 !important;
+            padding: 0 !important;
             box-sizing: border-box;
           }
           .quote-container {
@@ -881,7 +881,7 @@ export default function Quotations() {
           <!-- Header -->
           <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0a382c; padding-bottom: 12px; margin-bottom: 14px;">
             <div>
-              <h1 style="font-size: 22px; font-weight: 900; margin: 0; color: #0a382c;">${storeDetails.name || 'ElectroManage'}</h1>
+              <h1 style="font-size: 22px; font-weight: 900; margin: 0; color: #0a382c; text-decoration: none; border-bottom: none;">${storeDetails.name || 'ElectroManage'}</h1>
               <p style="font-size: 11px; color: #475569; margin: 3px 0 0 0;">${storeDetails.address || 'Commercial Electronics Hub'}</p>
               <p style="font-size: 11px; color: #475569; margin: 2px 0 0 0;">Phone: ${storeDetails.phone || '—'} | Email: ${storeDetails.email || '—'}</p>
             </div>
