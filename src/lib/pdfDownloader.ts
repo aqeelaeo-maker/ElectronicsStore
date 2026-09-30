@@ -1,5 +1,3 @@
-import html2pdf from 'html2pdf.js';
-
 export interface DownloadPdfOptions {
   filename?: string;
   margin?: number | [number, number, number, number];
@@ -215,6 +213,20 @@ export async function downloadHtmlAsPdf(
         page-break-inside: avoid !important;
         break-inside: avoid !important;
       }
+      .returned-item-badge {
+        display: inline-block !important;
+        text-align: center !important;
+        vertical-align: middle !important;
+        font-size: 10px !important;
+        font-weight: 700 !important;
+        line-height: 1.4 !important;
+        padding: 3px 12px !important;
+        border-radius: 4px !important;
+        border: 1px solid #d8b4fe !important;
+        background-color: #f3e8ff !important;
+        color: #6b21a8 !important;
+        box-sizing: border-box !important;
+      }
     </style>
   `;
 
@@ -279,7 +291,8 @@ export async function downloadHtmlAsPdf(
     // Delay to allow fonts and CSS layout to fully compute
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    const html2pdfLib: any = (html2pdf as any)?.default || html2pdf || (window as any).html2pdf;
+    const html2pdfModule = await import('html2pdf.js');
+    const html2pdfLib: any = (html2pdfModule as any)?.default || html2pdfModule || (window as any).html2pdf;
     const measuredWidth = targetWidthPx;
 
     const opt = {

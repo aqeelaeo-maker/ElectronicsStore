@@ -5,17 +5,27 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Products from './pages/Products';
-import Customers from './pages/Customers';
-import Vendors from './pages/Vendors';
-import Sales from './pages/Sales';
-import Quotations from './pages/Quotations';
-import Settings from './pages/Settings';
 
-import SerialNumbers from './pages/SerialNumbers';
-import Inventory from './pages/Inventory';
+// Dynamic code-splitting for optimal loading speed & performance
+const Login = React.lazy(() => import('./pages/Login'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Products = React.lazy(() => import('./pages/Products'));
+const Customers = React.lazy(() => import('./pages/Customers'));
+const Vendors = React.lazy(() => import('./pages/Vendors'));
+const Sales = React.lazy(() => import('./pages/Sales'));
+const Quotations = React.lazy(() => import('./pages/Quotations'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const SerialNumbers = React.lazy(() => import('./pages/SerialNumbers'));
+const Inventory = React.lazy(() => import('./pages/Inventory'));
+
+const PageLoadingFallback = () => (
+  <div className="w-full h-full min-h-[300px] flex items-center justify-center p-6">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+      <span className="text-xs font-semibold text-slate-500">Loading module...</span>
+    </div>
+  </div>
+);
 
 // Mock empty pages for the rest of the routes
 const Placeholder = ({ title }: { title: string }) => (
@@ -123,31 +133,33 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }>
-            <Route index element={<Dashboard />} />
-            <Route path="sales" element={<Sales />} />
-            <Route path="quotations" element={<Quotations />} />
-            <Route path="products" element={<Products />} />
-            <Route path="customers" element={<Customers />} />
+        <React.Suspense fallback={<PageLoadingFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
+              <Route index element={<Dashboard />} />
+              <Route path="sales" element={<Sales />} />
+              <Route path="quotations" element={<Quotations />} />
+              <Route path="products" element={<Products />} />
+              <Route path="customers" element={<Customers />} />
 
-            {/* Admin-only routes */}
-            <Route path="serials" element={<AdminRoute><SerialNumbers /></AdminRoute>} />
-            <Route path="purchases" element={<AdminRoute><Placeholder title="Purchases" /></AdminRoute>} />
-            <Route path="vendors" element={<AdminRoute><Vendors /></AdminRoute>} />
-            <Route path="inventory" element={<AdminRoute><Inventory /></AdminRoute>} />
-            <Route path="inventory/add" element={<AdminRoute><Inventory initialAddStock={true} /></AdminRoute>} />
-            <Route path="reports" element={<AdminRoute><Placeholder title="Reports" /></AdminRoute>} />
-            <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
+              {/* Admin-only routes */}
+              <Route path="serials" element={<AdminRoute><SerialNumbers /></AdminRoute>} />
+              <Route path="purchases" element={<AdminRoute><Placeholder title="Purchases" /></AdminRoute>} />
+              <Route path="vendors" element={<AdminRoute><Vendors /></AdminRoute>} />
+              <Route path="inventory" element={<AdminRoute><Inventory /></AdminRoute>} />
+              <Route path="inventory/add" element={<AdminRoute><Inventory initialAddStock={true} /></AdminRoute>} />
+              <Route path="reports" element={<AdminRoute><Placeholder title="Reports" /></AdminRoute>} />
+              <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </React.Suspense>
         <ToastContainer position="top-right" autoClose={3000} aria-label="Notifications" />
       </AuthProvider>
     </BrowserRouter>

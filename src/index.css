@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+html, body {
+  touch-action: manipulation;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
 .glass-panel {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important; /* slate-200 */
@@ -229,7 +237,11 @@
   }
 
   .returned-item-badge {
+    display: inline-block !important;
     text-align: center !important;
+    vertical-align: middle !important;
+    line-height: 1.4 !important;
+    box-sizing: border-box !important;
   }
 
   .company-left-details,

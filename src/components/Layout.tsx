@@ -138,6 +138,7 @@ export default function Layout() {
                 <Link
                   key={item.name}
                   to={item.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={cn(
                     "flex items-center px-2 py-1.5 text-xs font-semibold rounded-lg group transition-all duration-150 border",
                     isActive 
@@ -241,7 +242,7 @@ export default function Layout() {
             <Menu className="w-5 h-5" />
           </button>
           
-          <div className="flex items-center space-x-3 sm:space-x-4 ml-auto">
+          <div className="flex items-center space-x-1.5 sm:space-x-3 ml-auto shrink-0">
              {/* Package Expiry or Super Admin Badge */}
              {isSuperAdmin ? (
                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200/80 rounded-xl text-xs font-bold text-amber-900 shadow-2xs">
@@ -274,7 +275,7 @@ export default function Layout() {
              {sessionUser?.role === 'User' ? (
                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold">
                  <UserIcon className="w-3.5 h-3.5 text-blue-600" />
-                 <span>User Mode (Restricted)</span>
+                 <span>User Mode<span className="hidden sm:inline"> (Restricted)</span></span>
                </div>
              ) : (
                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -324,7 +325,7 @@ export default function Layout() {
                {storeDetails.logoUrl && (
                  <img src={storeDetails.logoUrl} alt="Store Logo" className="h-5 w-5 rounded-full object-cover flex-shrink-0" referrerPolicy="no-referrer" />
                )}
-               <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">
+               <span className="text-xs font-bold text-slate-700 max-w-[85px] sm:max-w-[150px] truncate hidden sm:inline-block">
                  {storeDetails.name || 'ElectroManage'}
                </span>
                {!storeDetails.logoUrl && (

@@ -1762,8 +1762,8 @@ export default function Sales() {
               </div>
             ` : ''}
             ${item.returnedQuantity && item.returnedQuantity > 0 ? `
-              <div style="margin-top: 3px;">
-                <div class="returned-item-badge" style="font-size: 9.5px; color: #6b21a8; font-weight: bold; background-color: #f3e8ff; padding: 2.5px 10px; border-radius: 4px; display: inline-block; text-align: center; border: 1px solid #d8b4fe; line-height: 1.35; box-sizing: border-box; vertical-align: middle;">Returned: ${item.returnedQuantity} of ${item.quantity}${item.returnedSerials && item.returnedSerials.length > 0 ? ` (S/N: ${item.returnedSerials.join(', ')})` : ''}</div>
+              <div style="margin-top: 4px;">
+                <div class="returned-item-badge" style="font-size: 10px; color: #6b21a8; font-weight: 700; background-color: #f3e8ff; padding: 3px 12px; border-radius: 4px; display: inline-block; text-align: center; border: 1px solid #d8b4fe; line-height: 1.4; box-sizing: border-box; vertical-align: middle;">Returned: ${item.returnedQuantity} of ${item.quantity}${item.returnedSerials && item.returnedSerials.length > 0 ? ` (S/N: ${item.returnedSerials.join(', ')})` : ''}</div>
               </div>
             ` : ''}
           </td>
@@ -2120,16 +2120,16 @@ export default function Sales() {
           .returned-item-badge {
             display: inline-block;
             text-align: center;
-            font-size: 9.5px;
-            font-weight: bold;
+            vertical-align: middle;
+            font-size: 10px;
+            font-weight: 700;
             color: #6b21a8;
             background-color: #f3e8ff;
             border: 1px solid #d8b4fe;
             border-radius: 4px;
-            padding: 2.5px 10px;
-            line-height: 1.35;
+            padding: 3px 12px;
+            line-height: 1.4;
             box-sizing: border-box;
-            vertical-align: middle;
           }
           @media print {
             body {
@@ -3498,7 +3498,7 @@ export default function Sales() {
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
-                        <div className="w-full overflow-x-auto lg:overflow-x-visible">
+                        <div className="w-full overflow-x-auto">
                           <table className="w-full text-left text-xs table-auto">
                             <thead className="bg-slate-50/90 text-slate-600 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">
                               <tr>
