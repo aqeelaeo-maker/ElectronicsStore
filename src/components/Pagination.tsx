@@ -107,7 +107,7 @@ export function Pagination({
       </div>
 
       {/* Right side: Page navigation */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         {/* First page */}
         <button
           type="button"
@@ -130,9 +130,16 @@ export function Pagination({
           <ChevronLeft className="w-4 h-4" />
         </button>
 
-        {/* Page numbers */}
+        {/* Mobile current page indicator */}
         {!isAll && (
-          <div className="flex items-center gap-0.5 px-1">
+          <span className="sm:hidden px-2 text-xs font-bold text-slate-700 font-mono">
+            {safeCurrentPage} / {totalPages}
+          </span>
+        )}
+
+        {/* Page numbers (Desktop / Tablet) */}
+        {!isAll && (
+          <div className="hidden sm:flex items-center gap-0.5 px-1">
             {getPageNumbers().map((p, idx) => {
               if (typeof p === 'string') {
                 return (

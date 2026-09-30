@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { collection, onSnapshot, addDoc, serverTimestamp, query, orderBy, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Clock, Phone, MapPin, Mail } from 'lucide-react';
@@ -77,6 +77,32 @@ export default function Customers() {
     return () => unsubscribeSales();
   }, [storeId]);
 
+  // Fast O(N) aggregate map of sales data per customer (avoids quadratic filtering loops)
+  const customerSalesAggregateMap = useMemo(() => {
+    const map = new Map<string, { pending: number; returns: number; salesCount: number }>();
+    for (const s of sales) {
+      if (!s.customerId) continue;
+      let entry = map.get(s.customerId);
+      if (!entry) {
+        entry = { pending: 0, returns: 0, salesCount: 0 };
+        map.set(s.customerId, entry);
+      }
+      entry.salesCount++;
+      const pending = s.pendingAmount !== undefined 
+        ? s.pendingAmount 
+        : (s.status === 'Pending' ? (s.total || 0) : (s.status === 'Paid' ? 0 : Math.max(0, (s.total || 0) - (s.paidAmount || 0))));
+      entry.pending += pending;
+      if (Array.isArray(s.returns) && s.returns.length > 0) {
+        for (const r of s.returns) {
+          entry.returns += Number(r.totalRefund) || 0;
+        }
+      } else if (typeof s.totalRefunded === 'number' && s.totalRefunded > 0) {
+        entry.returns += s.totalRefunded;
+      }
+    }
+    return map;
+  }, [sales]);
+
   // 1. Initial / Opening balance for a customer
   const getCustomerInitialBalance = (customer: Customer): number => {
     if (customer.openingBalance !== undefined && customer.openingBalance !== null && !isNaN(Number(customer.openingBalance))) {
@@ -85,9 +111,8 @@ export default function Customers() {
     if (customer.initialBalance !== undefined && customer.initialBalance !== null && !isNaN(Number(customer.initialBalance))) {
       return Number(customer.initialBalance);
     }
-    // If no sales exist for this customer, balance is their initial balance
-    const custSales = sales.filter(s => s.customerId === customer.id);
-    if (custSales.length === 0 && customer.balance !== undefined && !isNaN(Number(customer.balance))) {
+    const agg = customerSalesAggregateMap.get(customer.id);
+    if ((!agg || agg.salesCount === 0) && customer.balance !== undefined && !isNaN(Number(customer.balance))) {
       return Number(customer.balance);
     }
     return 0;
@@ -95,30 +120,13 @@ export default function Customers() {
 
   // 2. Pending on Invoices for a customer
   const getCustomerPendingInvoices = (customerId: string): number => {
-    return sales
-      .filter(s => s.customerId === customerId)
-      .reduce((sum, sale) => {
-        const pending = sale.pendingAmount !== undefined 
-          ? sale.pendingAmount 
-          : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
-        return sum + pending;
-      }, 0);
+    return customerSalesAggregateMap.get(customerId)?.pending || 0;
   };
 
   // 3. Return value for a customer across sales returns / refunded invoices
   const getCustomerReturnValue = (customerId: string): number => {
-    const custSales = sales.filter(s => s.customerId === customerId);
-    let totalReturns = 0;
-    custSales.forEach(s => {
-      if (Array.isArray(s.returns) && s.returns.length > 0) {
-        s.returns.forEach((r: any) => {
-          totalReturns += Number(r.totalRefund) || 0;
-        });
-      } else if (typeof s.totalRefunded === 'number' && s.totalRefunded > 0) {
-        totalReturns += s.totalRefunded;
-      }
-    });
-    return Number(totalReturns.toFixed(2));
+    const ret = customerSalesAggregateMap.get(customerId)?.returns || 0;
+    return Number(ret.toFixed(2));
   };
 
   // 4. In Customer ledger, Net Account Balance = Initial Balance + Pending on Invoices - Return Value
@@ -129,26 +137,27 @@ export default function Customers() {
     return Number((initial + pending - returnVal).toFixed(2));
   };
 
-  // Automatically reconcile and sync customer.balance in Firestore to match Ledger Net Account Balance
+  // Automatically reconcile and sync customer.balance in Firestore to match Ledger Net Account Balance without loop
+  const syncedCustomerIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (loading || sales.length === 0 || customers.length === 0) return;
 
-    customers.forEach(async (c) => {
+    for (const c of customers) {
+      if (syncedCustomerIds.current.has(c.id)) continue;
       const netBal = getCustomerNetAccountBalance(c);
       const currentStored = typeof c.balance === 'number' ? c.balance : (parseFloat(c.balance as any) || 0);
-      if (Math.abs(currentStored - netBal) > 0.01) {
-        try {
-          const custRef = doc(db, 'customers', c.id);
-          await updateDoc(custRef, {
-            balance: netBal,
-            updatedAt: serverTimestamp()
-          });
-        } catch (syncErr) {
+      if (Math.abs(currentStored - netBal) > 0.05) {
+        syncedCustomerIds.current.add(c.id);
+        const custRef = doc(db, 'customers', c.id);
+        updateDoc(custRef, {
+          balance: netBal,
+          updatedAt: serverTimestamp()
+        }).catch((syncErr) => {
           console.warn(`Could not auto-sync balance for customer ${c.name}:`, syncErr);
-        }
+        });
       }
-    });
-  }, [customers, sales, loading]);
+    }
+  }, [customers, sales, loading, customerSalesAggregateMap]);
 
   // Overall financial summary metrics
   const { totalNetReceivables, pendingAccountsCount, settledAccountsCount } = useMemo(() => {

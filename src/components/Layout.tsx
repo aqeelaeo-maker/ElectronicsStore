@@ -99,19 +99,29 @@ export default function Layout() {
 
   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 2 && daysUntilExpiry >= 0;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarOpen]);
+
   return (
-    <div className="min-h-screen bg-[#f3f6f5] flex text-slate-800 relative overflow-hidden font-sans">
+    <div className="h-[100dvh] min-h-[100dvh] bg-[#f3f6f5] flex text-slate-800 relative overflow-hidden font-sans">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-40 bg-[#0a382c] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-xl",
+        "fixed inset-y-0 left-0 z-50 w-52 sm:w-48 lg:w-40 bg-[#0a382c] transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 flex flex-col shadow-xl",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="h-14 flex items-center justify-between px-2.5 border-b border-emerald-900/40 bg-[#072d23]">
@@ -273,12 +283,12 @@ export default function Layout() {
 
              {/* Role Status or Admin Preview Switcher */}
              {sessionUser?.role === 'User' ? (
-               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold">
-                 <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+               <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-blue-50 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold shrink-0">
+                 <UserIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                  <span>User Mode<span className="hidden sm:inline"> (Restricted)</span></span>
                </div>
              ) : (
-               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+               <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 shrink-0">
                  <button
                    type="button"
                    onClick={() => {
@@ -288,14 +298,14 @@ export default function Layout() {
                      }
                    }}
                    className={cn(
-                     "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                     "px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer touch-manipulation",
                      activeRole === 'Admin'
                        ? "bg-[#0a382c] text-white shadow-xs"
                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                    )}
                    title="Admin view (Full access to all modules and financials)"
                  >
-                   <ShieldCheck className="w-3.5 h-3.5" />
+                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                    <span>Admin</span>
                  </button>
                  <button
@@ -307,21 +317,21 @@ export default function Layout() {
                      }
                    }}
                    className={cn(
-                     "px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer",
+                     "px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer touch-manipulation",
                      activeRole === 'User'
                        ? "bg-blue-700 text-white shadow-xs"
                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
                    )}
                    title="Test User view (Restricted: Dashboard, Sales, Products, Customers only)"
                  >
-                   <UserIcon className="w-3.5 h-3.5" />
+                   <UserIcon className="w-3.5 h-3.5 shrink-0" />
                    <span>User</span>
                  </button>
                </div>
              )}
 
              {/* Profile selection with dynamic store name and logo */}
-             <div className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 rounded-full border border-slate-200 transition-all cursor-pointer">
+             <div className="flex items-center gap-1.5 sm:gap-2.5 bg-slate-50 hover:bg-slate-100 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full border border-slate-200 transition-all cursor-pointer shrink-0">
                {storeDetails.logoUrl && (
                  <img src={storeDetails.logoUrl} alt="Store Logo" className="h-5 w-5 rounded-full object-cover flex-shrink-0" referrerPolicy="no-referrer" />
                )}
@@ -337,7 +347,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-6 overscroll-y-contain">
           <Outlet />
         </main>
       </div>

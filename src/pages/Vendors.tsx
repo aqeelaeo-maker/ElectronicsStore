@@ -96,6 +96,37 @@ export default function Vendors() {
     };
   }, [storeId]);
 
+  // Fast O(N) aggregate map of purchases per vendor (avoids quadratic filtering loops)
+  const vendorPurchasesMap = useMemo(() => {
+    const map = new Map<string, { totalPending: number; totalCost: number; count: number }>();
+    for (const p of purchases) {
+      if (!p.vendorId) continue;
+      let entry = map.get(p.vendorId);
+      if (!entry) {
+        entry = { totalPending: 0, totalCost: 0, count: 0 };
+        map.set(p.vendorId, entry);
+      }
+      entry.count++;
+      const cost = p.totalCost !== undefined ? p.totalCost : ((p.purchasePrice || 0) * (p.quantityAdded || 1));
+      const paid = p.paymentDone !== undefined ? p.paymentDone : (p.paymentStatus === 'Paid' ? cost : 0);
+      const pending = p.remainingAmount !== undefined ? p.remainingAmount : Math.max(0, cost - paid);
+      entry.totalPending += pending;
+      entry.totalCost += cost;
+    }
+    return map;
+  }, [purchases]);
+
+  // Fast O(N) aggregate map of payments per vendor
+  const vendorPaymentsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of payments) {
+      if (!p.vendorId) continue;
+      const current = map.get(p.vendorId) || 0;
+      map.set(p.vendorId, current + (p.paidAmount || p.paymentDone || 0));
+    }
+    return map;
+  }, [payments]);
+
   // 1. Initial / Opening balance for a vendor
   const getVendorInitialBalance = (vendor: Vendor): number => {
     if (vendor.openingBalance !== undefined && vendor.openingBalance !== null && !isNaN(Number(vendor.openingBalance))) {
@@ -104,9 +135,8 @@ export default function Vendors() {
     if (vendor.initialBalance !== undefined && vendor.initialBalance !== null && !isNaN(Number(vendor.initialBalance))) {
       return Number(vendor.initialBalance);
     }
-    // If no purchases exist for this vendor, balance is their initial balance
-    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
-    if (vendPurchases.length === 0 && vendor.balance !== undefined && !isNaN(Number(vendor.balance))) {
+    const agg = vendorPurchasesMap.get(vendor.id);
+    if ((!agg || agg.count === 0) && vendor.balance !== undefined && !isNaN(Number(vendor.balance))) {
       return Number(vendor.balance);
     }
     return 0;
@@ -122,15 +152,7 @@ export default function Vendors() {
     }
 
     const initial = getVendorInitialBalance(vendor);
-    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
-    let totalPending = 0;
-    vendPurchases.forEach(p => {
-      const cost = p.totalCost !== undefined ? p.totalCost : ((p.purchasePrice || 0) * (p.quantityAdded || 1));
-      const paid = p.paymentDone !== undefined ? p.paymentDone : (p.paymentStatus === 'Paid' ? cost : 0);
-      const pending = p.remainingAmount !== undefined ? p.remainingAmount : Math.max(0, cost - paid);
-      totalPending += pending;
-    });
-
+    const totalPending = vendorPurchasesMap.get(vendor.id)?.totalPending || 0;
     return Number((initial + totalPending).toFixed(2));
   };
 
@@ -138,21 +160,14 @@ export default function Vendors() {
     if (vendor.totalPurchases !== undefined && vendor.totalPurchases > 0) {
       return vendor.totalPurchases;
     }
-    const vendPurchases = purchases.filter(p => p.vendorId === vendor.id);
-    return vendPurchases.reduce((sum, p) => {
-      const cost = p.totalCost !== undefined ? p.totalCost : ((p.purchasePrice || 0) * (p.quantityAdded || 1));
-      return sum + cost;
-    }, 0);
+    return vendorPurchasesMap.get(vendor.id)?.totalCost || 0;
   };
 
   const getVendorPaidTotal = (vendor: Vendor): number => {
     if (vendor.totalPaid !== undefined && vendor.totalPaid > 0) {
       return vendor.totalPaid;
     }
-    const vendPayments = payments.filter(p => p.vendorId === vendor.id);
-    return vendPayments.reduce((sum, p) => {
-      return sum + (p.paidAmount || p.paymentDone || 0);
-    }, 0);
+    return vendorPaymentsMap.get(vendor.id) || 0;
   };
 
   // Financial summary metrics matching Customers module

@@ -523,6 +523,35 @@ export default function Sales() {
     };
   }, []);
 
+  // High-performance O(1) lookup map from Serial ID to Serial Number
+  const serialIdToNumberMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of allSerials) {
+      if (s.id && s.serialNumber) {
+        map.set(s.id, s.serialNumber.trim());
+      }
+    }
+    return map;
+  }, [allSerials]);
+
+  // High-performance O(1) lookup map from Product ID to Product Object
+  const productMap = useMemo(() => {
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [products]);
+
+  // Set of product IDs that have serial numbers for O(1) membership check
+  const productIdsWithSerialsSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allSerials) {
+      if (s.productId) set.add(s.productId);
+    }
+    return set;
+  }, [allSerials]);
+
   // Available serial numbers in stock (or part of current editing invoice)
   const availableSerialsInStock = useMemo(() => {
     return allSerials.filter(sn => {
@@ -542,15 +571,14 @@ export default function Sales() {
     invoiceItems.forEach(item => {
       item.selectedSerials?.forEach(idOrSn => {
         set.add(idOrSn);
-        const snDoc = allSerials.find(s => s.id === idOrSn || s.serialNumber === idOrSn);
-        if (snDoc) {
-          set.add(snDoc.id);
-          set.add(snDoc.serialNumber);
+        const mappedSn = serialIdToNumberMap.get(idOrSn);
+        if (mappedSn) {
+          set.add(mappedSn);
         }
       });
     });
     return set;
-  }, [invoiceItems, allSerials]);
+  }, [invoiceItems, serialIdToNumberMap]);
 
   // Filtered customers matching typed search text
   const filteredCustomers = useMemo(() => {
@@ -576,18 +604,18 @@ export default function Sales() {
     return products.filter(p => {
       if (p.productType === 'Without Serials') return false;
       if (p.productType === 'Serials') return true;
-      return allSerials.some(s => s.productId === p.id);
+      return productIdsWithSerialsSet.has(p.id);
     });
-  }, [products, allSerials]);
+  }, [products, productIdsWithSerialsSet]);
 
   // Products WITHOUT serial numbers: explicit productType === 'Without Serials' (or fallback: no serials)
   const productsWithoutSerials = useMemo(() => {
     return products.filter(p => {
       if (p.productType === 'Without Serials') return true;
       if (p.productType === 'Serials') return false;
-      return !allSerials.some(s => s.productId === p.id);
+      return !productIdsWithSerialsSet.has(p.id);
     });
-  }, [products, allSerials]);
+  }, [products, productIdsWithSerialsSet]);
 
   // Available non-serialized products: falls back to all products if no dedicated non-serialized products exist
   const availableProductsWithoutSerials = useMemo(() => {
@@ -597,27 +625,26 @@ export default function Sales() {
     return products;
   }, [productsWithoutSerials, products]);
 
-  // Filtered available in-stock serial numbers matching search text (for "By Serial Number" mode)
+  // Filtered available in-stock serial numbers matching search text (for "By Serial Number" mode) - single-pass O(N)
   const filteredStockSerials = useMemo(() => {
     const q = serialSearchInput.toLowerCase().trim();
-    return availableSerialsInStock
-      .filter(s => !alreadyAddedSerialIds.has(s.id) && !alreadyAddedSerialIds.has(s.serialNumber))
-      .map(s => {
-        const product = products.find(p => p.id === s.productId);
-        return { ...s, product };
-      })
-      .filter(s => !!s.product)
-      .filter(s => {
-        if (!q) return true;
-        return (
-          s.serialNumber.toLowerCase().includes(q) ||
-          s.product!.name.toLowerCase().includes(q) ||
-          s.product!.brand?.toLowerCase().includes(q) ||
-          s.product!.modelNumber?.toLowerCase().includes(q) ||
-          s.product!.category?.toLowerCase().includes(q)
-        );
-      });
-  }, [availableSerialsInStock, alreadyAddedSerialIds, products, serialSearchInput]);
+    const result: (SerialNumber & { product: Product })[] = [];
+    for (const s of availableSerialsInStock) {
+      if (alreadyAddedSerialIds.has(s.id) || alreadyAddedSerialIds.has(s.serialNumber)) continue;
+      const product = productMap.get(s.productId);
+      if (!product) continue;
+      if (q) {
+        const matches = s.serialNumber.toLowerCase().includes(q) ||
+          product.name.toLowerCase().includes(q) ||
+          (product.brand && product.brand.toLowerCase().includes(q)) ||
+          (product.modelNumber && product.modelNumber.toLowerCase().includes(q)) ||
+          (product.category && product.category.toLowerCase().includes(q));
+        if (!matches) continue;
+      }
+      result.push({ ...s, product });
+    }
+    return result;
+  }, [availableSerialsInStock, alreadyAddedSerialIds, productMap, serialSearchInput]);
 
   // Filtered products WITHOUT serial numbers matching search text (for "Without Serial Number" mode)
   const filteredProductsWithoutSerials = useMemo(() => {
@@ -2402,10 +2429,10 @@ export default function Sales() {
         const trimmed = val.trim();
         if (trimmed) {
           serialSet.add(trimmed);
-          // If stored value is a serial document ID, also index its real serialNumber
-          const found = allSerials.find(s => s.id === trimmed);
-          if (found && found.serialNumber) {
-            serialSet.add(found.serialNumber.trim());
+          // O(1) instant lookup from map instead of slow O(N) array search
+          const realSn = serialIdToNumberMap.get(trimmed);
+          if (realSn) {
+            serialSet.add(realSn);
           }
         }
       } else if (typeof val === 'object') {
@@ -2454,36 +2481,42 @@ export default function Sales() {
     }
 
     return Array.from(serialSet);
-  }, [allSerials]);
+  }, [serialIdToNumberMap]);
 
   const filteredSales = useMemo(() => {
     const rawSearch = searchTerm.trim().toLowerCase();
     const cleanSearchAlphanum = rawSearch.replace(/[^a-z0-9]/gi, '');
 
     return sales.filter(s => {
+      // 1. Fast rejection by status filter first
+      if (statusFilter === 'Paid' && s.status !== 'Paid') return false;
+      if (statusFilter === 'Pending' && s.status !== 'Pending') return false;
+      if (statusFilter === 'Returns' && (!s.returns || s.returns.length === 0)) return false;
+
+      // 2. Search match
       if (rawSearch) {
         const matchesInvoice = s.invoiceNo?.toLowerCase().includes(rawSearch) || false;
         const matchesCustomer = s.customerName?.toLowerCase().includes(rawSearch) || false;
 
-        // Search by serial numbers associated with this sale
-        const serials = getSaleSerialNumbers(s);
-        const matchesSerial = serials.some(sn => {
-          const snLower = sn.toLowerCase();
-          if (snLower.includes(rawSearch)) return true;
-          // Match without punctuation/dashes (e.g. SN1234 matches SN-1234)
-          if (cleanSearchAlphanum.length >= 3) {
-            const snAlphanum = snLower.replace(/[^a-z0-9]/gi, '');
-            if (snAlphanum.includes(cleanSearchAlphanum)) return true;
-          }
-          return false;
-        });
+        // Only do serial numbers lookup if invoice number or customer name didn't already match
+        let matchesSerial = false;
+        if (!matchesInvoice && !matchesCustomer) {
+          const serials = getSaleSerialNumbers(s);
+          matchesSerial = serials.some(sn => {
+            const snLower = sn.toLowerCase();
+            if (snLower.includes(rawSearch)) return true;
+            // Match without punctuation/dashes (e.g. SN1234 matches SN-1234)
+            if (cleanSearchAlphanum.length >= 3) {
+              const snAlphanum = snLower.replace(/[^a-z0-9]/gi, '');
+              if (snAlphanum.includes(cleanSearchAlphanum)) return true;
+            }
+            return false;
+          });
+        }
 
         if (!matchesInvoice && !matchesCustomer && !matchesSerial) return false;
       }
 
-      if (statusFilter === 'Paid') return s.status === 'Paid';
-      if (statusFilter === 'Pending') return s.status === 'Pending';
-      if (statusFilter === 'Returns') return Boolean(s.returns && s.returns.length > 0);
       return true;
     });
   }, [sales, searchTerm, statusFilter, getSaleSerialNumbers]);
@@ -2782,7 +2815,7 @@ export default function Sales() {
                             </button>
 
                             {/* Filtered list of customers according to typed text */}
-                            {filteredCustomers.map(c => (
+                            {filteredCustomers.slice(0, 40).map(c => (
                               <button
                                 key={c.id}
                                 type="button"
@@ -2806,6 +2839,11 @@ export default function Sales() {
                                 )}
                               </button>
                             ))}
+                            {filteredCustomers.length > 40 && (
+                              <div className="p-2 text-center text-[10px] text-slate-500 font-semibold bg-slate-50 border-t border-slate-100">
+                                Showing 40 of {filteredCustomers.length} clients. Type to narrow down.
+                              </div>
+                            )}
 
                             {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && (
                               <button
@@ -3295,38 +3333,45 @@ export default function Sales() {
                               <span className="text-[10px] text-slate-400">Click to add to invoice</span>
                             </div>
                             {filteredStockSerials.length > 0 ? (
-                              filteredStockSerials.map(sn => (
-                                <button
-                                  key={sn.id}
-                                  type="button"
-                                  onClick={() => addSerialNumberToInvoice(sn)}
-                                  className="w-full text-left p-3 hover:bg-emerald-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
-                                >
-                                  <div className="space-y-0.5 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50 group-hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                        {sn.serialNumber}
+                              <>
+                                {filteredStockSerials.slice(0, 40).map(sn => (
+                                  <button
+                                    key={sn.id}
+                                    type="button"
+                                    onClick={() => addSerialNumberToInvoice(sn)}
+                                    className="w-full text-left p-3 hover:bg-emerald-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                                  >
+                                    <div className="space-y-0.5 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-black text-xs text-[#0a382c] bg-emerald-50 group-hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                                          {sn.serialNumber}
+                                        </span>
+                                        <span className="text-xs font-bold text-slate-900 truncate">
+                                          {sn.product?.name}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                        {sn.product?.brand && <span>Brand: {sn.product.brand}</span>}
+                                        {sn.product?.modelNumber && <span>• Model: {sn.product.modelNumber}</span>}
+                                        <span>• Stock: {sn.product?.stock}</span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="text-xs font-bold font-mono text-slate-900 block">
+                                        PKR {sn.product?.salePrice?.toFixed(2) || '0.00'}
                                       </span>
-                                      <span className="text-xs font-bold text-slate-900 truncate">
-                                        {sn.product?.name}
+                                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">
+                                        + Add Item
                                       </span>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                                      {sn.product?.brand && <span>Brand: {sn.product.brand}</span>}
-                                      {sn.product?.modelNumber && <span>• Model: {sn.product.modelNumber}</span>}
-                                      <span>• Stock: {sn.product?.stock}</span>
-                                    </div>
+                                  </button>
+                                ))}
+                                {filteredStockSerials.length > 40 && (
+                                  <div className="p-2.5 text-center text-[10px] text-slate-500 font-semibold bg-slate-50 border-t border-slate-100">
+                                    Showing 40 of {filteredStockSerials.length} serials in stock. Type to filter.
                                   </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-bold font-mono text-slate-900 block">
-                                      PKR {sn.product?.salePrice?.toFixed(2) || '0.00'}
-                                    </span>
-                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">
-                                      + Add Item
-                                    </span>
-                                  </div>
-                                </button>
-                              ))
+                                )}
+                              </>
                             ) : (
                               <div className="p-4 text-center text-slate-400 italic text-xs">
                                 {serialSearchInput.trim() 
@@ -3430,40 +3475,47 @@ export default function Sales() {
                               <span className="text-[10px] text-slate-400">Click to add to invoice</span>
                             </div>
                             {filteredProductsWithoutSerials.length > 0 ? (
-                              filteredProductsWithoutSerials.map(prod => (
-                                <button
-                                  key={prod.id}
-                                  type="button"
-                                  onClick={() => addProductWithoutSerialToInvoice(prod)}
-                                  className="w-full text-left p-3 hover:bg-sky-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
-                                >
-                                  <div className="space-y-0.5 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-black text-slate-900 truncate">
-                                        {prod.name}
-                                      </span>
-                                      {prod.category && (
-                                        <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded">
-                                          {prod.category}
+                              <>
+                                {filteredProductsWithoutSerials.slice(0, 40).map(prod => (
+                                  <button
+                                    key={prod.id}
+                                    type="button"
+                                    onClick={() => addProductWithoutSerialToInvoice(prod)}
+                                    className="w-full text-left p-3 hover:bg-sky-50/70 flex items-center justify-between transition-colors gap-3 group cursor-pointer"
+                                  >
+                                    <div className="space-y-0.5 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-slate-900 truncate">
+                                          {prod.name}
                                         </span>
-                                      )}
+                                        {prod.category && (
+                                          <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded">
+                                            {prod.category}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                        {prod.brand && <span>Brand: {prod.brand}</span>}
+                                        {prod.modelNumber && <span>• Model: {prod.modelNumber}</span>}
+                                        <span className="text-sky-700 font-bold">• Stock: {prod.stock} {prod.unit || 'pcs'}</span>
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                                      {prod.brand && <span>Brand: {prod.brand}</span>}
-                                      {prod.modelNumber && <span>• Model: {prod.modelNumber}</span>}
-                                      <span className="text-sky-700 font-bold">• Stock: {prod.stock} {prod.unit || 'pcs'}</span>
+                                    <div className="text-right shrink-0">
+                                      <span className="text-xs font-bold font-mono text-slate-900 block">
+                                        PKR {prod.salePrice?.toFixed(2) || '0.00'}
+                                      </span>
+                                      <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 uppercase group-hover:bg-sky-100">
+                                        + Add Product
+                                      </span>
                                     </div>
+                                  </button>
+                                ))}
+                                {filteredProductsWithoutSerials.length > 40 && (
+                                  <div className="p-2.5 text-center text-[10px] text-slate-500 font-semibold bg-slate-50 border-t border-slate-100">
+                                    Showing 40 of {filteredProductsWithoutSerials.length} products. Type to filter.
                                   </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-bold font-mono text-slate-900 block">
-                                      PKR {prod.salePrice?.toFixed(2) || '0.00'}
-                                    </span>
-                                    <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 uppercase group-hover:bg-sky-100">
-                                      + Add Product
-                                    </span>
-                                  </div>
-                                </button>
-                              ))
+                                )}
+                              </>
                             ) : (
                               <div className="p-4 text-center text-slate-400 italic text-xs">
                                 {productSearchInput.trim()
@@ -3722,34 +3774,34 @@ export default function Sales() {
                     {/* Header Section (Logo, Title, Contact Info & Black Line all moved up) */}
                     <div>
                       {/* Top Row: Company Logo on Left, Company Name Centered, Vertically Aligned at Start of Page */}
-                      <div className="flex items-center justify-between gap-4 pt-0 pb-0">
+                      <div className="flex items-center justify-between gap-2 sm:gap-4 pt-0 pb-0">
                         {/* Company Logo on Left */}
-                        <div className="w-24 sm:w-28 flex-shrink-0">
+                        <div className="w-16 sm:w-24 sm:w-28 flex-shrink-0">
                           {storeDetails.logoUrl ? (
                             <img 
                               src={storeDetails.logoUrl} 
                               alt="Store Logo" 
-                              className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
+                              className="w-16 h-16 sm:w-24 sm:h-24 sm:w-28 sm:h-28 rounded-xl object-contain border-0 shadow-none ring-0 outline-none bg-transparent" 
                             />
                           ) : (
-                            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-black font-black text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
+                            <div className="w-16 h-16 sm:w-24 sm:h-24 sm:w-28 sm:h-28 rounded-xl bg-[#f0b90b] text-black font-black text-2xl sm:text-3xl sm:text-4xl flex items-center justify-center border-0 shadow-none ring-0 outline-none">
                               {getInitials(storeDetails.name || 'ElectroManage')}
                             </div>
                           )}
                         </div>
 
-                        {/* Company Name (Enlarged, Prestigious Font, Vertically Aligned with Logo) */}
-                        <div className="flex-1 text-center py-0 sm:px-4">
+                        {/* Company Name (Responsive Font, Vertically Aligned with Logo) */}
+                        <div className="flex-1 text-center py-0 px-1 sm:px-4 min-w-0">
                           <h2 
                             style={{ fontFamily: "'Cinzel', 'Playfair Display', 'Plus Jakarta Sans', Georgia, serif" }}
-                            className="text-4xl sm:text-5xl lg:text-6xl font-black text-black tracking-tight leading-tight"
+                            className="text-2xl sm:text-4xl lg:text-5xl font-black text-black tracking-tight leading-tight truncate sm:whitespace-normal"
                           >
                             {storeDetails.name || 'ElectroManage'}
                           </h2>
                         </div>
 
                         {/* Right spacer for symmetry */}
-                        <div className="hidden sm:block w-24 sm:w-28 flex-shrink-0"></div>
+                        <div className="hidden sm:block w-16 sm:w-24 sm:w-28 flex-shrink-0"></div>
                       </div>
 
                       {/* Company Info under Logo on left side in Calibri font size 16 - MOVED UP */}
@@ -3878,7 +3930,7 @@ export default function Sales() {
                   <div className="mt-auto pt-6 space-y-3">
                     {/* Totals Summary */}
                     <div className="flex justify-end pt-3">
-                      <div className="w-80 sm:w-96 space-y-2 text-black">
+                      <div className="w-full max-w-xs sm:max-w-sm space-y-2 text-black">
                         <div className="flex justify-between font-bold text-black text-base sm:text-lg">
                           <span>Subtotal (Pre-discount):</span>
                           <span className="font-mono font-bold">PKR {draftSubtotal.toFixed(2)}</span>
@@ -4361,11 +4413,10 @@ export default function Sales() {
         const detailCustomer = customers.find(c => c.id === selectedSale.customerId || c.name.toLowerCase() === selectedSale.customerName.toLowerCase());
         return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+          <div className="flex items-center justify-center min-h-screen p-2 sm:p-4 text-center">
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowDetailModal(false)} />
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-            <div className="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full border border-slate-200 printable-modal-wrapper">
-              <div className="bg-[#0a382c] px-6 py-4 text-white flex justify-between items-center no-print">
+            <div className="relative z-10 w-full max-w-2xl max-h-[92vh] bg-white rounded-2xl text-left shadow-2xl flex flex-col border border-slate-200 printable-modal-wrapper my-auto overflow-hidden">
+              <div className="bg-[#0a382c] px-4 sm:px-6 py-3.5 text-white flex justify-between items-center no-print shrink-0">
                 <div className="flex items-center gap-2">
                   <Printer className="w-4 h-4 text-emerald-300" />
                   <span className="font-extrabold text-sm tracking-wide uppercase">Sales Invoice & Receipt</span>
@@ -4378,7 +4429,7 @@ export default function Sales() {
                 </button>
               </div>
 
-              <div className="printable-invoice-content bg-white p-5 sm:p-6 space-y-3 font-sans text-black">
+              <div className="printable-invoice-content bg-white p-4 sm:p-6 space-y-3 font-sans text-black overflow-y-auto flex-1">
                 {/* Header Section (Logo, Title, Contact Info & Black Line) */}
                 <div>
                   {/* Top Row: Company Logo on Left, Company Name Centered */}
@@ -4535,7 +4586,7 @@ export default function Sales() {
 
                 {/* Totals Summary */}
                 <div className="flex justify-end pt-3">
-                  <div className="w-80 sm:w-96 space-y-2 text-black">
+                  <div className="w-full max-w-xs sm:max-w-sm space-y-2 text-black">
                     <div className="flex justify-between font-bold text-black text-base sm:text-lg">
                       <span>Subtotal (Pre-discount):</span>
                       <span className="font-mono font-bold">
@@ -4672,45 +4723,45 @@ export default function Sales() {
                 </div>
               </div>
 
-              <div className="bg-[#f8faf9] px-6 py-4 flex justify-between items-center border-t border-slate-150 no-print">
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 font-bold">
+              <div className="bg-[#f8faf9] px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 border-t border-slate-150 no-print shrink-0">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Authorized Receipt
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
                   <button 
                     onClick={() => {
                       setReturnSale(selectedSale);
                       setShowReturnModal(true);
                     }}
-                    className="px-4 py-2.5 bg-purple-750 hover:bg-purple-850 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="flex-1 sm:flex-none px-3.5 py-2 bg-purple-750 hover:bg-purple-850 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <RotateCcw className="w-4 h-4" />
-                    Return Items
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Return</span>
                   </button>
                   <button 
                     onClick={() => printInvoice(selectedSale)}
-                    className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                    className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Printer className="w-4 h-4" />
-                    Print Invoice
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print</span>
                   </button>
                   <button 
                     onClick={() => handleDownloadInvoice(selectedSale)}
                     disabled={downloadingInvoiceId === (selectedSale.id || selectedSale.invoiceNo)}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="flex-1 sm:flex-none px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {downloadingInvoiceId === (selectedSale.id || selectedSale.invoiceNo) ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <Download className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                     )}
-                    Download Invoice
+                    <span>PDF</span>
                   </button>
                   <button 
                     onClick={() => setShowDetailModal(false)}
-                    className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md transition-colors cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md transition-colors cursor-pointer text-center"
                   >
-                    Close Receipt
+                    Close
                   </button>
                 </div>
               </div>
