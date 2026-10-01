@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy, limit, where, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import { cn } from '../lib/utils';
 
 interface StatCardProps {
@@ -80,10 +81,13 @@ function StatCard({
 export default function Dashboard() {
   const { storeId, role, isUser, isAdmin, isSuperAdmin, packageExpiryDate: authPackageExpiry } = useAuth();
   const [storeExpiryDate, setStoreExpiryDate] = useState<string | null>(authPackageExpiry || null);
-  const [sales, setSales] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant persistent reactive data from useDataStore
+  const sales = useDataStore((s) => s.sales);
+  const products = useDataStore((s) => s.products);
+  const customers = useDataStore((s) => s.customers);
+  const loading = useDataStore((s) => !s.salesLoaded && !s.productsLoaded);
+
   const [stockPriceBasis, setStockPriceBasis] = useState<'cost' | 'retail'>('cost');
 
   // Keep storeExpiryDate in sync if authPackageExpiry changes
@@ -149,57 +153,6 @@ export default function Dashboard() {
     if (daysLeft === 1) return 'Your Package will Expire in 1 Day';
     return `Your Package will Expire in ${daysLeft} Days`;
   }, [daysLeft]);
-
-  useEffect(() => {
-    if (!storeId) return;
-
-    const baseQuery = (colName: string) => 
-      query(collection(db, colName), where('storeId', '==', storeId));
-
-    // Listen to Sales
-    const qSales = query(collection(db, 'sales'), where('storeId', '==', storeId));
-
-    const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
-      const data: any[] = [];
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-      setSales(data);
-    }, (error) => {
-      console.warn('Dashboard sales listener notice:', error);
-      setLoading(false);
-    });
-
-    // Listen to Products
-    const unsubscribeProducts = onSnapshot(baseQuery('products'), (snapshot) => {
-      const data: any[] = [];
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      setProducts(data);
-    }, (error) => {
-      console.warn('Dashboard products listener notice:', error);
-      setLoading(false);
-    });
-
-    // Listen to Customers
-    const unsubscribeCustomers = onSnapshot(baseQuery('customers'), (snapshot) => {
-      const data: any[] = [];
-      snapshot.forEach(doc => data.push({ id: doc.id, ...doc.data() }));
-      setCustomers(data);
-      setLoading(false);
-    }, (error) => {
-      console.warn('Dashboard customers listener notice:', error);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribeSales();
-      unsubscribeProducts();
-      unsubscribeCustomers();
-    };
-  }, [storeId]);
 
   const { totalSales, totalRefunds, netSales } = useMemo(() => {
     let gross = 0;

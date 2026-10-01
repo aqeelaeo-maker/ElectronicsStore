@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import { Pagination } from '../components/Pagination';
 import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
@@ -176,27 +177,14 @@ export default function Quotations() {
   const { storeId } = useAuth();
   const navigate = useNavigate();
 
-  const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [allSerials, setAllSerials] = useState<SerialNumber[]>([]);
-  const [storeDetails, setStoreDetails] = useState<{
-    name: string;
-    logoUrl: string;
-    phone: string;
-    address: string;
-    email: string;
-    termsAndConditions?: string;
-  }>({
-    name: '',
-    logoUrl: '',
-    phone: '',
-    address: '',
-    email: '',
-    termsAndConditions: ''
-  });
+  // Instant persistent reactive data from useDataStore
+  const quotations = useDataStore((s) => s.quotations);
+  const products = useDataStore((s) => s.products);
+  const customers = useDataStore((s) => s.customers);
+  const allSerials = useDataStore((s) => s.allSerials);
+  const storeDetails = useDataStore((s) => s.storeDetails);
+  const loading = useDataStore((s) => !s.quotationsLoaded);
 
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Draft' | 'Sent' | 'Accepted' | 'Converted' | 'Declined'>('All');
 
@@ -259,111 +247,6 @@ export default function Quotations() {
     const paddedSeq = String(nextSeq).padStart(4, '0');
     return `QT-${currentYear}-${paddedSeq}`;
   };
-
-  // 2. Fetch Quotations
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'quotations'), where('storeId', '==', storeId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Quotation[] = [];
-      snapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Quotation);
-      });
-
-      list.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setQuotations(list);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching quotations:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 3. Fetch Products for lookup
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Product[] = [];
-      snapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Product);
-      });
-      setProducts(list);
-    }, (error) => {
-      console.error('Error fetching products:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 4. Fetch Customers for lookup
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'customers'), where('storeId', '==', storeId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Customer[] = [];
-      snapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as Customer);
-      });
-      setCustomers(list);
-    }, (error) => {
-      console.error('Error fetching customers:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 5. Fetch Serials for lookup
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'serialNumbers'), where('storeId', '==', storeId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: SerialNumber[] = [];
-      snapshot.forEach(docSnap => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as SerialNumber);
-      });
-      setAllSerials(list);
-    }, (error) => {
-      console.error('Error fetching serials:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 6. Fetch Store Details
-  useEffect(() => {
-    if (!storeId) return;
-
-    const storeRef = doc(db, 'stores', storeId);
-    const unsubscribe = onSnapshot(storeRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setStoreDetails({
-          name: data.name || '',
-          logoUrl: data.logoUrl || '',
-          phone: data.phone || '',
-          address: data.address || '',
-          email: data.email || '',
-          termsAndConditions: data.termsAndConditions || ''
-        });
-      }
-    }, (error) => {
-      console.error('Error fetching store info:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
 
   // Outside click listeners for dropdowns
   useEffect(() => {

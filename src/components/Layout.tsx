@@ -22,9 +22,8 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { toast } from 'react-toastify';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import OfflineSyncBanner from './OfflineSyncBanner';
+import { initDataListeners, useDataStore } from '../lib/dataStore';
 
 const allNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -41,7 +40,7 @@ export default function Layout() {
   const { user, storeId, logout, clearSessionUser, activeRole, activeUser, sessionUser, switchActiveRole, isUser, isSuperAdmin, packageExpiryDate, packageName } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [storeDetails, setStoreDetails] = useState<{ name: string; logoUrl: string }>({ name: '', logoUrl: '' });
+  const storeDetails = useDataStore((s) => s.storeDetails);
 
   // User role can ONLY view: Dashboard, Sales, Quotations, Products, Customers
   // Admin role can view everything in the application
@@ -49,22 +48,10 @@ export default function Layout() {
     ? allNavigation.filter(item => ['Dashboard', 'Sales', 'Quotations', 'Products', 'Customers'].includes(item.name))
     : allNavigation;
 
+  // Initialize store-wide data streaming once across all tabs
   useEffect(() => {
     if (!storeId) return;
-
-    const storeRef = doc(db, 'stores', storeId);
-    const unsubscribe = onSnapshot(storeRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setStoreDetails({
-          name: data.name || '',
-          logoUrl: data.logoUrl || ''
-        });
-      }
-    }, (error) => {
-      console.error('Error listening to store details:', error);
-    });
-
+    const unsubscribe = initDataListeners(storeId);
     return () => unsubscribe();
   }, [storeId]);
 

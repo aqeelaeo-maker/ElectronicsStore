@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Search, Plus, Trash2, Hash, AlertCircle, Zap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 
 interface Product {
   id: string;
@@ -26,42 +27,18 @@ interface SerialNumber {
 
 export default function SerialNumbers() {
   const { storeId, role } = useAuth();
-  const [products, setProducts] = useState<Product[]>([]);
+  
+  // Instant persistent reactive data from useDataStore
+  const products = useDataStore((s) => s.products);
+  const loadingProducts = useDataStore((s) => !s.productsLoaded);
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [serialNumbers, setSerialNumbers] = useState<SerialNumber[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingSerials, setLoadingSerials] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [newSerialNumber, setNewSerialNumber] = useState('');
   const [addingSerial, setAddingSerial] = useState(false);
   const [duplicateConflict, setDuplicateConflict] = useState<{ serial: string; docId?: string; reason: string } | null>(null);
-
-  useEffect(() => {
-    if (!storeId) return;
-    
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId));
-      
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Product[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Product);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setProducts(data);
-      setLoadingProducts(false);
-    }, (error) => {
-      console.error('Error fetching products:', error);
-      setLoadingProducts(false);
-    });
-    
-    return () => unsubscribe();
-  }, [storeId]);
 
   useEffect(() => {
     if (!selectedProduct || !storeId) {

@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Users, Receipt, Wallet, CheckCircle2, Clock, Phone, MapPin, Mail } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import CustomerLedgerView from '../components/CustomerLedgerView';
 import { Pagination } from '../components/Pagination';
 
@@ -24,58 +25,16 @@ interface Customer {
 
 export default function Customers() {
   const { storeId, role } = useAuth();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [sales, setSales] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant persistent reactive data from useDataStore
+  const customers = useDataStore((s) => s.customers);
+  const sales = useDataStore((s) => s.sales);
+  const loading = useDataStore((s) => !s.customersLoaded);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
-
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'customers'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Customer[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Customer);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setCustomers(data);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching customers:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // Real-time sales subscription to accurately compute Pending on Invoices for every customer
-  useEffect(() => {
-    if (!storeId) return;
-
-    const qSales = query(collection(db, 'sales'), where('storeId', '==', storeId));
-    const unsubscribeSales = onSnapshot(qSales, (snapshot) => {
-      const list: any[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() });
-      });
-      setSales(list);
-    }, (error) => {
-      console.error('Error fetching sales for customer ledger balances:', error);
-    });
-
-    return () => unsubscribeSales();
-  }, [storeId]);
 
   // Fast O(N) aggregate map of sales data per customer (avoids quadratic filtering loops)
   const customerSalesAggregateMap = useMemo(() => {

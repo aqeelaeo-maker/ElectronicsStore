@@ -2,6 +2,8 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
   initializeFirestore, 
+  persistentLocalCache,
+  persistentMultipleTabManager,
   memoryLocalCache,
   getFirestore,
   Firestore
@@ -25,11 +27,16 @@ let firestoreInstance: Firestore;
 
 try {
   firestoreInstance = initializeFirestore(app, {
-    localCache: memoryLocalCache()
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });
 } catch (err) {
-  console.warn('Memory cache initialization error, falling back to getFirestore:', err);
-  firestoreInstance = getFirestore(app);
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache()
+    });
+  } catch {
+    firestoreInstance = getFirestore(app);
+  }
 }
 
 export const db = firestoreInstance;

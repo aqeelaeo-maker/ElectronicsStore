@@ -6,17 +6,17 @@ import 'react-toastify/dist/ReactToastify.css';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 
-// Dynamic code-splitting for optimal loading speed & performance
-const Login = React.lazy(() => import('./pages/Login'));
-const Dashboard = React.lazy(() => import('./pages/Dashboard'));
-const Products = React.lazy(() => import('./pages/Products'));
-const Customers = React.lazy(() => import('./pages/Customers'));
-const Vendors = React.lazy(() => import('./pages/Vendors'));
-const Sales = React.lazy(() => import('./pages/Sales'));
-const Quotations = React.lazy(() => import('./pages/Quotations'));
-const Settings = React.lazy(() => import('./pages/Settings'));
-const SerialNumbers = React.lazy(() => import('./pages/SerialNumbers'));
-const Inventory = React.lazy(() => import('./pages/Inventory'));
+// Eager imports for instant 0ms tab navigation
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Products from './pages/Products';
+import Customers from './pages/Customers';
+import Vendors from './pages/Vendors';
+import Sales from './pages/Sales';
+import Quotations from './pages/Quotations';
+import Settings from './pages/Settings';
+import SerialNumbers from './pages/SerialNumbers';
+import Inventory from './pages/Inventory';
 
 const PageLoadingFallback = () => (
   <div className="w-full h-full min-h-[300px] flex items-center justify-center p-6">

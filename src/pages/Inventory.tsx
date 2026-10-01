@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import AddInventoryStock, { Product, Vendor } from './AddInventoryStock';
 import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
 import { Pagination } from '../components/Pagination';
@@ -60,10 +61,15 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const navigate = useNavigate();
   const { storeId } = useAuth();
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [logs, setLogs] = useState<InventoryLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Instant persistent reactive data from useDataStore
+  const products = useDataStore((s) => s.products);
+  const vendors = useDataStore((s) => s.vendors);
+  const logs = useDataStore((s) => s.inventoryLogs);
+  const loading = useDataStore((s) => !s.productsLoaded);
+  const storeDetails = useDataStore((s) => s.storeDetails);
+  const units = storeDetails.units || [];
+  const categories = storeDetails.categories || DEFAULT_PRODUCT_CATEGORIES;
+
   const [searchTerm, setSearchTerm] = useState('');
   
   // Full-page Add Stock state
@@ -95,130 +101,12 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const [editProdSalePrice, setEditProdSalePrice] = useState<number>(0);
   const [savingProductEdit, setSavingProductEdit] = useState(false);
 
-  // Store Units
-  const [units, setUnits] = useState<Array<{ name: string; abbreviation: string }>>([
-    { name: 'Piece', abbreviation: 'Pcs' },
-    { name: 'Box', abbreviation: 'Box' },
-    { name: 'Packet', abbreviation: 'Pk' },
-    { name: 'Set', abbreviation: 'Set' },
-    { name: 'Kilogram', abbreviation: 'Kg' },
-    { name: 'Meter', abbreviation: 'Mtr' },
-    { name: 'Liter', abbreviation: 'Ltr' },
-    { name: 'Dozen', abbreviation: 'Dzn' },
-    { name: 'Carton', abbreviation: 'Ctn' }
-  ]);
-
-  // Store Categories
-  const [categories, setCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
-
-  useEffect(() => {
-    if (!storeId) return;
-
-    const storeRef = doc(db, 'stores', storeId);
-    const unsubStore = onSnapshot(storeRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (Array.isArray(data.units) && data.units.length > 0) {
-          const parsed = data.units.map((u: any) => {
-            if (typeof u === 'string') return { name: u, abbreviation: u };
-            return {
-              name: u.name || u.abbreviation || 'Unit',
-              abbreviation: u.abbreviation || u.name || 'Unit'
-            };
-          });
-          setUnits(parsed);
-        }
-
-        if (Array.isArray(data.categories) && data.categories.length > 0) {
-          const parsedCategories = data.categories
-            .map((c: any) => typeof c === 'string' ? c.trim() : (c.name || String(c)).trim())
-            .filter(Boolean);
-          if (parsedCategories.length > 0) {
-            setCategories(parsedCategories);
-          }
-        }
-      }
-    });
-
-    return () => unsubStore();
-  }, [storeId]);
-
   // Serial Numbers for Product being edited
   const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold'; createdAt?: any }>>([]);
   const [loadingEditProductSerials, setLoadingEditProductSerials] = useState(false);
   const [serialSearchTerm, setSerialSearchTerm] = useState('');
   const [showSoldSerials, setShowSoldSerials] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
-
-  // Fetch Firestore Collections
-  useEffect(() => {
-    if (!storeId) return;
-
-    // 1. Fetch Products
-    const productsQuery = query(collection(db, 'products'), where('storeId', '==', storeId));
-    const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
-      const data: Product[] = [];
-      snapshot.forEach((docSnap) => {
-        data.push({ id: docSnap.id, ...docSnap.data() } as Product);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setProducts(data);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching products:', error);
-      setLoading(false);
-    });
-
-    // 2. Fetch Vendors
-    const vendorsQuery = query(collection(db, 'vendors'), where('storeId', '==', storeId));
-    const unsubscribeVendors = onSnapshot(vendorsQuery, (snapshot) => {
-      const data: Vendor[] = [];
-      snapshot.forEach((docSnap) => {
-        data.push({ id: docSnap.id, ...docSnap.data() } as Vendor);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setVendors(data);
-    }, (error) => {
-      console.error('Error fetching vendors:', error);
-    });
-
-    // 3. Fetch Inventory Logs
-    const logsQuery = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId));
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      const data: InventoryLog[] = [];
-      snapshot.forEach((docSnap) => {
-        data.push({ id: docSnap.id, ...docSnap.data() } as InventoryLog);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setLogs(data);
-    }, (error) => {
-      console.error('Error fetching inventory logs:', error);
-    });
-
-    return () => {
-      unsubscribeProducts();
-      unsubscribeVendors();
-      unsubscribeLogs();
-    };
-  }, [storeId]);
 
   // Open Full-Page Add Stock
   const handleOpenAddStock = (product?: Product) => {

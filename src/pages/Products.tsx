@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Package, Barcode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import { DEFAULT_PRODUCT_CATEGORIES } from './Settings';
 import { Pagination } from '../components/Pagination';
 
@@ -22,28 +23,18 @@ interface Product {
 
 export default function Products() {
   const { storeId, role } = useAuth();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant persistent reactive data from useDataStore
+  const products = useDataStore((s) => s.products);
+  const loading = useDataStore((s) => !s.productsLoaded);
+  const storeDetails = useDataStore((s) => s.storeDetails);
+  const units = storeDetails.units || [];
+  const categories = storeDetails.categories || DEFAULT_PRODUCT_CATEGORIES;
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedProductType, setSelectedProductType] = useState<'Serials' | 'Without Serials'>('Serials');
-
-  // Store Units of Measurement
-  const [units, setUnits] = useState<Array<{ name: string; abbreviation: string }>>([
-    { name: 'Piece', abbreviation: 'Pcs' },
-    { name: 'Box', abbreviation: 'Box' },
-    { name: 'Packet', abbreviation: 'Pk' },
-    { name: 'Set', abbreviation: 'Set' },
-    { name: 'Kilogram', abbreviation: 'Kg' },
-    { name: 'Meter', abbreviation: 'Mtr' },
-    { name: 'Liter', abbreviation: 'Ltr' },
-    { name: 'Dozen', abbreviation: 'Dzn' },
-    { name: 'Carton', abbreviation: 'Ctn' }
-  ]);
-
-  // Store Product Categories
-  const [categories, setCategories] = useState<string[]>(DEFAULT_PRODUCT_CATEGORIES);
 
   // Serial numbers state for edit view
   const [editProductSerials, setEditProductSerials] = useState<Array<{ id: string; serialNumber: string; status: 'Available' | 'Sold' }>>([]);
@@ -51,69 +42,6 @@ export default function Products() {
   const [serialSearch, setSerialSearch] = useState('');
   const [copiedAll, setCopiedAll] = useState(false);
   const [showSold, setShowSold] = useState(false);
-
-  // Fetch store units & categories
-  useEffect(() => {
-    if (!storeId) return;
-
-    const storeRef = doc(db, 'stores', storeId);
-    const unsubStore = onSnapshot(storeRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (Array.isArray(data.units) && data.units.length > 0) {
-          const parsed = data.units.map((u: any) => {
-            if (typeof u === 'string') return { name: u, abbreviation: u };
-            return {
-              name: u.name || u.abbreviation || 'Unit',
-              abbreviation: u.abbreviation || u.name || 'Unit'
-            };
-          });
-          setUnits(parsed);
-        }
-
-        if (Array.isArray(data.categories) && data.categories.length > 0) {
-          const parsedCategories = data.categories
-            .map((c: any) => typeof c === 'string' ? c.trim() : (c.name || String(c)).trim())
-            .filter(Boolean);
-          if (parsedCategories.length > 0) {
-            setCategories(parsedCategories);
-          }
-        }
-      }
-    }, (err) => {
-      console.error('Error fetching store settings:', err);
-    });
-
-    return () => unsubStore();
-  }, [storeId]);
-
-  useEffect(() => {
-    if (!storeId) return;
-    
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId));
-      
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Product[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Product);
-      });
-
-      // Sort client-side newest first
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setProducts(data);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching products:', error);
-      setLoading(false);
-    });
-    
-    return () => unsubscribe();
-  }, [storeId]);
 
   // Fetch Serial Numbers for Product being edited
   useEffect(() => {

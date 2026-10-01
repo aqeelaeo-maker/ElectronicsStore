@@ -49,6 +49,7 @@ import {
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import SalesReturnModal, { printReturnReceipt, downloadReturnReceiptPdf, SaleReturnRecord } from '../components/SalesReturnModal';
 import { Pagination } from '../components/Pagination';
@@ -182,29 +183,15 @@ const groupSaleItemsForPrint = (items: SaleItem[]): SaleItem[] => {
 
 export default function Sales() {
   const { storeId, role } = useAuth();
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [allSerials, setAllSerials] = useState<SerialNumber[]>([]);
-  const [storeDetails, setStoreDetails] = useState<{
-    name: string;
-    logoUrl: string;
-    phone: string;
-    address: string;
-    email: string;
-    bankAccounts?: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number; balance?: number }[];
-    termsAndConditions?: string;
-  }>({
-    name: '',
-    logoUrl: '',
-    phone: '',
-    address: '',
-    email: '',
-    bankAccounts: [],
-    termsAndConditions: ''
-  });
+
+  // Instant persistent reactive data from useDataStore
+  const sales = useDataStore((s) => s.sales);
+  const products = useDataStore((s) => s.products);
+  const customers = useDataStore((s) => s.customers);
+  const allSerials = useDataStore((s) => s.allSerials);
+  const storeDetails = useDataStore((s) => s.storeDetails);
+  const loading = useDataStore((s) => !s.salesLoaded);
   
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Paid' | 'Partial' | 'Pending' | 'Returns'>('All');
   const [showModal, setShowModal] = useState(false);
@@ -271,148 +258,6 @@ export default function Sales() {
     const paddedSeq = String(nextSeq).padStart(4, '0');
     return `INV-${currentYear}-${paddedSeq}`;
   };
-
-  // 1. Fetch Sales List
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'sales'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Sale[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Sale);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setSales(data);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching sales:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 2. Fetch Products for Lookup
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'products'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Product[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Product);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setProducts(data);
-    }, (error) => {
-      console.error('Error fetching products:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 3. Fetch Customers for Lookup
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'customers'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Customer[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Customer);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setCustomers(data);
-    }, (error) => {
-      console.error('Error fetching customers:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 4. Fetch Serial Numbers for Verification & Selection
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'serialNumbers'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: SerialNumber[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as SerialNumber);
-      });
-      setAllSerials(data);
-    }, (error) => {
-      console.error('Error fetching serial numbers:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // 5. Fetch Store Details
-  useEffect(() => {
-    if (!storeId) return;
-
-    const storeRef = doc(db, 'stores', storeId);
-    const unsubscribe = onSnapshot(storeRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        let loadedAccounts: { bankName: string; accountNumber: string; accountTitle?: string; openingBalance?: number; balance?: number }[] = [];
-        if (Array.isArray(data.bankAccounts)) {
-          loadedAccounts = data.bankAccounts.map((item: any) => {
-            if (typeof item === 'string') {
-              return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
-            }
-            const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
-            const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
-            return {
-              bankName: item.bankName || '',
-              accountNumber: item.accountNumber || '',
-              accountTitle: item.accountTitle || '',
-              openingBalance: opBal,
-              balance: curBal
-            };
-          });
-        }
-
-        setStoreDetails({
-          name: data.name || '',
-          logoUrl: data.logoUrl || '',
-          phone: data.phone || '',
-          address: data.address || '',
-          email: data.email || '',
-          bankAccounts: loadedAccounts,
-          termsAndConditions: data.termsAndConditions || ''
-        });
-      }
-    }, (error) => {
-      console.error('Error listening to store details:', error);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
 
   // Handle Quotation Conversion: prefill invoice items and customer from quotation
   useEffect(() => {

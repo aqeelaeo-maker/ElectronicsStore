@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { Plus, Search, Edit2, Trash2, Building2, Receipt, Wallet, Clock, CheckCircle2, Phone, MapPin, Mail } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
+import { useDataStore } from '../lib/dataStore';
 import VendorLedgerView from '../components/VendorLedgerView';
 import { Pagination } from '../components/Pagination';
 
@@ -32,69 +33,17 @@ interface Vendor {
 
 export default function Vendors() {
   const { storeId, role } = useAuth();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [purchases, setPurchases] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Instant persistent reactive data from useDataStore
+  const vendors = useDataStore((s) => s.vendors);
+  const purchases = useDataStore((s) => s.inventoryLogs);
+  const payments = useDataStore((s) => s.vendorPayments);
+  const loading = useDataStore((s) => !s.vendorsLoaded);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [ledgerVendor, setLedgerVendor] = useState<Vendor | null>(null);
-
-  useEffect(() => {
-    if (!storeId) return;
-
-    const q = query(collection(db, 'vendors'), where('storeId', '==', storeId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Vendor[] = [];
-      snapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() } as Vendor);
-      });
-
-      data.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeB - timeA;
-      });
-
-      setVendors(data);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching vendors:', error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [storeId]);
-
-  // Real-time stock purchases and payments subscription to compute accurate vendor ledger balances
-  useEffect(() => {
-    if (!storeId) return;
-
-    const qPurchases = query(collection(db, 'inventoryLogs'), where('storeId', '==', storeId));
-    const unsubPurchases = onSnapshot(qPurchases, (snapshot) => {
-      const list: any[] = [];
-      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      setPurchases(list);
-    }, (err) => {
-      console.error('Error fetching inventory logs for vendors:', err);
-    });
-
-    const qPayments = query(collection(db, 'vendorPayments'), where('storeId', '==', storeId));
-    const unsubPayments = onSnapshot(qPayments, (snapshot) => {
-      const list: any[] = [];
-      snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
-      setPayments(list);
-    }, (err) => {
-      console.error('Error fetching vendor payments:', err);
-    });
-
-    return () => {
-      unsubPurchases();
-      unsubPayments();
-    };
-  }, [storeId]);
 
   // Fast O(N) aggregate map of purchases per vendor (avoids quadratic filtering loops)
   const vendorPurchasesMap = useMemo(() => {
