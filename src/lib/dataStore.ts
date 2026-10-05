@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { useSyncExternalStore } from 'react';
 import { 
   collection, 
   onSnapshot, 
@@ -109,7 +109,49 @@ const getTimeMillis = (item: any): number => {
   return 0;
 };
 
-export const useDataStore = create<DataStoreState>((set) => ({
+type Listener = () => void;
+
+function createStore<T>(initializer: (set: (partial: Partial<T> | ((state: T) => Partial<T>)) => void, get: () => T) => T) {
+  let state: T;
+  const listeners = new Set<Listener>();
+
+  const getState = () => state;
+
+  const setState = (partial: Partial<T> | ((state: T) => Partial<T>)) => {
+    const nextPartial = typeof partial === 'function' ? (partial as (s: T) => Partial<T>)(state) : partial;
+    state = Object.assign({}, state, nextPartial);
+    listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (e) {
+        console.error('DataStore listener error:', e);
+      }
+    });
+  };
+
+  const subscribe = (listener: Listener) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+
+  state = initializer(setState, getState);
+
+  const useStore = <U = T>(selector?: (state: T) => U): U => {
+    const getSnapshot = () => state;
+    const storeState = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+    return selector ? selector(storeState) : (storeState as unknown as U);
+  };
+
+  useStore.getState = getState;
+  useStore.setState = setState;
+  useStore.subscribe = subscribe;
+
+  return useStore;
+}
+
+export const useDataStore = createStore<DataStoreState>((set) => ({
   storeId: null,
   sales: [],
   products: [],

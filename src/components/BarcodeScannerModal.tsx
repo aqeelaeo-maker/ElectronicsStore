@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Camera, 
   X, 
@@ -131,7 +131,7 @@ export default function BarcodeScannerModal({
   }, []);
 
   // Handle successful barcode decoded
-  const handleBarcodeDecoded = useCallback(async (code: string) => {
+  const handleBarcodeDecoded = async (code: string) => {
     const clean = code.trim();
     if (!clean) return;
 
@@ -160,10 +160,10 @@ export default function BarcodeScannerModal({
         onClose();
       }, 300);
     }
-  }, [onScan, soundEnabled, autoCloseOnSuccess, onClose]);
+  };
 
   // Stop camera stream safely
-  const stopCamera = useCallback(() => {
+  const stopCamera = () => {
     if (scanLoopRef.current) {
       cancelAnimationFrame(scanLoopRef.current);
       scanLoopRef.current = null;
@@ -184,10 +184,10 @@ export default function BarcodeScannerModal({
     setIsCameraActive(false);
     setIsTorchOn(false);
     setHasTorch(false);
-  }, []);
+  };
 
   // Start Camera Stream
-  const startCamera = useCallback(async (deviceIdToUse?: string) => {
+  const startCamera = async (deviceIdToUse?: string) => {
     stopCamera();
     setCameraError(null);
 
@@ -298,10 +298,10 @@ export default function BarcodeScannerModal({
       setCameraError(message);
       setIsCameraActive(false);
     }
-  }, [stopCamera]);
+  };
 
   // Frame decoding loop using BarcodeDetector + ZXing
-  const startDecodingLoop = useCallback(() => {
+  const startDecodingLoop = () => {
     let hasBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
     let barcodeDetector: any = null;
 
@@ -416,7 +416,7 @@ export default function BarcodeScannerModal({
     };
 
     scanLoopRef.current = requestAnimationFrame(tick);
-  }, [handleBarcodeDecoded]);
+  };
 
   // Lifecycle when modal opens or closes
   useEffect(() => {
@@ -433,7 +433,7 @@ export default function BarcodeScannerModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen]);
 
   // Toggle Torch/Flashlight
   const toggleTorch = async () => {

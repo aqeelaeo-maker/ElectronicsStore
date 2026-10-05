@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   collection, 
+  addDoc,
   onSnapshot, 
   doc, 
   writeBatch, 
@@ -939,6 +940,59 @@ export default function Sales() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [showModal, showSalesCameraScanner, showDetailModal, allSerials, products, availableSerialsInStock, alreadyAddedSerialIds, invoiceItems]);
 
+  // Quick-add new customer by name if not in customer list
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false);
+
+  const handleAddCustomerByName = async (rawName: string) => {
+    const name = rawName.trim();
+    if (!name) return;
+    if (name.toLowerCase() === 'walk in customer' || name.toLowerCase() === 'walk-in customer') {
+      setSelectedCustomerId('walk-in');
+      setCustomerSearchInput('Walk In Customer');
+      setIsCustomerDropdownOpen(false);
+      return;
+    }
+    if (!storeId) {
+      toast.error('Store ID not found');
+      return;
+    }
+
+    const existing = customers.find(c => c.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setSelectedCustomerId(existing.id);
+      setCustomerSearchInput(existing.name);
+      setIsCustomerDropdownOpen(false);
+      return;
+    }
+
+    try {
+      setIsAddingCustomer(true);
+      const newCustomerData = {
+        name,
+        mobile: '',
+        email: '',
+        city: '',
+        address: '',
+        balance: 0,
+        openingBalance: 0,
+        initialBalance: 0,
+        storeId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(collection(db, 'customers'), newCustomerData);
+      setSelectedCustomerId(docRef.id);
+      setCustomerSearchInput(name);
+      setIsCustomerDropdownOpen(false);
+      toast.success(`Customer "${name}" added to customers list!`);
+    } catch (err) {
+      console.error('Failed to add customer:', err);
+      toast.error('Failed to add customer to customer list');
+    } finally {
+      setIsAddingCustomer(false);
+    }
+  };
+
   // Handle setting up edit mode
   const handleEditClick = (sale: Sale) => {
     setEditingSale(sale);
@@ -1127,19 +1181,50 @@ export default function Sales() {
     let customerName = 'Walk In Customer';
     let customerId: string | null = null;
 
-    if (selectedCustomerId && selectedCustomerId !== 'walk-in') {
-      const cust = customers.find(c => c.id === selectedCustomerId);
-      if (cust) {
-        customerName = cust.name;
-        customerId = cust.id;
-      } else {
-        customerName = selectedCustomerId;
-        customerId = null;
-      }
-    } else {
+    const trimmedCustomerInput = customerSearchInput.trim();
+    const isWalkIn = selectedCustomerId === 'walk-in' || !trimmedCustomerInput || trimmedCustomerInput.toLowerCase() === 'walk in customer' || trimmedCustomerInput.toLowerCase() === 'walk-in customer';
+
+    if (isWalkIn) {
       const walkInCust = customers.find(c => c.name?.trim().toLowerCase() === 'walk in customer' || c.name?.trim().toLowerCase() === 'walk-in customer');
       customerName = 'Walk In Customer';
       customerId = walkInCust ? walkInCust.id : null;
+    } else {
+      // Check if customer exists in customers list by ID or by exact name
+      let cust = customers.find(c => c.id === selectedCustomerId);
+      if (!cust && trimmedCustomerInput) {
+        cust = customers.find(c => c.name.trim().toLowerCase() === trimmedCustomerInput.toLowerCase());
+      }
+
+      if (cust) {
+        customerName = cust.name;
+        customerId = cust.id;
+      } else if (trimmedCustomerInput) {
+        // Customer is not present in the customer list! Automatically add customer to the customers list by just name
+        try {
+          const newCustomerData = {
+            name: trimmedCustomerInput,
+            mobile: '',
+            email: '',
+            city: '',
+            address: '',
+            balance: 0,
+            openingBalance: 0,
+            initialBalance: 0,
+            storeId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          const docRef = await addDoc(collection(db, 'customers'), newCustomerData);
+          customerId = docRef.id;
+          customerName = trimmedCustomerInput;
+          setSelectedCustomerId(docRef.id);
+          toast.success(`Customer "${trimmedCustomerInput}" added to customers list!`);
+        } catch (addErr) {
+          console.error('Failed to auto-create customer in Firestore:', addErr);
+          customerName = trimmedCustomerInput;
+          customerId = null;
+        }
+      }
     }
 
     // Validation
@@ -2265,7 +2350,7 @@ export default function Sales() {
   };
 
   // Extract all unique serial numbers associated with a sale (from items, returns, etc.)
-  const getSaleSerialNumbers = useCallback((sale: Sale): string[] => {
+  const getSaleSerialNumbers = (sale: Sale): string[] => {
     const serialSet = new Set<string>();
 
     const addSerial = (val: any) => {
@@ -2326,7 +2411,7 @@ export default function Sales() {
     }
 
     return Array.from(serialSet);
-  }, [serialIdToNumberMap]);
+  };
 
   const filteredSales = useMemo(() => {
     const rawSearch = searchTerm.trim().toLowerCase();
@@ -2364,7 +2449,7 @@ export default function Sales() {
 
       return true;
     });
-  }, [sales, searchTerm, statusFilter, getSaleSerialNumbers]);
+  }, [sales, searchTerm, statusFilter, serialIdToNumberMap]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -2605,6 +2690,22 @@ export default function Sales() {
                           placeholder="Search customer name or phone..."
                           value={customerSearchInput}
                           onFocus={() => setIsCustomerDropdownOpen(true)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const query = customerSearchInput.trim();
+                              if (query && query.toLowerCase() !== 'walk in customer' && query.toLowerCase() !== 'walk-in customer') {
+                                const exactMatch = customers.find(c => c.name.trim().toLowerCase() === query.toLowerCase());
+                                if (exactMatch) {
+                                  setSelectedCustomerId(exactMatch.id);
+                                  setCustomerSearchInput(exactMatch.name);
+                                  setIsCustomerDropdownOpen(false);
+                                } else {
+                                  handleAddCustomerByName(query);
+                                }
+                              }
+                            }
+                          }}
                           onChange={(e) => {
                             const val = e.target.value;
                             setCustomerSearchInput(val);
@@ -2639,7 +2740,7 @@ export default function Sales() {
 
                         {/* Dropdown displaying customers filtered by text */}
                         {isCustomerDropdownOpen && (
-                          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100 text-xs">
                             {/* Walk In option */}
                             <button
                               type="button"
@@ -2658,6 +2759,37 @@ export default function Sales() {
                               </div>
                               <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Default</span>
                             </button>
+
+                            {/* Quick Add Customer button if typed name is not present in customers list */}
+                            {(() => {
+                              const trimmed = customerSearchInput.trim();
+                              const isNotWalkIn = trimmed && trimmed.toLowerCase() !== 'walk in customer' && trimmed.toLowerCase() !== 'walk-in customer';
+                              const exactMatch = customers.find(c => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+                              if (!isNotWalkIn || exactMatch) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={isAddingCustomer}
+                                  onClick={() => handleAddCustomerByName(trimmed)}
+                                  className="w-full text-left px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100/90 text-emerald-950 flex items-center justify-between transition-colors border-y border-emerald-200/80 cursor-pointer group"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-md bg-emerald-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs group-hover:scale-105 transition-transform">
+                                      +
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="font-extrabold text-xs text-emerald-950">
+                                        Add "<strong>{trimmed}</strong>" to Customer List
+                                      </span>
+                                      <span className="text-[10px] text-emerald-700 font-medium">Adds new customer to system with this name</span>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
+                                    {isAddingCustomer ? 'Adding...' : '+ Add Customer'}
+                                  </span>
+                                </button>
+                              );
+                            })()}
 
                             {/* Filtered list of customers according to typed text */}
                             {filteredCustomers.slice(0, 40).map(c => (
@@ -2690,18 +2822,10 @@ export default function Sales() {
                               </div>
                             )}
 
-                            {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedCustomerId(customerSearchInput.trim());
-                                  setIsCustomerDropdownOpen(false);
-                                }}
-                                className="w-full text-left px-3 py-2 hover:bg-slate-50 text-slate-600 italic flex items-center justify-between"
-                              >
-                                <span>Use <strong>"{customerSearchInput.trim()}"</strong> as customer</span>
-                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Custom</span>
-                              </button>
+                            {filteredCustomers.length === 0 && customerSearchInput.trim() && customerSearchInput.trim().toLowerCase() !== 'walk in customer' && !customers.some(c => c.name.trim().toLowerCase() === customerSearchInput.trim().toLowerCase()) && (
+                              <div className="p-2.5 text-center text-xs text-slate-500 bg-slate-50">
+                                Click <strong>+ Add Customer</strong> above or press Enter to add "{customerSearchInput.trim()}" to the customer list.
+                              </div>
                             )}
                           </div>
                         )}
@@ -2709,12 +2833,25 @@ export default function Sales() {
 
                       {/* Selected Customer Details Bar */}
                       {selectedCustomerId !== 'walk-in' && (() => {
-                        const selectedCust = customers.find(c => c.id === selectedCustomerId);
+                        const selectedCust = customers.find(c => c.id === selectedCustomerId || c.name.trim().toLowerCase() === customerSearchInput.trim().toLowerCase());
                         if (!selectedCust) {
+                          const trimmed = customerSearchInput.trim();
                           return (
-                            <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between shadow-2xs">
-                              <span className="font-bold text-slate-900">{customerSearchInput}</span>
-                              <span className="text-[10px] text-slate-400 italic">Custom customer</span>
+                            <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-center justify-between shadow-2xs">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-900">{trimmed || selectedCustomerId}</span>
+                                <span className="text-[10px] text-amber-700 italic">(New customer - will be added to list)</span>
+                              </div>
+                              {trimmed && trimmed.toLowerCase() !== 'walk in customer' && (
+                                <button
+                                  type="button"
+                                  disabled={isAddingCustomer}
+                                  onClick={() => handleAddCustomerByName(trimmed)}
+                                  className="text-[10px] font-bold text-emerald-800 bg-white hover:bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-300 cursor-pointer shadow-2xs"
+                                >
+                                  {isAddingCustomer ? 'Adding...' : '+ Add to Customer List'}
+                                </button>
+                              )}
                             </div>
                           );
                         }
@@ -2734,14 +2871,19 @@ export default function Sales() {
                                 </span>
                               )}
                             </div>
-                            {selectedCust.balance !== undefined && (
-                              <div className="flex items-center gap-1 text-[11px] shrink-0 font-medium">
-                                <span className="text-slate-500">Balance:</span>
-                                <span className={`font-mono font-bold ${selectedCust.balance > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
-                                  PKR {Number(selectedCust.balance).toFixed(2)}
-                                </span>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                In Customer List
+                              </span>
+                              {selectedCust.balance !== undefined && (
+                                <div className="flex items-center gap-1 text-[11px] shrink-0 font-medium">
+                                  <span className="text-slate-500">Balance:</span>
+                                  <span className={`font-mono font-bold ${selectedCust.balance > 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                                    PKR {Number(selectedCust.balance).toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       })()}

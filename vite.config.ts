@@ -10,6 +10,21 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+      dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-router-dom',
+        'react-toastify',
+        'lucide-react',
+        'zustand',
+        'recharts',
+        'motion'
+      ],
     },
     build: {
       chunkSizeWarningLimit: 1200,
