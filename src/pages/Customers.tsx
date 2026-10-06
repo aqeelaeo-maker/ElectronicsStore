@@ -88,35 +88,16 @@ export default function Customers() {
     return Number(ret.toFixed(2));
   };
 
-  // 4. In Customer ledger, Net Account Balance = Initial Balance + Pending on Invoices - Return Value
+  // 4. In Customer ledger, Net Account Balance = Stored account ledger balance (or initial + pending - returns if unset)
   const getCustomerNetAccountBalance = (customer: Customer): number => {
+    if (customer.balance !== undefined && customer.balance !== null && !isNaN(Number(customer.balance))) {
+      return Number(Number(customer.balance).toFixed(2));
+    }
     const initial = getCustomerInitialBalance(customer);
     const pending = getCustomerPendingInvoices(customer.id);
     const returnVal = getCustomerReturnValue(customer.id);
     return Number((initial + pending - returnVal).toFixed(2));
   };
-
-  // Automatically reconcile and sync customer.balance in Firestore to match Ledger Net Account Balance without loop
-  const syncedCustomerIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (loading || sales.length === 0 || customers.length === 0) return;
-
-    for (const c of customers) {
-      if (syncedCustomerIds.current.has(c.id)) continue;
-      const netBal = getCustomerNetAccountBalance(c);
-      const currentStored = typeof c.balance === 'number' ? c.balance : (parseFloat(c.balance as any) || 0);
-      if (Math.abs(currentStored - netBal) > 0.05) {
-        syncedCustomerIds.current.add(c.id);
-        const custRef = doc(db, 'customers', c.id);
-        updateDoc(custRef, {
-          balance: netBal,
-          updatedAt: serverTimestamp()
-        }).catch((syncErr) => {
-          console.warn(`Could not auto-sync balance for customer ${c.name}:`, syncErr);
-        });
-      }
-    }
-  }, [customers, sales, loading, customerSalesAggregateMap]);
 
   // Overall financial summary metrics
   const { totalNetReceivables, pendingAccountsCount, settledAccountsCount } = useMemo(() => {
@@ -181,7 +162,8 @@ export default function Customers() {
     const formData = new FormData(e.currentTarget);
     const openingBalVal = Number(formData.get('balance')) || 0;
     const pendingInvoices = getCustomerPendingInvoices(editingCustomer.id);
-    const calculatedNetBalance = Number((openingBalVal + pendingInvoices).toFixed(2));
+    const returnVal = getCustomerReturnValue(editingCustomer.id);
+    const calculatedNetBalance = Number((openingBalVal + pendingInvoices - returnVal).toFixed(2));
 
     const updatedCustomer = {
       name: formData.get('name'),

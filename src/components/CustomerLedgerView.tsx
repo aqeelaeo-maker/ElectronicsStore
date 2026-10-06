@@ -319,68 +319,247 @@ export default function CustomerLedgerView({
     return 0;
   }, [customer, sales, payments]);
 
-  // Financial calculations
-  const financialTotals = useMemo(() => {
-    let totalInvoiced = 0;
-    let totalPending = 0;
+  // Statement Row type definition
+  type StatementRowItem = {
+    id: string;
+    date: string;
+    dateObj: Date;
+    sortOrder: number;
+    type: 'Initial Balance' | 'Invoice' | 'Payment' | 'Return';
+    refNo: string;
+    description: string;
+    debit: number;          // Increases amount customer owes
+    credit: number;         // Reduces amount customer owes
+    runningBalance: number; // Cumulative net account balance
+    mode: string;
+    bankInfo?: string;
+    rawSale?: CustomerSaleRecord;
+    rawPayment?: CustomerPaymentRecord;
+  };
 
+  // Combined Running Account Statement
+  const statementRows = useMemo(() => {
+    const combined: (Omit<StatementRowItem, 'runningBalance'>)[] = [];
+
+    // Earliest date for Initial Balance row
+    let earliestDate: Date;
+    if (customer.createdAt?.toMillis) {
+      earliestDate = new Date(customer.createdAt.toMillis());
+    } else if (sales.length > 0 && sales[sales.length - 1]?.date) {
+      earliestDate = new Date(new Date(sales[sales.length - 1].date).getTime() - 86400000);
+    } else {
+      earliestDate = new Date();
+    }
+
+    // 1. Initial / Opening Balance Row (only if non-zero initial balance)
+    if (initialBalance && Number(initialBalance) !== 0) {
+      combined.push({
+        id: 'initial-balance-row',
+        date: earliestDate.toISOString(),
+        dateObj: earliestDate,
+        sortOrder: 0, // Top priority
+        type: 'Initial Balance',
+        refNo: 'INITIAL-BAL',
+        description: 'Account Opening / Initial Balance',
+        debit: Number(initialBalance) > 0 ? Number(initialBalance) : 0,
+        credit: Number(initialBalance) < 0 ? Math.abs(Number(initialBalance)) : 0,
+        mode: 'Opening',
+      });
+    }
+
+    // 2. Sales Invoices (Debit)
     sales.forEach(sale => {
-      totalInvoiced += sale.total || 0;
-      const pending = sale.pendingAmount !== undefined 
-        ? sale.pendingAmount 
-        : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
-      totalPending += pending;
+      const saleTotal = Number(sale.total) || 0;
+      if (saleTotal <= 0) return; // Do not include entries where there is no credit and no debit
+
+      const itemsCount = sale.items?.length || 0;
+      const itemsDesc = sale.items?.slice(0, 2).map((it: any) => it.name).join(', ') + (itemsCount > 2 ? ` +${itemsCount - 2} more` : '');
+
+      const saleDate = sale.date || '';
+      combined.push({
+        id: `sale-${sale.id}`,
+        date: saleDate,
+        dateObj: new Date(saleDate || 0),
+        sortOrder: 1,
+        type: 'Invoice',
+        refNo: sale.invoiceNo || `INV-${sale.id.slice(-6).toUpperCase()}`,
+        description: `Sales Invoice (${itemsCount} item${itemsCount === 1 ? '' : 's'}${itemsDesc ? `: ${itemsDesc}` : ''})`,
+        debit: saleTotal,
+        credit: 0,
+        rawSale: sale,
+        mode: sale.paymentMode || 'Credit',
+        bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
+      });
     });
 
-    // 1. Total Return Value from sales returns / refund adjustments
-    let totalReturnValue = 0;
-    const recordedReturnIds = new Set<string>();
+    // 3. Customer Payments & Returns (Credit)
+    const existingReturnRefs = new Set<string>();
+    const seenInvoicePaymentSaleIds = new Set<string>();
+    const coveredSaleIds = new Set<string>();
+    const coveredInvoiceNos = new Set<string>();
 
+    payments.forEach(payment => {
+      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
+      const amount = isReturn ? (Number(payment.refundAmount) || 0) : (Number(payment.paidAmount) || 0);
+      if (amount <= 0) return; // Do not include entries where there is no credit and no debit
+
+      const dateVal = payment.paymentDate || (payment.createdAt?.toMillis ? new Date(payment.createdAt.toMillis()).toISOString() : '');
+      if (isReturn) {
+        if (payment.referenceNo) existingReturnRefs.add(payment.referenceNo);
+        if (payment.saleId) existingReturnRefs.add(`sale-${payment.saleId}`);
+      } else if (payment.type === 'InvoicePayment' && payment.saleId) {
+        // Prevent duplicate InvoicePayment records for the same saleId
+        if (seenInvoicePaymentSaleIds.has(payment.saleId)) return;
+        seenInvoicePaymentSaleIds.add(payment.saleId);
+      }
+
+      if (payment.saleId) coveredSaleIds.add(payment.saleId);
+      if (payment.invoiceNo) coveredInvoiceNos.add(payment.invoiceNo);
+      
+      combined.push({
+        id: `pay-${payment.id}`,
+        date: dateVal,
+        dateObj: new Date(dateVal || 0),
+        sortOrder: 2,
+        type: isReturn ? 'Return' : 'Payment',
+        refNo: payment.invoiceNo || payment.referenceNo || `PAY-${payment.id.slice(-6).toUpperCase()}`,
+        description: payment.notes || (isReturn ? 'Sales Return Refund Credit' : (payment.invoiceNo ? `Payment on Invoice #${payment.invoiceNo}` : 'Account Settlement Payment')),
+        debit: 0,
+        credit: amount,
+        rawPayment: payment,
+        mode: payment.paymentMode || 'Cash',
+        bankInfo: payment.bankName ? `${payment.bankName} (${payment.bankAccountNumber})` : undefined
+      });
+    });
+
+    // 4. Ensure payments recorded directly on sales invoices are credited if not present in customerPayments collection
+    sales.forEach(sale => {
+      const paid = sale.paidAmount !== undefined 
+        ? (Number(sale.paidAmount) || 0) 
+        : (sale.status === 'Paid' ? (Number(sale.total) || 0) : 0);
+      if (paid > 0 && !coveredSaleIds.has(sale.id) && (!sale.invoiceNo || !coveredInvoiceNos.has(sale.invoiceNo))) {
+        const saleDate = sale.date || '';
+        combined.push({
+          id: `pay-auto-${sale.id}`,
+          date: saleDate,
+          dateObj: new Date(saleDate || 0),
+          sortOrder: 2,
+          type: 'Payment',
+          refNo: sale.invoiceNo ? `PAY-${sale.invoiceNo}` : `PAY-${sale.id.slice(-6).toUpperCase()}`,
+          description: `Payment on Invoice #${sale.invoiceNo || sale.id}`,
+          debit: 0,
+          credit: paid,
+          rawSale: sale,
+          mode: sale.paymentMode || 'Cash',
+          bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
+        });
+      }
+    });
+
+    // 5. Sales Returns recorded on Invoices (Credit) not already logged in customer payments
     sales.forEach(sale => {
       if (Array.isArray(sale.returns) && sale.returns.length > 0) {
         sale.returns.forEach((r: any) => {
-          if (r.id) recordedReturnIds.add(r.id);
-          totalReturnValue += Number(r.totalRefund) || 0;
+          if (r.id && existingReturnRefs.has(r.id)) return;
+          const returnAmt = Number(r.totalRefund) || 0;
+          if (returnAmt <= 0) return; // Do not include entries where there is no credit and no debit
+
+          const returnDate = r.returnDate || sale.date || '';
+          combined.push({
+            id: `ret-${r.id || Math.random()}`,
+            date: returnDate,
+            dateObj: new Date(returnDate || 0),
+            sortOrder: 2,
+            type: 'Return',
+            refNo: r.id || `RET-${sale.invoiceNo}`,
+            description: r.notes || `Sales Return on Inv #${sale.invoiceNo}${r.reason ? ` (${r.reason})` : ''}`,
+            debit: 0,
+            credit: returnAmt,
+            mode: r.refundMode || 'Customer Credit',
+            bankInfo: r.bankName ? `${r.bankName} (${r.bankAccountNumber})` : undefined
+          });
         });
-      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0) {
-        totalReturnValue += sale.totalRefunded;
+      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0 && !existingReturnRefs.has(`sale-${sale.id}`)) {
+        const returnDate = sale.date || '';
+        combined.push({
+          id: `ret-sale-${sale.id}`,
+          date: returnDate,
+          dateObj: new Date(returnDate || 0),
+          sortOrder: 2,
+          type: 'Return',
+          refNo: `RET-${sale.invoiceNo}`,
+          description: `Sales Return on Inv #${sale.invoiceNo}`,
+          debit: 0,
+          credit: sale.totalRefunded,
+          mode: 'Return Credit'
+        });
       }
     });
 
-    // Check payments for any ReturnCredit not already counted
-    payments.forEach(payment => {
-      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
-      if (isReturn) {
-        const ref = payment.referenceNo;
-        if (ref && recordedReturnIds.has(ref)) return;
-        if (payment.saleId && sales.some(s => s.id === payment.saleId && (s.totalRefunded || 0) > 0)) return;
-        totalReturnValue += (payment.refundAmount || payment.paidAmount || 0);
-      }
+    // Filter out entries where there is no credit and no debit
+    const validEntries = combined.filter(item => {
+      const debit = Number(item.debit) || 0;
+      const credit = Number(item.credit) || 0;
+      return debit > 0 || credit > 0;
     });
-    totalReturnValue = Number(totalReturnValue.toFixed(2));
 
-    // 2. Total Paid Amount (direct payments received, not return credits)
+    // Sort chronologically ascending to calculate running balance
+    validEntries.sort((a, b) => {
+      const diff = a.dateObj.getTime() - b.dateObj.getTime();
+      if (diff !== 0) return diff;
+      return a.sortOrder - b.sortOrder;
+    });
+
+    // Calculate running balance starting from Initial Balance
+    let running = 0;
+    return validEntries.map(item => {
+      running = Number((running + item.debit - item.credit).toFixed(2));
+      return {
+        ...item,
+        runningBalance: running
+      };
+    });
+  }, [sales, payments, customer, initialBalance]);
+
+  // Final Net Running Balance at the end of Statement rows
+  const finalRunningBalance = useMemo(() => {
+    if (statementRows.length > 0) {
+      return statementRows[statementRows.length - 1].runningBalance;
+    }
+    return Number((initialBalance || 0).toFixed(2));
+  }, [statementRows, initialBalance]);
+
+  // Financial calculations derived consistently from ledger statement rows
+  const financialTotals = useMemo(() => {
+    let totalInvoiced = 0;
     let totalPaid = 0;
-    payments.forEach(payment => {
-      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
-      if (!isReturn) {
-        totalPaid += (payment.paidAmount || 0);
+    let totalReturnValue = 0;
+
+    statementRows.forEach(item => {
+      if (item.type === 'Invoice') {
+        totalInvoiced += (item.debit || 0);
+      } else if (item.type === 'Payment') {
+        totalPaid += (item.credit || 0);
+      } else if (item.type === 'Return') {
+        totalReturnValue += (item.credit || 0);
       }
     });
+
+    totalInvoiced = Number(totalInvoiced.toFixed(2));
     totalPaid = Number(totalPaid.toFixed(2));
+    totalReturnValue = Number(totalReturnValue.toFixed(2));
+    const totalPending = Math.max(0, Number((totalInvoiced - totalPaid - totalReturnValue).toFixed(2)));
 
-    // 3. User Mandate: Net Account Balance = Initial Balance + Pending on Invoices - Return Value
-    const netAccountBalance = Number((initialBalance + totalPending - totalReturnValue).toFixed(2));
-
+    // User Requirement: Net Account Balance should be strictly identical to final Net Running Balance in the statement
     return {
       initialBalance,
       totalInvoiced,
       totalPaid,
       totalPending,
       totalReturnValue,
-      currentBalance: netAccountBalance
+      currentBalance: finalRunningBalance
     };
-  }, [sales, payments, initialBalance]);
+  }, [statementRows, initialBalance, finalRunningBalance]);
 
   // Automatically keep customer.balance in Firestore synced with the ledger's true Net Account Balance
   useEffect(() => {
@@ -1056,173 +1235,6 @@ export default function CustomerLedgerView({
     });
   }, [payments, searchTerm, dateFilter]);
 
-  // Statement Row type definition
-  type StatementRowItem = {
-    id: string;
-    date: string;
-    dateObj: Date;
-    sortOrder: number;
-    type: 'Initial Balance' | 'Invoice' | 'Payment' | 'Return';
-    refNo: string;
-    description: string;
-    debit: number;          // Increases amount customer owes
-    credit: number;         // Reduces amount customer owes
-    runningBalance: number; // Cumulative net account balance
-    mode: string;
-    bankInfo?: string;
-    rawSale?: CustomerSaleRecord;
-    rawPayment?: CustomerPaymentRecord;
-  };
-
-  // Combined Running Account Statement
-  const statementRows = useMemo(() => {
-    const combined: (Omit<StatementRowItem, 'runningBalance'>)[] = [];
-
-    // Earliest date for Initial Balance row
-    let earliestDate: Date;
-    if (customer.createdAt?.toMillis) {
-      earliestDate = new Date(customer.createdAt.toMillis());
-    } else if (sales.length > 0 && sales[sales.length - 1]?.date) {
-      earliestDate = new Date(new Date(sales[sales.length - 1].date).getTime() - 86400000);
-    } else {
-      earliestDate = new Date();
-    }
-
-    // 1. Initial / Opening Balance Row (only if non-zero initial balance)
-    if (initialBalance && Number(initialBalance) !== 0) {
-      combined.push({
-        id: 'initial-balance-row',
-        date: earliestDate.toISOString(),
-        dateObj: earliestDate,
-        sortOrder: 0, // Top priority
-        type: 'Initial Balance',
-        refNo: 'INITIAL-BAL',
-        description: 'Account Opening / Initial Balance',
-        debit: Number(initialBalance) > 0 ? Number(initialBalance) : 0,
-        credit: Number(initialBalance) < 0 ? Math.abs(Number(initialBalance)) : 0,
-        mode: 'Opening',
-      });
-    }
-
-    // 2. Sales Invoices (Debit)
-    sales.forEach(sale => {
-      const saleTotal = Number(sale.total) || 0;
-      if (saleTotal <= 0) return; // Do not include entries where there is no credit and no debit
-
-      const itemsCount = sale.items?.length || 0;
-      const itemsDesc = sale.items?.slice(0, 2).map((it: any) => it.name).join(', ') + (itemsCount > 2 ? ` +${itemsCount - 2} more` : '');
-
-      const saleDate = sale.date || '';
-      combined.push({
-        id: `sale-${sale.id}`,
-        date: saleDate,
-        dateObj: new Date(saleDate || 0),
-        sortOrder: 1,
-        type: 'Invoice',
-        refNo: sale.invoiceNo || `INV-${sale.id.slice(-6).toUpperCase()}`,
-        description: `Sales Invoice (${itemsCount} item${itemsCount === 1 ? '' : 's'}${itemsDesc ? `: ${itemsDesc}` : ''})`,
-        debit: saleTotal,
-        credit: 0,
-        rawSale: sale,
-        mode: sale.paymentMode || 'Credit',
-        bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
-      });
-    });
-
-    // 3. Customer Payments & Returns (Credit)
-    const existingReturnRefs = new Set<string>();
-    payments.forEach(payment => {
-      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
-      const amount = isReturn ? (Number(payment.refundAmount) || 0) : (Number(payment.paidAmount) || 0);
-      if (amount <= 0) return; // Do not include entries where there is no credit and no debit
-
-      const dateVal = payment.paymentDate || (payment.createdAt?.toMillis ? new Date(payment.createdAt.toMillis()).toISOString() : '');
-      if (isReturn) {
-        if (payment.referenceNo) existingReturnRefs.add(payment.referenceNo);
-        if (payment.saleId) existingReturnRefs.add(`sale-${payment.saleId}`);
-      }
-      
-      combined.push({
-        id: `pay-${payment.id}`,
-        date: dateVal,
-        dateObj: new Date(dateVal || 0),
-        sortOrder: 2,
-        type: isReturn ? 'Return' : 'Payment',
-        refNo: payment.invoiceNo || payment.referenceNo || `PAY-${payment.id.slice(-6).toUpperCase()}`,
-        description: payment.notes || (isReturn ? 'Sales Return Refund Credit' : (payment.invoiceNo ? `Payment on Invoice #${payment.invoiceNo}` : 'Account Settlement Payment')),
-        debit: 0,
-        credit: amount,
-        rawPayment: payment,
-        mode: payment.paymentMode || 'Cash',
-        bankInfo: payment.bankName ? `${payment.bankName} (${payment.bankAccountNumber})` : undefined
-      });
-    });
-
-    // 4. Sales Returns recorded on Invoices (Credit) not already logged in customer payments
-    sales.forEach(sale => {
-      if (Array.isArray(sale.returns) && sale.returns.length > 0) {
-        sale.returns.forEach((r: any) => {
-          if (r.id && existingReturnRefs.has(r.id)) return;
-          const returnAmt = Number(r.totalRefund) || 0;
-          if (returnAmt <= 0) return; // Do not include entries where there is no credit and no debit
-
-          const returnDate = r.returnDate || sale.date || '';
-          combined.push({
-            id: `ret-${r.id || Math.random()}`,
-            date: returnDate,
-            dateObj: new Date(returnDate || 0),
-            sortOrder: 2,
-            type: 'Return',
-            refNo: r.id || `RET-${sale.invoiceNo}`,
-            description: r.notes || `Sales Return on Inv #${sale.invoiceNo}${r.reason ? ` (${r.reason})` : ''}`,
-            debit: 0,
-            credit: returnAmt,
-            mode: r.refundMode || 'Customer Credit',
-            bankInfo: r.bankName ? `${r.bankName} (${r.bankAccountNumber})` : undefined
-          });
-        });
-      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0 && !existingReturnRefs.has(`sale-${sale.id}`)) {
-        const returnDate = sale.date || '';
-        combined.push({
-          id: `ret-sale-${sale.id}`,
-          date: returnDate,
-          dateObj: new Date(returnDate || 0),
-          sortOrder: 2,
-          type: 'Return',
-          refNo: `RET-${sale.invoiceNo}`,
-          description: `Sales Return on Inv #${sale.invoiceNo}`,
-          debit: 0,
-          credit: sale.totalRefunded,
-          mode: 'Return Credit'
-        });
-      }
-    });
-
-    // Filter out entries where there is no credit and no debit
-    const validEntries = combined.filter(item => {
-      const debit = Number(item.debit) || 0;
-      const credit = Number(item.credit) || 0;
-      return debit > 0 || credit > 0;
-    });
-
-    // Sort chronologically ascending to calculate running balance
-    validEntries.sort((a, b) => {
-      const diff = a.dateObj.getTime() - b.dateObj.getTime();
-      if (diff !== 0) return diff;
-      return a.sortOrder - b.sortOrder;
-    });
-
-    // Calculate running balance starting from Initial Balance
-    let running = 0;
-    return validEntries.map(item => {
-      running = Number((running + item.debit - item.credit).toFixed(2));
-      return {
-        ...item,
-        runningBalance: running
-      };
-    });
-  }, [sales, payments, customer, initialBalance]);
-
   // Generate Statement HTML for Printing and PDF Download
   const generateCustomerLedgerHtml = (): string => {
     const rowsHtml = statementRows.length > 0 ? statementRows.map((r) => `
@@ -1608,12 +1620,12 @@ export default function CustomerLedgerView({
                   ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' : financialTotals.currentBalance < 0 ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
                 </div>
                 <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                  Initial Balance (PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR ${(financialTotals.totalPending || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  Initial Balance (PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Invoiced (PKR ${(financialTotals.totalInvoiced || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Paid (PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                 </div>
               </td>
               <td style="vertical-align: middle; text-align: right; width: 260px;">
                 <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
-                  Net Account Balance
+                  Net Account Balance (Net Running Balance)
                 </div>
                 <div style="font-size: 20px; font-weight: 900; font-family: monospace; margin-top: 2px; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
                   PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1902,7 +1914,7 @@ export default function CustomerLedgerView({
             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            Initial (PKR {initialBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })}) + Pending (PKR {financialTotals.totalPending.toLocaleString('en-US', { maximumFractionDigits: 0 })}) - Returns (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { maximumFractionDigits: 0 })})
+            Same as final Net Running Balance: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
       </div>
@@ -2707,8 +2719,8 @@ export default function CustomerLedgerView({
                             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
-                        <td className="py-4 px-5 text-center text-slate-400 text-xs">
-                          Final Net
+                        <td className="py-4 px-5 text-center text-slate-500 font-bold text-xs whitespace-nowrap">
+                          Net Account Balance
                         </td>
                         <td className="py-4 px-5 text-right text-slate-400 text-xs"></td>
                       </tr>
@@ -2730,18 +2742,18 @@ export default function CustomerLedgerView({
                           : 'Account Fully Cleared (Zero Balance)'}
                     </div>
                     <div className="text-xs text-slate-300 mt-1 font-mono">
-                      Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                      Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Invoiced (PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Paid (PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                     </div>
                   </div>
                   <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15 flex flex-col items-start sm:items-end">
                     <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
-                      Net Account Balance
+                      Net Account Balance (Net Running Balance)
                     </div>
                     <div className="text-2xl font-black font-mono text-white mt-1">
                       PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div className="text-[10px] text-emerald-200/90 font-semibold mt-1 whitespace-nowrap">
-                      Software developed by 0332-5059526
+                      Net Running Balance at end: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
@@ -3428,11 +3440,11 @@ export default function CustomerLedgerView({
                   : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
             </div>
             <div className="text-[11px] text-black mt-1">
-              Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Pending on Invoices (PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+              Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Invoiced (PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Paid (PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-black uppercase tracking-wider">Net Account Balance</div>
+            <div className="text-[10px] font-black uppercase tracking-wider">Net Account Balance (Net Running Balance)</div>
             <div className="text-xl font-black font-mono text-black mt-1">
               PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
