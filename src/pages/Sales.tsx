@@ -279,28 +279,41 @@ export default function Sales() {
 
       // Pre-fill items from quotation
       if (quote.items && quote.items.length > 0) {
-        const mappedItems: any[] = [];
+        const mappedItems: Array<{
+          productId: string;
+          quantity: number;
+          salePrice: number;
+          discount?: number;
+          warranty?: string;
+          selectedSerials: string[];
+        }> = [];
+
         quote.items.forEach((item: any) => {
+          const serialIds: string[] = [];
           if (item.selectedSerials && item.selectedSerials.length > 0) {
             item.selectedSerials.forEach((snStr: string) => {
               const matchedDoc = allSerials.find(s => (s.serialNumber === snStr || s.id === snStr) && s.productId === item.productId);
-              mappedItems.push({
-                productId: item.productId,
-                quantity: 1,
-                salePrice: item.salePrice,
-                discount: 0,
-                warranty: item.warranty || '1 Year Warranty',
-                selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
-              });
+              serialIds.push(matchedDoc ? matchedDoc.id : snStr);
             });
+          }
+
+          const existingIndex = mappedItems.findIndex(m => m.productId === item.productId);
+          if (existingIndex !== -1) {
+            const existing = mappedItems[existingIndex];
+            const mergedSerials = [...existing.selectedSerials];
+            serialIds.forEach(id => {
+              if (!mergedSerials.includes(id)) mergedSerials.push(id);
+            });
+            existing.selectedSerials = mergedSerials;
+            existing.quantity = mergedSerials.length > 0 ? mergedSerials.length : existing.quantity + (item.quantity || 1);
           } else {
             mappedItems.push({
               productId: item.productId,
-              quantity: item.quantity || 1,
-              salePrice: item.salePrice,
+              quantity: serialIds.length > 0 ? serialIds.length : (item.quantity || 1),
+              salePrice: item.salePrice || 0,
               discount: 0,
               warranty: item.warranty || '1 Year Warranty',
-              selectedSerials: []
+              selectedSerials: serialIds
             });
           }
         });
@@ -515,6 +528,23 @@ export default function Sales() {
     } else if (editingInvoiceItemIndex !== null && editingInvoiceItemIndex > index) {
       setEditingInvoiceItemIndex(editingInvoiceItemIndex - 1);
     }
+  };
+
+  const handleRemoveSerialFromItem = (itemIndex: number, serialIndex: number) => {
+    const updated = [...invoiceItems];
+    const item = { ...updated[itemIndex] };
+    if (!item || !item.selectedSerials) return;
+
+    const newSerials = item.selectedSerials.filter((_, idx) => idx !== serialIndex);
+    if (newSerials.length === 0) {
+      handleRemoveItemRow(itemIndex);
+      return;
+    }
+
+    item.selectedSerials = newSerials;
+    item.quantity = newSerials.length;
+    updated[itemIndex] = item;
+    setInvoiceItems(updated);
   };
 
   const handleItemQuantityChange = (index: number, newQty: number) => {
@@ -744,25 +774,43 @@ export default function Sales() {
     const inStockSerialsCount = availableSerialsInStock.filter(s => s.productId === product.id).length;
     const effectiveStock = Math.max(product.stock || 0, inStockSerialsCount);
     const maxAllowed = effectiveStock + previousQty;
-    const currentlyAddedForProduct = invoiceItems.filter(i => i.productId === product.id).length;
+    const currentlyAddedForProduct = invoiceItems
+      .filter(i => i.productId === product.id)
+      .reduce((sum, i) => sum + (i.selectedSerials?.length || i.quantity || 1), 0);
     if (maxAllowed > 0 && currentlyAddedForProduct >= maxAllowed) {
       playScanBeep('warning');
       toast.warning(`Maximum available stock (${maxAllowed}) reached for ${product.name}.`);
       return false;
     }
 
-    const newItem = {
-      productId: product.id,
-      quantity: 1,
-      salePrice: product.salePrice || 0,
-      discount: 0,
-      warranty: invoiceWarranty || 'No Warranty',
-      selectedSerials: [serialDoc.id]
-    };
-
     // Filter out any empty placeholder item if present
     const existingValid = invoiceItems.filter(i => i.productId && i.productId !== '');
-    setInvoiceItems([...existingValid, newItem]);
+    const existingIndex = existingValid.findIndex(i => i.productId === product.id);
+
+    if (existingIndex !== -1) {
+      const updated = [...existingValid];
+      const existing = updated[existingIndex];
+      const currentSerials = existing.selectedSerials ? [...existing.selectedSerials] : [];
+      if (!currentSerials.includes(serialDoc.id)) {
+        currentSerials.push(serialDoc.id);
+      }
+      updated[existingIndex] = {
+        ...existing,
+        quantity: currentSerials.length > 0 ? currentSerials.length : (existing.quantity || 1) + 1,
+        selectedSerials: currentSerials
+      };
+      setInvoiceItems(updated);
+    } else {
+      const newItem = {
+        productId: product.id,
+        quantity: 1,
+        salePrice: product.salePrice || 0,
+        discount: 0,
+        warranty: invoiceWarranty || 'No Warranty',
+        selectedSerials: [serialDoc.id]
+      };
+      setInvoiceItems([...existingValid, newItem]);
+    }
 
     playScanBeep('success');
     toast.success(`Added ${product.name} (SN: ${serialDoc.serialNumber})`);
@@ -1055,28 +1103,41 @@ export default function Sales() {
     }
 
     if (sale.items) {
-      const mappedItems: any[] = [];
+      const mappedItems: Array<{
+        productId: string;
+        quantity: number;
+        salePrice: number;
+        discount?: number;
+        warranty?: string;
+        selectedSerials: string[];
+      }> = [];
+
       sale.items.forEach(item => {
+        const serialIds: string[] = [];
         if (item.selectedSerials && item.selectedSerials.length > 0) {
           item.selectedSerials.forEach(snStr => {
             const matchedDoc = allSerials.find(s => (s.serialNumber === snStr || s.id === snStr) && s.productId === item.productId);
-            mappedItems.push({
-              productId: item.productId,
-              quantity: 1,
-              salePrice: item.salePrice,
-              discount: 0,
-              warranty: existingWarranty || 'No Warranty',
-              selectedSerials: [matchedDoc ? matchedDoc.id : snStr]
-            });
+            serialIds.push(matchedDoc ? matchedDoc.id : snStr);
           });
+        }
+
+        const existingIndex = mappedItems.findIndex(m => m.productId === item.productId);
+        if (existingIndex !== -1) {
+          const existing = mappedItems[existingIndex];
+          const mergedSerials = [...existing.selectedSerials];
+          serialIds.forEach(id => {
+            if (!mergedSerials.includes(id)) mergedSerials.push(id);
+          });
+          existing.selectedSerials = mergedSerials;
+          existing.quantity = mergedSerials.length > 0 ? mergedSerials.length : existing.quantity + (item.quantity || 1);
         } else {
           mappedItems.push({
             productId: item.productId,
-            quantity: item.quantity || 1,
+            quantity: serialIds.length > 0 ? serialIds.length : (item.quantity || 1),
             salePrice: item.salePrice,
-            discount: 0,
+            discount: item.discount || 0,
             warranty: existingWarranty || 'No Warranty',
-            selectedSerials: []
+            selectedSerials: serialIds
           });
         }
       });
@@ -3553,8 +3614,12 @@ export default function Sales() {
                               {invoiceItems.map((item, index) => {
                                 const selectedProduct = products.find(p => p.id === item.productId);
                                 const isSerialized = Boolean(item.selectedSerials && item.selectedSerials.length > 0);
-                                const serialDoc = isSerialized ? allSerials.find(s => item.selectedSerials?.includes(s.id) || item.selectedSerials?.includes(s.serialNumber)) : null;
-                                const serialText = serialDoc?.serialNumber || item.selectedSerials?.[0] || '';
+                                const serialNumbersList: string[] = isSerialized
+                                  ? (item.selectedSerials || []).map(idOrSn => {
+                                      const doc = allSerials.find(s => s.id === idOrSn || s.serialNumber === idOrSn);
+                                      return doc ? doc.serialNumber : idOrSn;
+                                    })
+                                  : [];
                                 const previousQty = editingSale?.items?.find(pi => pi.productId === item.productId)?.quantity || 0;
                                 const maxAllowed = (selectedProduct?.stock || 0) + previousQty;
                                 const isEditing = editingInvoiceItemIndex === index;
@@ -3570,32 +3635,55 @@ export default function Sales() {
                                       #{index + 1}
                                     </td>
 
-                                    {/* 2. Product Details (Fully displayed with serial badge, name, brand, model & category) */}
+                                    {/* 2. Product Details (Displayed once with different serial numbers like shown in invoice below) */}
                                     <td className="py-3 px-4">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        {isSerialized ? (
-                                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-[#0a382c] border border-emerald-200 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold shrink-0">
-                                            <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
-                                            {serialText}
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-bold text-slate-900 text-xs">
+                                            {selectedProduct?.name || 'Product'}
                                           </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold shrink-0">
-                                            <Package className="w-3.5 h-3.5 text-sky-600" />
-                                            Non-Serial
-                                          </span>
-                                        )}
-                                        <span className="font-bold text-slate-900 text-xs">
-                                          {selectedProduct?.name || 'Product'}
-                                        </span>
-                                        {(selectedProduct?.brand || selectedProduct?.modelNumber) && (
-                                          <span className="text-[11px] text-slate-500 font-normal">
-                                            ({[selectedProduct?.brand, selectedProduct?.modelNumber].filter(Boolean).join(' • ')})
-                                          </span>
-                                        )}
-                                        {selectedProduct?.category && (
-                                          <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
-                                            {selectedProduct.category}
-                                          </span>
+                                          {(selectedProduct?.brand || selectedProduct?.modelNumber) && (
+                                            <span className="text-[11px] text-slate-500 font-normal">
+                                              ({[selectedProduct?.brand, selectedProduct?.modelNumber].filter(Boolean).join(' • ')})
+                                            </span>
+                                          )}
+                                          {selectedProduct?.category && (
+                                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+                                              {selectedProduct.category}
+                                            </span>
+                                          )}
+                                          {!isSerialized && (
+                                            <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md text-[10px] font-bold shrink-0">
+                                              <Package className="w-3 h-3 text-sky-600" />
+                                              Non-Serial
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* All Serial Numbers listed under the product (like shown in invoice below) */}
+                                        {isSerialized && serialNumbersList.length > 0 && (
+                                          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                            <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                              S/N ({serialNumbersList.length}):
+                                            </span>
+                                            {serialNumbersList.map((sn, sIdx) => (
+                                              <span 
+                                                key={sIdx} 
+                                                className="inline-flex items-center gap-1 bg-emerald-50 text-[#0a382c] border border-emerald-200 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold shrink-0"
+                                              >
+                                                <Barcode className="w-3.5 h-3.5 text-[#0a382c]" />
+                                                <span>{sn}</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleRemoveSerialFromItem(index, sIdx)}
+                                                  className="hover:text-red-700 text-slate-400 hover:bg-emerald-100 rounded p-0.5 transition-colors cursor-pointer ml-0.5"
+                                                  title={`Remove serial number ${sn}`}
+                                                >
+                                                  <X className="w-2.5 h-2.5" />
+                                                </button>
+                                              </span>
+                                            ))}
+                                          </div>
                                         )}
                                       </div>
                                     </td>
