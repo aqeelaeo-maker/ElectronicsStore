@@ -394,10 +394,6 @@ export default function CustomerLedgerView({
 
     // 3. Customer Payments & Returns (Credit)
     const existingReturnRefs = new Set<string>();
-    const seenInvoicePaymentSaleIds = new Set<string>();
-    const coveredSaleIds = new Set<string>();
-    const coveredInvoiceNos = new Set<string>();
-
     payments.forEach(payment => {
       const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
       const amount = isReturn ? (Number(payment.refundAmount) || 0) : (Number(payment.paidAmount) || 0);
@@ -407,14 +403,7 @@ export default function CustomerLedgerView({
       if (isReturn) {
         if (payment.referenceNo) existingReturnRefs.add(payment.referenceNo);
         if (payment.saleId) existingReturnRefs.add(`sale-${payment.saleId}`);
-      } else if (payment.type === 'InvoicePayment' && payment.saleId) {
-        // Prevent duplicate InvoicePayment records for the same saleId
-        if (seenInvoicePaymentSaleIds.has(payment.saleId)) return;
-        seenInvoicePaymentSaleIds.add(payment.saleId);
       }
-
-      if (payment.saleId) coveredSaleIds.add(payment.saleId);
-      if (payment.invoiceNo) coveredInvoiceNos.add(payment.invoiceNo);
       
       combined.push({
         id: `pay-${payment.id}`,
@@ -432,31 +421,7 @@ export default function CustomerLedgerView({
       });
     });
 
-    // 4. Ensure payments recorded directly on sales invoices are credited if not present in customerPayments collection
-    sales.forEach(sale => {
-      const paid = sale.paidAmount !== undefined 
-        ? (Number(sale.paidAmount) || 0) 
-        : (sale.status === 'Paid' ? (Number(sale.total) || 0) : 0);
-      if (paid > 0 && !coveredSaleIds.has(sale.id) && (!sale.invoiceNo || !coveredInvoiceNos.has(sale.invoiceNo))) {
-        const saleDate = sale.date || '';
-        combined.push({
-          id: `pay-auto-${sale.id}`,
-          date: saleDate,
-          dateObj: new Date(saleDate || 0),
-          sortOrder: 2,
-          type: 'Payment',
-          refNo: sale.invoiceNo ? `PAY-${sale.invoiceNo}` : `PAY-${sale.id.slice(-6).toUpperCase()}`,
-          description: `Payment on Invoice #${sale.invoiceNo || sale.id}`,
-          debit: 0,
-          credit: paid,
-          rawSale: sale,
-          mode: sale.paymentMode || 'Cash',
-          bankInfo: sale.bankName ? `${sale.bankName} (${sale.bankAccountNumber})` : undefined
-        });
-      }
-    });
-
-    // 5. Sales Returns recorded on Invoices (Credit) not already logged in customer payments
+    // 4. Sales Returns recorded on Invoices (Credit) not already logged in customer payments
     sales.forEach(sale => {
       if (Array.isArray(sale.returns) && sale.returns.length > 0) {
         sale.returns.forEach((r: any) => {
@@ -529,54 +494,68 @@ export default function CustomerLedgerView({
     return Number((initialBalance || 0).toFixed(2));
   }, [statementRows, initialBalance]);
 
-  // Financial calculations derived consistently from ledger statement rows
+  // Financial calculations
   const financialTotals = useMemo(() => {
     let totalInvoiced = 0;
-    let totalPaid = 0;
-    let totalReturnValue = 0;
+    let totalPending = 0;
 
-    statementRows.forEach(item => {
-      if (item.type === 'Invoice') {
-        totalInvoiced += (item.debit || 0);
-      } else if (item.type === 'Payment') {
-        totalPaid += (item.credit || 0);
-      } else if (item.type === 'Return') {
-        totalReturnValue += (item.credit || 0);
+    sales.forEach(sale => {
+      totalInvoiced += sale.total || 0;
+      const pending = sale.pendingAmount !== undefined 
+        ? sale.pendingAmount 
+        : (sale.status === 'Pending' ? (sale.total || 0) : (sale.status === 'Paid' ? 0 : Math.max(0, (sale.total || 0) - (sale.paidAmount || 0))));
+      totalPending += pending;
+    });
+
+    // 1. Total Return Value from sales returns / refund adjustments
+    let totalReturnValue = 0;
+    const recordedReturnIds = new Set<string>();
+
+    sales.forEach(sale => {
+      if (Array.isArray(sale.returns) && sale.returns.length > 0) {
+        sale.returns.forEach((r: any) => {
+          if (r.id) recordedReturnIds.add(r.id);
+          totalReturnValue += Number(r.totalRefund) || 0;
+        });
+      } else if (typeof sale.totalRefunded === 'number' && sale.totalRefunded > 0) {
+        totalReturnValue += sale.totalRefunded;
       }
     });
 
-    totalInvoiced = Number(totalInvoiced.toFixed(2));
-    totalPaid = Number(totalPaid.toFixed(2));
+    // Check payments for any ReturnCredit not already counted
+    payments.forEach(payment => {
+      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
+      if (isReturn) {
+        const ref = payment.referenceNo;
+        if (ref && recordedReturnIds.has(ref)) return;
+        if (payment.saleId && sales.some(s => s.id === payment.saleId && (s.totalRefunded || 0) > 0)) return;
+        totalReturnValue += (payment.refundAmount || payment.paidAmount || 0);
+      }
+    });
     totalReturnValue = Number(totalReturnValue.toFixed(2));
-    const totalPending = Math.max(0, Number((totalInvoiced - totalPaid - totalReturnValue).toFixed(2)));
 
-    // User Requirement: Net Account Balance should be strictly identical to final Net Running Balance in the statement
+    // 2. Total Paid Amount (direct payments received, not return credits)
+    let totalPaid = 0;
+    payments.forEach(payment => {
+      const isReturn = payment.type === 'ReturnCredit' || (payment.refundAmount && payment.refundAmount > 0);
+      if (!isReturn) {
+        totalPaid += (payment.paidAmount || 0);
+      }
+    });
+    totalPaid = Number(totalPaid.toFixed(2));
+
+    // Net Account Balance = Initial Balance + Total Invoiced - Total Paid Amount - Return Value
+    const netAccountBalance = Number((initialBalance + totalInvoiced - totalPaid - totalReturnValue).toFixed(2));
+
     return {
       initialBalance,
       totalInvoiced,
       totalPaid,
-      totalPending,
+      totalPending: Number(totalPending.toFixed(2)),
       totalReturnValue,
-      currentBalance: finalRunningBalance
+      currentBalance: netAccountBalance
     };
-  }, [statementRows, initialBalance, finalRunningBalance]);
-
-  // Automatically keep customer.balance in Firestore synced with the ledger's true Net Account Balance
-  useEffect(() => {
-    if (!customer?.id || loading) return;
-    const currentStoredBal = customer.balance !== undefined ? Number(customer.balance) : null;
-    if (currentStoredBal !== null && Math.abs(currentStoredBal - financialTotals.currentBalance) > 0.01) {
-      try {
-        const custRef = doc(db, 'customers', customer.id);
-        updateDoc(custRef, {
-          balance: financialTotals.currentBalance,
-          updatedAt: serverTimestamp()
-        }).catch(err => console.warn('Could not sync customer balance in Firestore:', err));
-      } catch (e) {
-        console.warn('Sync customer balance error:', e);
-      }
-    }
-  }, [customer?.id, customer?.balance, financialTotals.currentBalance, loading]);
+  }, [sales, payments, initialBalance]);
 
   // Handlers for Editing & Deleting Invoices
   const handleOpenEditInvoice = (sale: CustomerSaleRecord) => {
@@ -1602,8 +1581,8 @@ export default function CustomerLedgerView({
                 <td colspan="4" style="padding: 6px 5px; text-align: right; text-transform: uppercase; font-size: 9px; border-right: 1px solid #cbd5e1;">Totals:</td>
                 <td style="padding: 6px 5px; text-align: right; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${(financialTotals.totalInvoiced || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td style="padding: 6px 5px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; font-size: 9.5px; white-space: nowrap;">PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 5px; text-align: right; font-family: monospace; font-size: 9.5px; font-weight: 900; white-space: nowrap; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
-                  PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <td style="padding: 6px 5px; text-align: right; font-family: monospace; font-size: 9.5px; font-weight: 900; white-space: nowrap; ${finalRunningBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
+                  PKR ${(finalRunningBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
               </tr>
             </tfoot>
@@ -1620,12 +1599,12 @@ export default function CustomerLedgerView({
                   ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE RECEIVABLE FROM CUSTOMER' : financialTotals.currentBalance < 0 ? 'CREDIT ADVANCE BALANCE IN CUSTOMER ACCOUNT' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING BALANCE'}
                 </div>
                 <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                  Initial Balance (PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Invoiced (PKR ${(financialTotals.totalInvoiced || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Paid (PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  Initial Balance (PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Total Invoiced (PKR ${(financialTotals.totalInvoiced || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Paid Amount (PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                 </div>
               </td>
               <td style="vertical-align: middle; text-align: right; width: 260px;">
                 <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0a382c;">
-                  Net Account Balance (Net Running Balance)
+                  Net Account Balance
                 </div>
                 <div style="font-size: 20px; font-weight: 900; font-family: monospace; margin-top: 2px; ${financialTotals.currentBalance > 0 ? 'color: #991b1b;' : 'color: #065f46;'}">
                   PKR ${(financialTotals.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1754,17 +1733,6 @@ export default function CustomerLedgerView({
               <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 border border-emerald-200 text-[#0a382c]">
                 Customer Account Ledger
               </span>
-              {(customer.balance || 0) > 0 ? (
-                <span className="px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  PKR {(customer.balance || 0).toFixed(2)} Pending
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Account Cleared
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-4 text-xs font-medium text-slate-500 mt-1.5 flex-wrap">
               <span className="flex items-center gap-1">
@@ -1827,7 +1795,7 @@ export default function CustomerLedgerView({
       </div>
 
       {/* Financial Metrics Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Initial Balance</span>
@@ -1888,21 +1856,6 @@ export default function CustomerLedgerView({
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Pending on Invoices</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-700">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-amber-900 mt-2 font-mono">
-            PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="text-xs text-amber-700/80 mt-1 font-medium">
-            Invoice balances due
-          </div>
-        </div>
-
         <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Net Account Balance</span>
@@ -1914,7 +1867,7 @@ export default function CustomerLedgerView({
             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            Same as final Net Running Balance: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            Initial (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}) + Total Invoiced - Total Paid - Return Value
           </div>
         </div>
       </div>
@@ -2715,12 +2668,12 @@ export default function CustomerLedgerView({
                           PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-4 px-5 text-right text-sm font-black font-mono">
-                          <span className={financialTotals.currentBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}>
-                            PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className={finalRunningBalance > 0 ? 'text-rose-700' : 'text-emerald-800'}>
+                            PKR {finalRunningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td className="py-4 px-5 text-center text-slate-500 font-bold text-xs whitespace-nowrap">
-                          Net Account Balance
+                          Net Running Balance
                         </td>
                         <td className="py-4 px-5 text-right text-slate-400 text-xs"></td>
                       </tr>
@@ -2747,13 +2700,13 @@ export default function CustomerLedgerView({
                   </div>
                   <div className="text-left sm:text-right bg-white/10 px-5 py-3 rounded-xl border border-white/15 flex flex-col items-start sm:items-end">
                     <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
-                      Net Account Balance (Net Running Balance)
+                      Net Account Balance
                     </div>
                     <div className="text-2xl font-black font-mono text-white mt-1">
                       PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <div className="text-[10px] text-emerald-200/90 font-semibold mt-1 whitespace-nowrap">
-                      Net Running Balance at end: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      (Initial + Invoiced - Paid - Returns)
                     </div>
                   </div>
                 </div>
@@ -3384,7 +3337,7 @@ export default function CustomerLedgerView({
             <p className="font-semibold">Initial Balance: PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             <p className="font-semibold">Total Invoiced: PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             <p className="font-semibold">Total Paid: PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-            <p className="font-semibold">Pending on Invoices: PKR {financialTotals.totalPending.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="font-semibold">Return Value: PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             <p className="font-black text-sm text-black mt-1">
               Net Account Balance: PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
@@ -3423,7 +3376,7 @@ export default function CustomerLedgerView({
               <td colSpan={4} className="p-2 text-right uppercase border-r border-black">Totals:</td>
               <td className="p-2 text-right border-r border-black">PKR {financialTotals.totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td className="p-2 text-right border-r border-black">PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-              <td className="p-2 text-right font-black font-mono">PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td className="p-2 text-right font-black font-mono">PKR {finalRunningBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             </tr>
           </tfoot>
         </table>
@@ -3444,7 +3397,7 @@ export default function CustomerLedgerView({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-black uppercase tracking-wider">Net Account Balance (Net Running Balance)</div>
+            <div className="text-[10px] font-black uppercase tracking-wider">Net Account Balance</div>
             <div className="text-xl font-black font-mono text-black mt-1">
               PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>

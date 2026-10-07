@@ -37,6 +37,7 @@ export interface DataStoreState {
   quotations: any[];
   inventoryLogs: any[];
   vendorPayments: any[];
+  customerPayments: any[];
   storeDetails: StoreDetails;
 
   salesLoaded: boolean;
@@ -47,6 +48,7 @@ export interface DataStoreState {
   quotationsLoaded: boolean;
   inventoryLogsLoaded: boolean;
   vendorPaymentsLoaded: boolean;
+  customerPaymentsLoaded: boolean;
   storeDetailsLoaded: boolean;
 
   setStoreId: (storeId: string | null) => void;
@@ -58,6 +60,7 @@ export interface DataStoreState {
   setQuotations: (quotations: any[]) => void;
   setInventoryLogs: (logs: any[]) => void;
   setVendorPayments: (payments: any[]) => void;
+  setCustomerPayments: (payments: any[]) => void;
   setStoreDetails: (details: Partial<StoreDetails>) => void;
   resetAll: () => void;
 }
@@ -161,6 +164,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
   quotations: [],
   inventoryLogs: [],
   vendorPayments: [],
+  customerPayments: [],
   storeDetails: defaultStoreDetails,
 
   salesLoaded: false,
@@ -171,6 +175,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
   quotationsLoaded: false,
   inventoryLogsLoaded: false,
   vendorPaymentsLoaded: false,
+  customerPaymentsLoaded: false,
   storeDetailsLoaded: false,
 
   setStoreId: (storeId) => set({ storeId }),
@@ -182,6 +187,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
   setQuotations: (quotations) => set({ quotations, quotationsLoaded: true }),
   setInventoryLogs: (inventoryLogs) => set({ inventoryLogs, inventoryLogsLoaded: true }),
   setVendorPayments: (vendorPayments) => set({ vendorPayments, vendorPaymentsLoaded: true }),
+  setCustomerPayments: (customerPayments) => set({ customerPayments, customerPaymentsLoaded: true }),
   setStoreDetails: (details) => set((state) => ({
     storeDetails: { ...state.storeDetails, ...details },
     storeDetailsLoaded: true
@@ -195,6 +201,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
     quotations: [],
     inventoryLogs: [],
     vendorPayments: [],
+    customerPayments: [],
     storeDetails: defaultStoreDetails,
     salesLoaded: false,
     productsLoaded: false,
@@ -204,6 +211,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
     quotationsLoaded: false,
     inventoryLogsLoaded: false,
     vendorPaymentsLoaded: false,
+    customerPaymentsLoaded: false,
     storeDetailsLoaded: false
   })
 }));
@@ -330,7 +338,20 @@ export const initDataListeners = (storeId: string): (() => void) => {
   });
   activeSubscriptions.push(unsubPayments);
 
-  // 9. Store Details & Settings
+  // 9. Customer Payments query
+  const qCustomerPayments = query(collection(db, 'customerPayments'), where('storeId', '==', storeId));
+  const unsubCustPayments = onSnapshot(qCustomerPayments, (snapshot) => {
+    const list: any[] = [];
+    snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    list.sort((a, b) => getTimeMillis(b) - getTimeMillis(a));
+    useDataStore.getState().setCustomerPayments(list);
+  }, (err) => {
+    console.warn('DataStore customerPayments error:', err);
+    useDataStore.setState({ customerPaymentsLoaded: true });
+  });
+  activeSubscriptions.push(unsubCustPayments);
+
+  // 10. Store Details & Settings
   const storeRef = doc(db, 'stores', storeId);
   const unsubStore = onSnapshot(storeRef, (docSnap) => {
     if (docSnap.exists()) {

@@ -29,6 +29,7 @@ export default function Customers() {
   // Instant persistent reactive data from useDataStore
   const customers = useDataStore((s) => s.customers);
   const sales = useDataStore((s) => s.sales);
+  const customerPayments = useDataStore((s) => s.customerPayments);
   const loading = useDataStore((s) => !s.customersLoaded);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,31 +37,51 @@ export default function Customers() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [ledgerCustomer, setLedgerCustomer] = useState<Customer | null>(null);
 
-  // Fast O(N) aggregate map of sales data per customer (avoids quadratic filtering loops)
-  const customerSalesAggregateMap = useMemo(() => {
-    const map = new Map<string, { pending: number; returns: number; salesCount: number }>();
+  // Fast aggregate map of all transactions (sales invoices, direct payments, returns) per customer
+  const customerLedgerAggregateMap = useMemo(() => {
+    const map = new Map<string, { 
+      totalInvoiced: number; 
+      totalPaid: number; 
+      totalReturns: number;
+    }>();
+
     for (const s of sales) {
       if (!s.customerId) continue;
       let entry = map.get(s.customerId);
       if (!entry) {
-        entry = { pending: 0, returns: 0, salesCount: 0 };
+        entry = { totalInvoiced: 0, totalPaid: 0, totalReturns: 0 };
         map.set(s.customerId, entry);
       }
-      entry.salesCount++;
-      const pending = s.pendingAmount !== undefined 
-        ? s.pendingAmount 
-        : (s.status === 'Pending' ? (s.total || 0) : (s.status === 'Paid' ? 0 : Math.max(0, (s.total || 0) - (s.paidAmount || 0))));
-      entry.pending += pending;
+      entry.totalInvoiced += Number(s.total) || 0;
       if (Array.isArray(s.returns) && s.returns.length > 0) {
         for (const r of s.returns) {
-          entry.returns += Number(r.totalRefund) || 0;
+          entry.totalReturns += Number(r.totalRefund) || 0;
         }
       } else if (typeof s.totalRefunded === 'number' && s.totalRefunded > 0) {
-        entry.returns += s.totalRefunded;
+        entry.totalReturns += s.totalRefunded;
       }
     }
+
+    const recordedReturnRefs = new Set<string>();
+    for (const p of customerPayments) {
+      if (!p.customerId) continue;
+      let entry = map.get(p.customerId);
+      if (!entry) {
+        entry = { totalInvoiced: 0, totalPaid: 0, totalReturns: 0 };
+        map.set(p.customerId, entry);
+      }
+      const isReturn = p.type === 'ReturnCredit' || (p.refundAmount && p.refundAmount > 0);
+      if (isReturn) {
+        if (p.referenceNo && recordedReturnRefs.has(p.referenceNo)) continue;
+        if (p.referenceNo) recordedReturnRefs.add(p.referenceNo);
+        entry.totalReturns += Number(p.refundAmount || p.paidAmount || 0);
+      } else {
+        entry.totalPaid += Number(p.paidAmount || 0);
+      }
+    }
+
     return map;
-  }, [sales]);
+  }, [sales, customerPayments]);
 
   // 1. Initial / Opening balance for a customer
   const getCustomerInitialBalance = (customer: Customer): number => {
@@ -70,33 +91,17 @@ export default function Customers() {
     if (customer.initialBalance !== undefined && customer.initialBalance !== null && !isNaN(Number(customer.initialBalance))) {
       return Number(customer.initialBalance);
     }
-    const agg = customerSalesAggregateMap.get(customer.id);
-    if ((!agg || agg.salesCount === 0) && customer.balance !== undefined && !isNaN(Number(customer.balance))) {
-      return Number(customer.balance);
-    }
     return 0;
   };
 
-  // 2. Pending on Invoices for a customer
-  const getCustomerPendingInvoices = (customerId: string): number => {
-    return customerSalesAggregateMap.get(customerId)?.pending || 0;
-  };
-
-  // 3. Return value for a customer across sales returns / refunded invoices
-  const getCustomerReturnValue = (customerId: string): number => {
-    const ret = customerSalesAggregateMap.get(customerId)?.returns || 0;
-    return Number(ret.toFixed(2));
-  };
-
-  // 4. In Customer ledger, Net Account Balance = Stored account ledger balance (or initial + pending - returns if unset)
+  // 2. Net Account Balance for a customer = Initial Balance + Total Invoiced - Total Paid Amount - Return Value
   const getCustomerNetAccountBalance = (customer: Customer): number => {
-    if (customer.balance !== undefined && customer.balance !== null && !isNaN(Number(customer.balance))) {
-      return Number(Number(customer.balance).toFixed(2));
-    }
+    const agg = customerLedgerAggregateMap.get(customer.id);
     const initial = getCustomerInitialBalance(customer);
-    const pending = getCustomerPendingInvoices(customer.id);
-    const returnVal = getCustomerReturnValue(customer.id);
-    return Number((initial + pending - returnVal).toFixed(2));
+    const invoiced = agg?.totalInvoiced || 0;
+    const paid = agg?.totalPaid || 0;
+    const ret = agg?.totalReturns || 0;
+    return Number((initial + invoiced - paid - ret).toFixed(2));
   };
 
   // Overall financial summary metrics
@@ -120,7 +125,7 @@ export default function Customers() {
       pendingAccountsCount: pendingCount,
       settledAccountsCount: settledCount
     };
-  }, [customers, sales]);
+  }, [customers, customerLedgerAggregateMap]);
 
   const handleAddCustomer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -161,9 +166,11 @@ export default function Customers() {
 
     const formData = new FormData(e.currentTarget);
     const openingBalVal = Number(formData.get('balance')) || 0;
-    const pendingInvoices = getCustomerPendingInvoices(editingCustomer.id);
-    const returnVal = getCustomerReturnValue(editingCustomer.id);
-    const calculatedNetBalance = Number((openingBalVal + pendingInvoices - returnVal).toFixed(2));
+    const agg = customerLedgerAggregateMap.get(editingCustomer.id);
+    const invoiced = agg?.totalInvoiced || 0;
+    const paid = agg?.totalPaid || 0;
+    const ret = agg?.totalReturns || 0;
+    const calculatedNetBalance = Number((openingBalVal + invoiced - paid - ret).toFixed(2));
 
     const updatedCustomer = {
       name: formData.get('name'),
@@ -407,7 +414,7 @@ export default function Customers() {
             <thead className="bg-[#f8faf9]">
               <tr>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer Details</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-56" title="Net Account Balance = Initial Balance + Pending on Invoices">
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-56" title="Net Account Balance = Initial Balance + Total Invoiced - Total Paid - Return Value">
                   Net Balance
                 </th>
                 <th scope="col" className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">
@@ -431,8 +438,10 @@ export default function Customers() {
               ) : (
                 paginatedCustomers.map((customer) => {
                   const initialBal = getCustomerInitialBalance(customer);
-                  const pendingBal = getCustomerPendingInvoices(customer.id);
-                  const returnVal = getCustomerReturnValue(customer.id);
+                  const ledgerAgg = customerLedgerAggregateMap.get(customer.id);
+                  const invoicedBal = ledgerAgg?.totalInvoiced || 0;
+                  const paidBal = ledgerAgg?.totalPaid || 0;
+                  const returnVal = ledgerAgg?.totalReturns || 0;
                   const netBal = getCustomerNetAccountBalance(customer);
                   const addressDisplay = [customer.address, customer.city].filter(Boolean).join(', ');
 
@@ -486,12 +495,12 @@ export default function Customers() {
                               Cleared
                             </span>
                           )}
-                          {(initialBal > 0 || pendingBal > 0 || returnVal > 0) && (
+                          {(initialBal !== 0 || invoicedBal > 0 || paidBal > 0 || returnVal > 0) && (
                             <span 
                               className="text-[10px] text-slate-400 font-medium font-mono hidden sm:inline" 
-                              title={`Initial Balance: PKR ${initialBal.toFixed(2)} | Invoices Pending: PKR ${pendingBal.toFixed(2)} | Returns: PKR ${returnVal.toFixed(2)}`}
+                              title={`Initial: PKR ${initialBal.toFixed(2)} | Invoiced: PKR ${invoicedBal.toFixed(2)} | Paid: PKR ${paidBal.toFixed(2)} | Returns: PKR ${returnVal.toFixed(2)} | Net Balance: PKR ${netBal.toFixed(2)}`}
                             >
-                              (Init: {initialBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} + Pend: {pendingBal.toLocaleString('en-US', { maximumFractionDigits: 0 })}{returnVal > 0 ? ` - Ret: ${returnVal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''})
+                              (Init: {initialBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} + Inv: {invoicedBal.toLocaleString('en-US', { maximumFractionDigits: 0 })} - Paid: {paidBal.toLocaleString('en-US', { maximumFractionDigits: 0 })}{returnVal > 0 ? ` - Ret: ${returnVal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''})
                             </span>
                           )}
                         </div>
