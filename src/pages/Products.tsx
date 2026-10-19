@@ -19,6 +19,8 @@ interface Product {
   purchasePrice: number;
   salePrice: number;
   stock: number;
+  vendorId?: string | null;
+  vendorName?: string | null;
 }
 
 export default function Products() {

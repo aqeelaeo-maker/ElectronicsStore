@@ -65,6 +65,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const products = useDataStore((s) => s.products);
   const vendors = useDataStore((s) => s.vendors);
   const logs = useDataStore((s) => s.inventoryLogs);
+  const allSerials = useDataStore((s) => s.allSerials);
   const loading = useDataStore((s) => !s.productsLoaded);
   const storeDetails = useDataStore((s) => s.storeDetails);
   const units = storeDetails.units || [];
@@ -99,6 +100,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
   const [editProdStock, setEditProdStock] = useState<number>(0);
   const [editProdPurchasePrice, setEditProdPurchasePrice] = useState<number>(0);
   const [editProdSalePrice, setEditProdSalePrice] = useState<number>(0);
+  const [editProdVendorId, setEditProdVendorId] = useState<string>('');
   const [savingProductEdit, setSavingProductEdit] = useState(false);
 
   // Serial Numbers for Product being edited
@@ -202,6 +204,19 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     setEditProdStock(product.stock || 0);
     setEditProdPurchasePrice(product.purchasePrice || 0);
     setEditProdSalePrice(product.salePrice || 0);
+
+    const directVendorId = (product as any).vendorId;
+    if (directVendorId) {
+      setEditProdVendorId(directVendorId);
+    } else {
+      const logWithVendor = logs.find(l => l.productId === product.id && l.vendorId);
+      if (logWithVendor?.vendorId) {
+        setEditProdVendorId(logWithVendor.vendorId);
+      } else {
+        const serialWithVendor = allSerials.find(s => s.productId === product.id && s.vendorId);
+        setEditProdVendorId(serialWithVendor?.vendorId || '');
+      }
+    }
   };
 
   // Fetch Serial Numbers for Product being edited
@@ -285,6 +300,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
 
     setSavingProductEdit(true);
     try {
+      const selectedVendor = vendors.find(v => v.id === editProdVendorId);
       await updateDoc(doc(db, 'products', editingProduct.id), {
         name: editProdName,
         brand: editProdBrand,
@@ -294,6 +310,8 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
         stock: editProdStock,
         purchasePrice: editProdPurchasePrice,
         salePrice: editProdSalePrice,
+        vendorId: editProdVendorId || null,
+        vendorName: selectedVendor ? (selectedVendor.companyName || selectedVendor.name) : null,
         updatedAt: serverTimestamp()
       });
       toast.success('Product updated successfully');
@@ -332,12 +350,114 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     localStorage.setItem('pos_per_page_inventory', String(val));
   };
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.brand.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.modelNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Map of productId to Vendor Name (resolved from product doc, inventory logs, serial numbers, or vendors list)
+  const productVendorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const vendorById = new Map<string, string>();
+    vendors.forEach((v) => {
+      const name = v.companyName || v.name || '';
+      if (name) vendorById.set(v.id, name);
+    });
+
+    products.forEach((p) => {
+      // 1. Direct on product document
+      if ((p as any).vendorName) {
+        map.set(p.id, (p as any).vendorName);
+        return;
+      }
+      if ((p as any).vendorId && vendorById.has((p as any).vendorId)) {
+        map.set(p.id, vendorById.get((p as any).vendorId)!);
+        return;
+      }
+
+      // 2. Latest inventory log with vendor
+      const matchedLog = logs.find(
+        (l) => l.productId === p.id && (l.vendorName || (l.vendorId && vendorById.has(l.vendorId)))
+      );
+      if (matchedLog) {
+        const vName = matchedLog.vendorName || (matchedLog.vendorId ? vendorById.get(matchedLog.vendorId) : '');
+        if (vName) {
+          map.set(p.id, vName);
+          return;
+        }
+      }
+
+      // 3. Serial document with vendor
+      const matchedSerial = allSerials.find(
+        (s) => s.productId === p.id && (s.vendorName || (s.vendorId && vendorById.has(s.vendorId)))
+      );
+      if (matchedSerial) {
+        const vName = matchedSerial.vendorName || (matchedSerial.vendorId ? vendorById.get(matchedSerial.vendorId) : '');
+        if (vName) {
+          map.set(p.id, vName);
+          return;
+        }
+      }
+    });
+
+    return map;
+  }, [products, vendors, logs, allSerials]);
+
+  // Map of productId to all serial numbers registered for this product
+  const productSerialsMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    allSerials.forEach((s) => {
+      if (s.productId && s.serialNumber) {
+        const trimmed = String(s.serialNumber).trim();
+        if (trimmed) {
+          const list = map.get(s.productId) || [];
+          if (!list.includes(trimmed)) {
+            list.push(trimmed);
+            map.set(s.productId, list);
+          }
+        }
+      }
+    });
+
+    logs.forEach((l) => {
+      if (l.productId && Array.isArray(l.serialNumbers)) {
+        l.serialNumbers.forEach((sn: string) => {
+          const trimmed = String(sn).trim();
+          if (trimmed) {
+            const list = map.get(l.productId) || [];
+            if (!list.includes(trimmed)) {
+              list.push(trimmed);
+              map.set(l.productId, list);
+            }
+          }
+        });
+      }
+    });
+
+    return map;
+  }, [allSerials, logs]);
+
+  // Search Products by Name, Model, Brand, Category, Vendor Name, and Serial Numbers
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return products;
+
+    return products.filter((p) => {
+      // 1. Search by Name
+      if (p.name && p.name.toLowerCase().includes(term)) return true;
+      // 2. Search by Model Number
+      if (p.modelNumber && p.modelNumber.toLowerCase().includes(term)) return true;
+      // 3. Search by Brand
+      if (p.brand && p.brand.toLowerCase().includes(term)) return true;
+      // 4. Search by Category
+      if (p.category && p.category.toLowerCase().includes(term)) return true;
+      // 5. Search by Vendor Name
+      const vendorName = productVendorMap.get(p.id);
+      if (vendorName && vendorName.toLowerCase().includes(term)) return true;
+      // 6. Search by Serial Numbers
+      const serials = productSerialsMap.get(p.id);
+      if (serials && serials.some((sn) => sn.toLowerCase().includes(term))) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [products, searchTerm, productVendorMap, productSerialsMap]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -440,15 +560,25 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
       {activeTab === 'current' ? (
         <div className="glass-panel rounded-2xl shadow-xs flex-1 flex flex-col overflow-hidden bg-white animate-in fade-in duration-200">
           <div className="px-6 py-4 border-b border-slate-150 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-80">
               <input
                 type="text"
-                placeholder="Search products by name, model, brand..."
-                className="glass-input block w-full pl-10 pr-3 py-2.5 rounded-xl text-xs"
+                placeholder="Search products by name, model, brand, serial numbers..."
+                className="glass-input block w-full pl-10 pr-8 py-2.5 rounded-xl text-xs"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             <button
@@ -476,67 +606,103 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
               <table className="min-w-full divide-y divide-slate-100 table-fixed">
                 <thead className="bg-[#f8faf9] sticky top-0 z-10">
                   <tr>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[35%]">Product Info</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Stock Level</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[18%]">Purchase Price</th>
-                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[18%]">Sale Price</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[28%]">Product Info</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[16%]">Vendor Name</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[14%]">Stock Level</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[14%]">Purchase Price</th>
+                    <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[14%]">Sale Price</th>
                     <th scope="col" className="px-6 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[14%]">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {paginatedProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-900 text-sm">{product.name}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {product.brand} | Model: {product.modelNumber}
-                        </div>
-                        <div className="mt-1.5">
-                          <span className="text-[10px] font-bold text-[#0a382c] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
-                            {product.category}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStockBadge(product.stock || 0)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800 font-mono">
-                        PKR {(product.purchasePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#0a382c] font-mono">
-                        PKR {(product.salePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAddStock(product)}
-                            className="p-1 text-emerald-800 hover:text-white hover:bg-[#0a382c] rounded-lg transition-all border border-emerald-200 hover:border-transparent cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-1"
-                            title="Quick Add Serialized Stock"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Add
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditProduct(product)}
-                            className="p-1.5 text-slate-500 hover:text-[#0a382c] hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-150 cursor-pointer"
-                            title="Edit Product"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteProduct(product.id, product.name)}
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-150 cursor-pointer"
-                            title="Delete Product"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {paginatedProducts.map((product) => {
+                    const vendorName = productVendorMap.get(product.id);
+                    const matchingSerials = searchTerm.trim() 
+                      ? (productSerialsMap.get(product.id) || []).filter(sn => sn.toLowerCase().includes(searchTerm.trim().toLowerCase()))
+                      : [];
+
+                    return (
+                      <tr key={product.id} className="hover:bg-[#f8faf9] transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-slate-900 text-sm">{product.name}</div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {product.brand} | Model: {product.modelNumber}
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-[#0a382c] bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded uppercase tracking-wider">
+                              {product.category}
+                            </span>
+                            {matchingSerials.length > 0 && (
+                              <span 
+                                className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md"
+                                title={`Matched Serial Numbers: ${matchingSerials.join(', ')}`}
+                              >
+                                <Barcode className="w-3 h-3 text-[#0a382c]" />
+                                <span>S/N: {matchingSerials.slice(0, 2).join(', ')}{matchingSerials.length > 2 ? ` +${matchingSerials.length - 2}` : ''}</span>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {vendorName ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-[#0a382c] border border-emerald-200 flex items-center justify-center font-black text-[11px] shrink-0 uppercase">
+                                {vendorName.charAt(0)}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 text-xs block truncate" title={vendorName}>
+                                  {vendorName}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  Supplier
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs font-medium" title="No vendor assigned">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStockBadge(product.stock || 0)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800 font-mono">
+                          PKR {(product.purchasePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#0a382c] font-mono">
+                          PKR {(product.salePrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAddStock(product)}
+                              className="p-1 text-emerald-800 hover:text-white hover:bg-[#0a382c] rounded-lg transition-all border border-emerald-200 hover:border-transparent cursor-pointer flex items-center gap-1 text-[10px] font-extrabold uppercase px-2 py-1"
+                              title="Quick Add Serialized Stock"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditProduct(product)}
+                              className="p-1.5 text-slate-500 hover:text-[#0a382c] hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-150 cursor-pointer"
+                              title="Edit Product"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProduct(product.id, product.name)}
+                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-150 cursor-pointer"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -881,7 +1047,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
               <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1">
                 {/* Form fields */}
                 <form id="edit-product-form" onSubmit={handleSaveProductEdit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                         Product Name <span className="text-rose-500">*</span>
@@ -905,6 +1071,23 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
                         value={editProdBrand}
                         onChange={(e) => setEditProdBrand(e.target.value)}
                       />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Vendor / Supplier
+                      </label>
+                      <select
+                        className="glass-input block w-full rounded-xl py-2 px-3 text-xs font-semibold text-slate-800"
+                        value={editProdVendorId}
+                        onChange={(e) => setEditProdVendorId(e.target.value)}
+                      >
+                        <option value="">-- No Vendor Assigned --</option>
+                        {vendors.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.companyName || v.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

@@ -58,6 +58,8 @@ export interface Product {
   purchasePrice?: number;
   salePrice?: number;
   stock?: number;
+  vendorId?: string | null;
+  vendorName?: string | null;
 }
 
 export interface Vendor {
@@ -892,6 +894,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
               stock: newStock,
               purchasePrice: purchasePriceInput,
               salePrice: salePriceInput,
+              ...(selectedVendorId ? { vendorId: selectedVendorId, vendorName: selectedVendor?.companyName || null } : {}),
               updatedAt: serverTimestamp()
             });
 
@@ -943,6 +946,7 @@ export default function AddInventoryStock({ onBack, initialProduct }: AddInvento
           stock: newStock,
           purchasePrice: purchasePriceInput,
           salePrice: salePriceInput,
+          ...(selectedVendorId ? { vendorId: selectedVendorId, vendorName: selectedVendor?.companyName || null } : {}),
           updatedAt: serverTimestamp()
         });
 
