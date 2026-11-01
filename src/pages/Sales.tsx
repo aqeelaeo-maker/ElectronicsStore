@@ -10,7 +10,8 @@ import {
   orderBy, 
   where,
   getDoc,
-  getDocs
+  getDocs,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -235,6 +236,29 @@ export default function Sales() {
   }>>([]);
   const [saving, setSaving] = useState(false);
   const [printOnCreate, setPrintOnCreate] = useState(false);
+  const printOnCreateRef = useRef(false);
+
+  // Synchronize offline sales backup into dataStore if not yet populated from network
+  useEffect(() => {
+    try {
+      const backupRaw = localStorage.getItem('app_offline_sales_backup');
+      if (backupRaw) {
+        const backupList: Sale[] = JSON.parse(backupRaw);
+        if (Array.isArray(backupList) && backupList.length > 0) {
+          const currentSales = useDataStore.getState().sales;
+          const currentIds = new Set(currentSales.map(s => s.id));
+          const missingSales = backupList.filter(s => s && s.id && !currentIds.has(s.id));
+          if (missingSales.length > 0) {
+            useDataStore.setState({
+              sales: [...missingSales, ...currentSales]
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not restore offline sales backup:', e);
+    }
+  }, []);
 
   // Serial Selection & Scanner States
   const [showSalesCameraScanner, setShowSalesCameraScanner] = useState(false);
@@ -1015,6 +1039,8 @@ export default function Sales() {
 
     try {
       setIsAddingCustomer(true);
+      const effectiveStoreId = storeId || useDataStore.getState().storeId || localStorage.getItem('app_store_id') || 'default-store';
+      const newCustRef = doc(collection(db, 'customers'));
       const newCustomerData = {
         name,
         mobile: '',
@@ -1024,12 +1050,25 @@ export default function Sales() {
         balance: 0,
         openingBalance: 0,
         initialBalance: 0,
-        storeId,
+        storeId: effectiveStoreId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
-      const docRef = await addDoc(collection(db, 'customers'), newCustomerData);
-      setSelectedCustomerId(docRef.id);
+      
+      const newCustomerRecord = {
+        id: newCustRef.id,
+        ...newCustomerData
+      };
+
+      // Optimistically add to useDataStore so UI has customer immediately even offline
+      useDataStore.setState({
+        customers: [...useDataStore.getState().customers, newCustomerRecord]
+      });
+
+      // Write to Firestore cache/server in background
+      setDoc(newCustRef, newCustomerData).catch(err => console.warn('Offline customer save:', err));
+
+      setSelectedCustomerId(newCustRef.id);
       setCustomerSearchInput(name);
       setIsCustomerDropdownOpen(false);
       toast.success(`Customer "${name}" added to customers list!`);
@@ -1158,6 +1197,7 @@ export default function Sales() {
     
     setSaving(true);
     try {
+      const effectiveStoreId = storeId || useDataStore.getState().storeId || localStorage.getItem('app_store_id') || 'default-store';
       const batch = writeBatch(db);
       
       // If deleted invoice was paid online, revert the bank account balance by the actual paid amount
@@ -1165,32 +1205,28 @@ export default function Sales() {
         ? sale.paidAmount 
         : (sale.status === 'Paid' ? sale.total : 0);
 
-      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && salePaidAmount > 0 && storeId) {
+      if (sale.paymentMode === 'Online' && sale.bankAccountNumber && salePaidAmount > 0 && effectiveStoreId) {
         try {
-          const storeRef = doc(db, 'stores', storeId);
-          const storeSnap = await getDoc(storeRef);
-          if (storeSnap.exists()) {
-            const storeData = storeSnap.data();
-            let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
-            currentAccounts = currentAccounts.map((acc: any) => {
-              const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
-              const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
-              if (acc.accountNumber === sale.bankAccountNumber) {
-                return {
-                  ...acc,
-                  balance: Number((curBal - salePaidAmount).toFixed(2))
-                };
-              }
+          const storeRef = doc(db, 'stores', effectiveStoreId);
+          let currentAccounts = Array.isArray(storeDetails?.bankAccounts) ? [...storeDetails.bankAccounts] : [];
+          currentAccounts = currentAccounts.map((acc: any) => {
+            const opBal = typeof acc.openingBalance === 'number' ? acc.openingBalance : (parseFloat(acc.openingBalance) || 0);
+            const curBal = typeof acc.balance === 'number' ? acc.balance : (parseFloat(acc.balance) || opBal);
+            if (acc.accountNumber === sale.bankAccountNumber) {
               return {
                 ...acc,
-                balance: curBal
+                balance: Number((curBal - salePaidAmount).toFixed(2))
               };
-            });
-            batch.update(storeRef, {
-              bankAccounts: currentAccounts,
-              updatedAt: serverTimestamp()
-            });
-          }
+            }
+            return {
+              ...acc,
+              balance: curBal
+            };
+          });
+          batch.update(storeRef, {
+            bankAccounts: currentAccounts,
+            updatedAt: serverTimestamp()
+          });
         } catch (storeErr) {
           console.warn('Could not revert store bank balance on deletion:', storeErr);
         }
@@ -1204,9 +1240,9 @@ export default function Sales() {
       if (salePendingAmount > 0 && sale.customerId && sale.customerId !== 'walk-in') {
         try {
           const customerRef = doc(db, 'customers', sale.customerId);
-          const custSnap = await getDoc(customerRef);
-          if (custSnap.exists()) {
-            const currentCustBal = custSnap.data().balance || 0;
+          const existingCust = customers.find(c => c.id === sale.customerId);
+          if (existingCust) {
+            const currentCustBal = existingCust.balance || 0;
             const newCustBal = Math.max(0, Number((currentCustBal - salePendingAmount).toFixed(2)));
             batch.update(customerRef, {
               balance: newCustBal,
@@ -1221,7 +1257,30 @@ export default function Sales() {
       // Delete the invoice document directly from database
       batch.delete(doc(db, 'sales', sale.id));
       
-      await batch.commit();
+      try {
+        await Promise.race([
+          batch.commit(),
+          new Promise((resolve) => setTimeout(resolve, 1500))
+        ]);
+      } catch (commitErr) {
+        console.warn('Batch commit deletion note:', commitErr);
+      }
+
+      // Optimistic update in dataStore
+      useDataStore.setState({
+        sales: useDataStore.getState().sales.filter(s => s.id !== sale.id)
+      });
+
+      // Remove from localStorage offline backup if present
+      try {
+        const savedBackup = localStorage.getItem('app_offline_sales_backup');
+        if (savedBackup) {
+          const backupList = JSON.parse(savedBackup);
+          const updatedBackup = backupList.filter((b: any) => b.id !== sale.id);
+          localStorage.setItem('app_offline_sales_backup', JSON.stringify(updatedBackup));
+        }
+      } catch {}
+
       toast.success(`Invoice ${sale.invoiceNo} has been deleted successfully!`);
     } catch (error) {
       console.error('Error deleting invoice:', error);
@@ -1232,15 +1291,17 @@ export default function Sales() {
   };
 
   // Submit Detailed Invoice (Create or Edit) using Atomic Batch writes
+  // Submit Detailed Invoice (Create or Edit) using Atomic Batch writes with Offline-First support
   const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!storeId) {
-      toast.error('Store ID not found');
-      return;
-    }
+    const effectiveStoreId = storeId || useDataStore.getState().storeId || localStorage.getItem('app_store_id') || 'default-store';
+
+    // Synchronously capture whether this action should trigger printing
+    const shouldPrint = printOnCreateRef.current;
 
     let customerName = 'Walk In Customer';
     let customerId: string | null = null;
+    let newCustomerDocToSave: any = null;
 
     const trimmedCustomerInput = customerSearchInput.trim();
     const isWalkIn = selectedCustomerId === 'walk-in' || !trimmedCustomerInput || trimmedCustomerInput.toLowerCase() === 'walk in customer' || trimmedCustomerInput.toLowerCase() === 'walk-in customer';
@@ -1260,31 +1321,25 @@ export default function Sales() {
         customerName = cust.name;
         customerId = cust.id;
       } else if (trimmedCustomerInput) {
-        // Customer is not present in the customer list! Automatically add customer to the customers list by just name
-        try {
-          const newCustomerData = {
-            name: trimmedCustomerInput,
-            mobile: '',
-            email: '',
-            city: '',
-            address: '',
-            balance: 0,
-            openingBalance: 0,
-            initialBalance: 0,
-            storeId,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          const docRef = await addDoc(collection(db, 'customers'), newCustomerData);
-          customerId = docRef.id;
-          customerName = trimmedCustomerInput;
-          setSelectedCustomerId(docRef.id);
-          toast.success(`Customer "${trimmedCustomerInput}" added to customers list!`);
-        } catch (addErr) {
-          console.error('Failed to auto-create customer in Firestore:', addErr);
-          customerName = trimmedCustomerInput;
-          customerId = null;
-        }
+        // Customer is not present in the customer list! Generate document reference synchronously for offline compatibility
+        const newCustRef = doc(collection(db, 'customers'));
+        customerId = newCustRef.id;
+        customerName = trimmedCustomerInput;
+        newCustomerDocToSave = {
+          id: customerId,
+          name: trimmedCustomerInput,
+          mobile: '',
+          email: '',
+          city: '',
+          address: '',
+          balance: 0,
+          openingBalance: 0,
+          initialBalance: 0,
+          storeId: effectiveStoreId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        setSelectedCustomerId(customerId);
       }
     }
 
@@ -1359,6 +1414,12 @@ export default function Sales() {
 
     const batch = writeBatch(db);
 
+    // If new customer was created on the fly, include in the atomic batch
+    if (newCustomerDocToSave && customerId) {
+      const newCustDocRef = doc(db, 'customers', customerId);
+      batch.set(newCustDocRef, newCustomerDocToSave);
+    }
+
     const rawItemsToSave: SaleItem[] = invoiceItems.map(item => {
       const prod = products.find(p => p.id === item.productId)!;
       return {
@@ -1411,13 +1472,13 @@ export default function Sales() {
       bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : null,
       accountTitle: paymentMode === 'Online' && matchedBank ? (matchedBank.accountTitle || '') : null,
       date: saleDate,
-      storeId,
+      storeId: effectiveStoreId,
       createdAt: editingSale ? (editingSale as any).createdAt || serverTimestamp() : serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
 
     try {
-      // 1. Set the Sales document (overwrites the existing one if editing, merges or replaces completely)
+      // 1. Set the Sales document
       const saleRef = doc(db, 'sales', saleId);
       batch.set(saleRef, newSaleDoc);
 
@@ -1436,11 +1497,11 @@ export default function Sales() {
 
       // Update product stocks and logs
       for (const [pId, change] of Object.entries(stockChangeMap)) {
-        if (change === 0) continue; // no change in stock for this product
+        if (change === 0) continue;
 
         const prod = products.find(p => p.id === pId)!;
-        const previousStock = prod.stock || 0;
-        const newStock = previousStock + change;
+        const previousStock = prod?.stock || 0;
+        const newStock = Math.max(0, previousStock + change);
 
         // Update product stock count
         const productRef = doc(db, 'products', pId);
@@ -1453,11 +1514,11 @@ export default function Sales() {
         const logId = doc(collection(db, 'inventoryLogs')).id;
         const logRef = doc(db, 'inventoryLogs', logId);
         batch.set(logRef, {
-          storeId,
+          storeId: effectiveStoreId,
           productId: pId,
-          productName: prod.name,
-          productBrand: prod.brand,
-          productModelNumber: prod.modelNumber,
+          productName: prod?.name || '',
+          productBrand: prod?.brand || '',
+          productModelNumber: prod?.modelNumber || '',
           quantityAdded: change,
           previousStock,
           newStock,
@@ -1514,55 +1575,51 @@ export default function Sales() {
         });
       }
 
-      // 4. Update Customer Outstanding Balance & Payment Record
+      // 4. Update Customer Outstanding Balance & Payment Record without blocking getDoc calls
       if (customerId && customerId !== 'walk-in') {
         const customerRef = doc(db, 'customers', customerId);
-        const custSnap = await getDoc(customerRef);
-        if (custSnap.exists()) {
-          const currentCustBalance = custSnap.data().balance || 0;
-          let netBalanceDiff = pendingAmount;
+        const existingCust = customers.find(c => c.id === customerId);
+        const currentCustBalance = existingCust ? (existingCust.balance || 0) : 0;
+        let netBalanceDiff = pendingAmount;
 
-          if (editingSale) {
-            const oldPending = editingSale.pendingAmount !== undefined 
-              ? editingSale.pendingAmount 
-              : (editingSale.status === 'Pending' ? editingSale.total : 0);
-            
-            if (editingSale.customerId === customerId) {
-              netBalanceDiff = pendingAmount - oldPending;
-            } else {
-              // Revert old customer's balance if customer changed
-              if (editingSale.customerId && editingSale.customerId !== 'walk-in') {
-                try {
-                  const oldCustRef = doc(db, 'customers', editingSale.customerId);
-                  const oldCustSnap = await getDoc(oldCustRef);
-                  if (oldCustSnap.exists()) {
-                    const oldCustBal = oldCustSnap.data().balance || 0;
-                    batch.update(oldCustRef, {
-                      balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
-                      updatedAt: serverTimestamp()
-                    });
-                  }
-                } catch (oldErr) {
-                  console.warn('Could not revert old customer balance:', oldErr);
-                }
+        if (editingSale) {
+          const oldPending = editingSale.pendingAmount !== undefined 
+            ? editingSale.pendingAmount 
+            : (editingSale.status === 'Pending' ? editingSale.total : 0);
+          
+          if (editingSale.customerId === customerId) {
+            netBalanceDiff = pendingAmount - oldPending;
+          } else {
+            // Revert old customer's balance if customer changed
+            if (editingSale.customerId && editingSale.customerId !== 'walk-in') {
+              try {
+                const oldCustRef = doc(db, 'customers', editingSale.customerId);
+                const oldCust = customers.find(c => c.id === editingSale.customerId);
+                const oldCustBal = oldCust ? (oldCust.balance || 0) : 0;
+                batch.update(oldCustRef, {
+                  balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
+                  updatedAt: serverTimestamp()
+                });
+              } catch (oldErr) {
+                console.warn('Could not revert old customer balance:', oldErr);
               }
-              netBalanceDiff = pendingAmount;
             }
+            netBalanceDiff = pendingAmount;
           }
-
-          const newCustBalance = Number((currentCustBalance + netBalanceDiff).toFixed(2));
-          batch.update(customerRef, {
-            balance: newCustBalance,
-            updatedAt: serverTimestamp()
-          });
         }
+
+        const newCustBalance = Number((currentCustBalance + netBalanceDiff).toFixed(2));
+        batch.update(customerRef, {
+          balance: newCustBalance,
+          updatedAt: serverTimestamp()
+        });
 
         // Add / Record transaction to customerPayments
         const paymentRecordId = doc(collection(db, 'customerPayments')).id;
         const paymentRef = doc(db, 'customerPayments', paymentRecordId);
         batch.set(paymentRef, {
           id: paymentRecordId,
-          storeId,
+          storeId: effectiveStoreId,
           customerId,
           customerName,
           saleId,
@@ -1589,14 +1646,12 @@ export default function Sales() {
         if (oldPending > 0) {
           try {
             const oldCustRef = doc(db, 'customers', editingSale.customerId);
-            const oldCustSnap = await getDoc(oldCustRef);
-            if (oldCustSnap.exists()) {
-              const oldCustBal = oldCustSnap.data().balance || 0;
-              batch.update(oldCustRef, {
-                balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
-                updatedAt: serverTimestamp()
-              });
-            }
+            const oldCust = customers.find(c => c.id === editingSale.customerId);
+            const oldCustBal = oldCust ? (oldCust.balance || 0) : 0;
+            batch.update(oldCustRef, {
+              balance: Math.max(0, Number((oldCustBal - oldPending).toFixed(2))),
+              updatedAt: serverTimestamp()
+            });
           } catch (oldErr) {
             console.warn('Could not revert old customer balance:', oldErr);
           }
@@ -1604,71 +1659,67 @@ export default function Sales() {
       }
 
       // 5. Update Bank Account Balance in Store document if online payment is involved
-      if (storeId) {
-        const storeRef = doc(db, 'stores', storeId);
-        const storeSnap = await getDoc(storeRef);
-        if (storeSnap.exists()) {
-          const storeData = storeSnap.data();
-          let currentAccounts = Array.isArray(storeData.bankAccounts) ? [...storeData.bankAccounts] : [];
-          let bankChanged = false;
+      if (effectiveStoreId) {
+        const storeRef = doc(db, 'stores', effectiveStoreId);
+        let currentAccounts = Array.isArray(storeDetails?.bankAccounts) ? [...storeDetails.bankAccounts] : [];
+        let bankChanged = false;
 
-          // Normalize accounts
-          currentAccounts = currentAccounts.map((item: any) => {
-            if (typeof item === 'string') {
-              return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
-            }
-            const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
-            const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
-            return {
-              ...item,
-              bankName: item.bankName || '',
-              accountNumber: item.accountNumber || '',
-              accountTitle: item.accountTitle || '',
-              openingBalance: opBal,
-              balance: curBal
-            };
-          });
-
-          // If editing an existing sale that was paid Online, revert its previous online paid amount
-          if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber) {
-            const prevOnlinePaid = editingSale.paidAmount !== undefined 
-              ? editingSale.paidAmount 
-              : (editingSale.status === 'Paid' ? editingSale.total : 0);
-
-            if (prevOnlinePaid > 0) {
-              currentAccounts = currentAccounts.map((acc: any) => {
-                if (acc.accountNumber === editingSale.bankAccountNumber) {
-                  bankChanged = true;
-                  return {
-                    ...acc,
-                    balance: Number(((acc.balance || 0) - prevOnlinePaid).toFixed(2))
-                  };
-                }
-                return acc;
-              });
-            }
+        // Normalize accounts
+        currentAccounts = currentAccounts.map((item: any) => {
+          if (typeof item === 'string') {
+            return { bankName: 'Bank', accountNumber: item, openingBalance: 0, balance: 0 };
           }
+          const opBal = typeof item.openingBalance === 'number' ? item.openingBalance : (parseFloat(item.openingBalance) || 0);
+          const curBal = typeof item.balance === 'number' ? item.balance : (parseFloat(item.balance) || opBal);
+          return {
+            ...item,
+            bankName: item.bankName || '',
+            accountNumber: item.accountNumber || '',
+            accountTitle: item.accountTitle || '',
+            openingBalance: opBal,
+            balance: curBal
+          };
+        });
 
-          // If current invoice is Online and has a positive paidAmount, add paidAmount to selected bank account
-          if (paymentMode === 'Online' && selectedBankAccNumber && paidAmount > 0) {
+        // If editing an existing sale that was paid Online, revert its previous online paid amount
+        if (editingSale && editingSale.paymentMode === 'Online' && editingSale.bankAccountNumber) {
+          const prevOnlinePaid = editingSale.paidAmount !== undefined 
+            ? editingSale.paidAmount 
+            : (editingSale.status === 'Paid' ? editingSale.total : 0);
+
+          if (prevOnlinePaid > 0) {
             currentAccounts = currentAccounts.map((acc: any) => {
-              if (acc.accountNumber === selectedBankAccNumber) {
+              if (acc.accountNumber === editingSale.bankAccountNumber) {
                 bankChanged = true;
                 return {
                   ...acc,
-                  balance: Number(((acc.balance || 0) + paidAmount).toFixed(2))
+                  balance: Number(((acc.balance || 0) - prevOnlinePaid).toFixed(2))
                 };
               }
               return acc;
             });
           }
+        }
 
-          if (bankChanged) {
-            batch.update(storeRef, {
-              bankAccounts: currentAccounts,
-              updatedAt: serverTimestamp()
-            });
-          }
+        // If current invoice is Online and has a positive paidAmount, add paidAmount to selected bank account
+        if (paymentMode === 'Online' && selectedBankAccNumber && paidAmount > 0) {
+          currentAccounts = currentAccounts.map((acc: any) => {
+            if (acc.accountNumber === selectedBankAccNumber) {
+              bankChanged = true;
+              return {
+                ...acc,
+                balance: Number(((acc.balance || 0) + paidAmount).toFixed(2))
+              };
+            }
+            return acc;
+          });
+        }
+
+        if (bankChanged) {
+          batch.update(storeRef, {
+            bankAccounts: currentAccounts,
+            updatedAt: serverTimestamp()
+          });
         }
       }
 
@@ -1682,33 +1733,124 @@ export default function Sales() {
         });
       }
 
-      await batch.commit();
+      // Execute batch commit with a race timeout so offline UI never hangs
+      try {
+        await Promise.race([
+          batch.commit(),
+          new Promise((resolve) => setTimeout(resolve, 1500))
+        ]);
+      } catch (commitErr) {
+        console.warn('Batch commit offline note (will persist locally & sync to server):', commitErr);
+      }
+
+      const createdSale: Sale = {
+        id: saleId,
+        invoiceNo,
+        customerId,
+        customerName,
+        items: itemsToSave,
+        subtotal: itemsSubtotal,
+        discount: invoiceDiscountNum,
+        warranty: invoiceWarranty || 'No Warranty',
+        total: totalAmount,
+        paidAmount,
+        pendingAmount,
+        status: invoiceStatus,
+        date: newSaleDoc.date,
+        paymentMode,
+        bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
+        bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : undefined,
+        accountTitle: paymentMode === 'Online' && matchedBank ? matchedBank.accountTitle : undefined,
+      };
+
+      // Optimistic updates to in-memory state so UI updates instantly even when offline
+      try {
+        const storeState = useDataStore.getState();
+
+        // 1. Update sales
+        let nextSales = [...storeState.sales];
+        if (editingSale) {
+          nextSales = nextSales.map(s => s.id === saleId ? { ...s, ...createdSale } : s);
+        } else {
+          nextSales = [createdSale, ...nextSales.filter(s => s.id !== saleId)];
+        }
+
+        // 2. Update products stock
+        let nextProducts = [...storeState.products];
+        for (const [pId, change] of Object.entries(stockChangeMap)) {
+          if (change === 0) continue;
+          nextProducts = nextProducts.map(p => {
+            if (p.id === pId) {
+              return { ...p, stock: Math.max(0, (p.stock || 0) + change) };
+            }
+            return p;
+          });
+        }
+
+        // 3. Update serial statuses
+        let nextSerials = [...storeState.allSerials];
+        if (serialsToMakeAvailable.length > 0) {
+          const availSet = new Set(serialsToMakeAvailable);
+          nextSerials = nextSerials.map(s => availSet.has(s.serialNumber) ? { ...s, status: 'Available' } : s);
+        }
+        if (newSerialIdsSet.size > 0) {
+          nextSerials = nextSerials.map(s => newSerialIdsSet.has(s.id) ? { ...s, status: 'Sold' } : s);
+        }
+
+        // 4. Update customers
+        let nextCustomers = [...storeState.customers];
+        if (newCustomerDocToSave) {
+          nextCustomers = [...nextCustomers, newCustomerDocToSave];
+        }
+        if (customerId && customerId !== 'walk-in') {
+          nextCustomers = nextCustomers.map(c => {
+            if (c.id === customerId) {
+              const diff = editingSale 
+                ? (pendingAmount - (editingSale.pendingAmount !== undefined ? editingSale.pendingAmount : (editingSale.status === 'Pending' ? editingSale.total : 0)))
+                : pendingAmount;
+              return { ...c, balance: Number(((c.balance || 0) + diff).toFixed(2)) };
+            }
+            return c;
+          });
+        }
+
+        // 5. Update store details bank accounts if online payment
+        let nextStoreDetails = { ...storeState.storeDetails };
+        if (paymentMode === 'Online' && selectedBankAccNumber && paidAmount > 0) {
+          const updatedBankAccounts = (nextStoreDetails.bankAccounts || []).map(acc => {
+            if (acc.accountNumber === selectedBankAccNumber) {
+              return { ...acc, balance: Number(((acc.balance || 0) + paidAmount).toFixed(2)) };
+            }
+            return acc;
+          });
+          nextStoreDetails = { ...nextStoreDetails, bankAccounts: updatedBankAccounts };
+        }
+
+        useDataStore.setState({
+          sales: nextSales,
+          products: nextProducts,
+          allSerials: nextSerials,
+          customers: nextCustomers,
+          storeDetails: nextStoreDetails
+        });
+
+        // 6. Persist sale to localStorage offline backup
+        try {
+          const savedBackup = localStorage.getItem('app_offline_sales_backup');
+          const backupList = savedBackup ? JSON.parse(savedBackup) : [];
+          const updatedBackup = [createdSale, ...backupList.filter((b: any) => b.id !== createdSale.id)].slice(0, 50);
+          localStorage.setItem('app_offline_sales_backup', JSON.stringify(updatedBackup));
+        } catch {}
+      } catch (optErr) {
+        console.warn('Optimistic state update failed:', optErr);
+      }
 
       toast.success(editingSale ? `Invoice ${invoiceNo} updated successfully!` : `Invoice ${invoiceNo} recorded successfully!`);
       setShowModal(false);
       setEditingSale(null);
       setSourceQuotationId(null);
       
-      if (printOnCreate) {
-        const createdSale: Sale = {
-          id: saleId,
-          invoiceNo,
-          customerId,
-          customerName,
-          items: itemsToSave,
-          subtotal: itemsSubtotal,
-          discount: invoiceDiscountNum,
-          warranty: invoiceWarranty || 'No Warranty',
-          total: totalAmount,
-          paidAmount,
-          pendingAmount,
-          status: invoiceStatus,
-          date: newSaleDoc.date,
-          paymentMode,
-          bankAccountNumber: paymentMode === 'Online' && matchedBank ? matchedBank.accountNumber : undefined,
-          bankName: paymentMode === 'Online' && matchedBank ? matchedBank.bankName : undefined,
-          accountTitle: paymentMode === 'Online' && matchedBank ? matchedBank.accountTitle : undefined,
-        };
+      if (shouldPrint) {
         printInvoice(createdSale);
       }
 
@@ -1735,11 +1877,14 @@ export default function Sales() {
       setInvoiceNumber('');
       setInvoiceDate(new Date().toISOString().split('T')[0]);
       setSourceQuotationId(null);
+      printOnCreateRef.current = false;
+      setPrintOnCreate(false);
     } catch (error) {
       console.error('Error submitting sales invoice:', error);
       toast.error(editingSale ? 'Failed to update sales invoice' : 'Failed to create sales invoice');
     } finally {
       setSaving(false);
+      printOnCreateRef.current = false;
     }
   };
 
@@ -4091,9 +4236,12 @@ export default function Sales() {
                 </button>
                 <button 
                   type="submit"
-                  onClick={() => setPrintOnCreate(false)}
-                  disabled={saving || calculateInvoiceTotal() <= 0}
-                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-800 focus:outline-none transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    printOnCreateRef.current = false;
+                    setPrintOnCreate(false);
+                  }}
+                  disabled={saving || invoiceItems.length === 0 || invoiceItems.every(i => !i.productId)}
+                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-sm font-bold text-slate-800 focus:outline-none transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {saving && !printOnCreate ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-800"></div>
@@ -4103,9 +4251,12 @@ export default function Sales() {
                 </button>
                 <button 
                   type="submit"
-                  onClick={() => setPrintOnCreate(true)}
-                  disabled={saving || calculateInvoiceTotal() <= 0}
-                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50 gap-1.5"
+                  onClick={() => {
+                    printOnCreateRef.current = true;
+                    setPrintOnCreate(true);
+                  }}
+                  disabled={saving || invoiceItems.length === 0 || invoiceItems.every(i => !i.productId)}
+                  className="flex-1 sm:flex-none inline-flex justify-center items-center rounded-xl px-5 py-2.5 bg-[#0a382c] hover:bg-[#0d4a3b] text-sm font-bold text-white shadow-md shadow-emerald-950/10 focus:outline-none transition-colors disabled:opacity-50 gap-1.5 cursor-pointer"
                 >
                   {saving && printOnCreate ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>

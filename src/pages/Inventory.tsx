@@ -471,13 +471,31 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
     return filteredProducts.slice(start, start + itemsPerPage);
   }, [filteredProducts, currentPage, itemsPerPage]);
 
+  // Search Logs by Product Name, Model, Brand, Vendor Name, Reference, and Serial Numbers
+  const filteredLogs = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return logs;
+
+    return logs.filter((l) => {
+      if (l.productName && l.productName.toLowerCase().includes(term)) return true;
+      if (l.productBrand && l.productBrand.toLowerCase().includes(term)) return true;
+      if (l.productModelNumber && l.productModelNumber.toLowerCase().includes(term)) return true;
+      if (l.vendorName && l.vendorName.toLowerCase().includes(term)) return true;
+      if (l.referenceNumber && l.referenceNumber.toLowerCase().includes(term)) return true;
+      if (Array.isArray(l.serialNumbers) && l.serialNumbers.some((sn: string) => sn.toLowerCase().includes(term))) {
+        return true;
+      }
+      return false;
+    });
+  }, [logs, searchTerm]);
+
   const paginatedLogs = useMemo(() => {
-    if (itemsPerPage === -1) return logs;
-    const totalPages = Math.max(1, Math.ceil(logs.length / itemsPerPage));
+    if (itemsPerPage === -1) return filteredLogs;
+    const totalPages = Math.max(1, Math.ceil(filteredLogs.length / itemsPerPage));
     const page = Math.min(Math.max(1, currentPage), totalPages);
     const start = (page - 1) * itemsPerPage;
-    return logs.slice(start, start + itemsPerPage);
-  }, [logs, currentPage, itemsPerPage]);
+    return filteredLogs.slice(start, start + itemsPerPage);
+  }, [filteredLogs, currentPage, itemsPerPage]);
 
   const getStockBadge = (stock: number) => {
     if (stock === 0) {
@@ -719,19 +737,45 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
       ) : (
         /* History / Audit Log Table */
         <div className="glass-panel rounded-2xl shadow-xs flex-1 flex flex-col overflow-hidden bg-white">
-          <div className="px-6 py-4 border-b border-slate-150 bg-slate-50/50 flex justify-between items-center">
-            <h2 className="text-lg font-black text-slate-900">Inventory Transaction Log</h2>
-            <span className="text-[10px] font-black text-[#0a382c] bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">
-              {logs.length} Transactions
-            </span>
+          <div className="px-6 py-4 border-b border-slate-150 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-lg font-black text-slate-900">Inventory Transaction Log</h2>
+              <span className="text-[10px] font-black text-[#0a382c] bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">
+                {filteredLogs.length} {filteredLogs.length === 1 ? 'Transaction' : 'Transactions'}
+              </span>
+            </div>
+            <div className="relative w-full sm:w-80">
+              <input
+                type="text"
+                placeholder="Search history by product, serial, vendor..."
+                className="glass-input block w-full pl-10 pr-8 py-2.5 rounded-xl text-xs"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-auto">
-            {logs.length === 0 ? (
+            {filteredLogs.length === 0 ? (
               <div className="text-center py-20 text-slate-400">
                 <History className="w-12 h-12 text-slate-350 mx-auto mb-3" />
-                <p className="text-base font-bold text-slate-700">No Logged Additions Yet</p>
-                <p className="text-xs text-slate-500 mt-1">Added stock entries will show up here as an audit trail.</p>
+                <p className="text-base font-bold text-slate-700">
+                  {searchTerm ? 'No Matching Transaction Logs' : 'No Logged Additions Yet'}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {searchTerm ? 'Try adjusting your search criteria.' : 'Added stock entries will show up here as an audit trail.'}
+                </p>
               </div>
             ) : (
               <table className="min-w-full divide-y divide-slate-100 table-fixed">
@@ -875,7 +919,7 @@ export default function Inventory({ initialAddStock = false }: InventoryProps) {
           </div>
           <Pagination
             currentPage={currentPage}
-            totalItems={logs.length}
+            totalItems={filteredLogs.length}
             itemsPerPage={itemsPerPage}
             onPageChange={setCurrentPage}
             onItemsPerPageChange={handleItemsPerPageChange}
