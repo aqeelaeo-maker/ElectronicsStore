@@ -22,7 +22,7 @@ import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy, limit, where, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { useDataStore } from '../lib/dataStore';
+import { useDataStore, compareSalesDescending } from '../lib/dataStore';
 import { cn } from '../lib/utils';
 
 interface StatCardProps {
@@ -194,7 +194,9 @@ export default function Dashboard() {
     };
   }, [products]);
 
-  const recentSales = sales.slice(0, 4);
+  const recentSales = useMemo(() => {
+    return [...sales].sort(compareSalesDescending).slice(0, 4);
+  }, [sales]);
 
   // Calculate top products based on actual total value sold from real invoices
   const topProducts = useMemo(() => {

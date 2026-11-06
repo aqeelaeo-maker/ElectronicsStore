@@ -100,16 +100,103 @@ const defaultStoreDetails: StoreDetails = {
   ]
 };
 
-const getTimeMillis = (item: any): number => {
-  if (!item) return 0;
-  if (item.createdAt?.toMillis) return item.createdAt.toMillis();
-  if (item.createdAt?.seconds) return item.createdAt.seconds * 1000;
-  if (typeof item.createdAt === 'number') return item.createdAt;
-  if (typeof item.date === 'string') {
-    const t = new Date(item.date).getTime();
+export const parseInvoiceNumberInfo = (invNo?: string) => {
+  if (!invNo) return { year: 0, seq: 0, raw: '' };
+  const raw = String(invNo).trim();
+  const match = raw.match(/(\d{4})[^\d]+(\d+)/);
+  if (match) {
+    return {
+      year: parseInt(match[1], 10) || 0,
+      seq: parseInt(match[2], 10) || 0,
+      raw
+    };
+  }
+  const singleMatch = raw.match(/(\d+)/);
+  if (singleMatch) {
+    return {
+      year: 0,
+      seq: parseInt(singleMatch[1], 10) || 0,
+      raw
+    };
+  }
+  return { year: 0, seq: 0, raw };
+};
+
+export const getSaleTimestamp = (sale: any): number => {
+  if (!sale) return 0;
+  if (sale.createdAt?.toMillis && typeof sale.createdAt.toMillis === 'function') {
+    return sale.createdAt.toMillis();
+  }
+  if (sale.createdAt?.seconds) {
+    return sale.createdAt.seconds * 1000 + (sale.createdAt.nanoseconds || 0) / 1000000;
+  }
+  if (typeof sale.createdAt === 'number') {
+    return sale.createdAt;
+  }
+  if (typeof sale.createdAt === 'string') {
+    const t = new Date(sale.createdAt).getTime();
     if (!isNaN(t)) return t;
   }
+  if (sale.date) {
+    if (typeof sale.date === 'string') {
+      const t = new Date(sale.date).getTime();
+      if (!isNaN(t)) return t;
+    } else if (sale.date instanceof Date) {
+      return sale.date.getTime();
+    } else if (sale.date?.toMillis) {
+      return sale.date.toMillis();
+    } else if (sale.date?.seconds) {
+      return sale.date.seconds * 1000;
+    }
+  }
+  if (sale.updatedAt?.toMillis) return sale.updatedAt.toMillis();
+  if (sale.updatedAt?.seconds) return sale.updatedAt.seconds * 1000;
   return 0;
+};
+
+// Sort invoices in descending order: latest invoice first
+export const compareSalesDescending = (a: any, b: any): number => {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+
+  const infoA = parseInvoiceNumberInfo(a.invoiceNo);
+  const infoB = parseInvoiceNumberInfo(b.invoiceNo);
+
+  // 1. If both have year and sequence (e.g. INV-2026-0005 vs INV-2026-0004)
+  if (infoA.year && infoB.year) {
+    if (infoB.year !== infoA.year) {
+      return infoB.year - infoA.year;
+    }
+    if (infoB.seq !== infoA.seq) {
+      return infoB.seq - infoA.seq;
+    }
+  }
+
+  // 2. If both have sequence numbers
+  if (infoA.seq && infoB.seq && infoB.seq !== infoA.seq) {
+    return infoB.seq - infoA.seq;
+  }
+
+  // 3. Natural alphanumeric comparison on invoice number
+  if (infoA.raw && infoB.raw) {
+    const comp = infoB.raw.localeCompare(infoA.raw, undefined, { numeric: true, sensitivity: 'base' });
+    if (comp !== 0) return comp;
+  }
+
+  // 4. Creation / Sale timestamp descending (most recent date/time first)
+  const timeA = getSaleTimestamp(a);
+  const timeB = getSaleTimestamp(b);
+  if (timeB !== timeA) {
+    return timeB - timeA;
+  }
+
+  // 5. Document ID fallback
+  return (b.id || '').localeCompare(a.id || '');
+};
+
+const getTimeMillis = (item: any): number => {
+  return getSaleTimestamp(item);
 };
 
 type Listener = () => void;
@@ -179,7 +266,7 @@ export const useDataStore = createStore<DataStoreState>((set) => ({
   storeDetailsLoaded: false,
 
   setStoreId: (storeId) => set({ storeId }),
-  setSales: (sales) => set({ sales, salesLoaded: true }),
+  setSales: (sales) => set({ sales: [...sales].sort(compareSalesDescending), salesLoaded: true }),
   setProducts: (products) => set({ products, productsLoaded: true }),
   setCustomers: (customers) => set({ customers, customersLoaded: true }),
   setVendors: (vendors) => set({ vendors, vendorsLoaded: true }),
@@ -240,7 +327,7 @@ export const initDataListeners = (storeId: string): (() => void) => {
   const unsubSales = onSnapshot(qSales, (snapshot) => {
     const list: any[] = [];
     snapshot.forEach((d) => list.push({ id: d.id, ...d.data() }));
-    list.sort((a, b) => getTimeMillis(b) - getTimeMillis(a));
+    list.sort(compareSalesDescending);
     useDataStore.getState().setSales(list);
   }, (err) => {
     console.warn('DataStore sales error:', err);

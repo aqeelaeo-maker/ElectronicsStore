@@ -51,7 +51,7 @@ import {
 import { toast } from 'react-toastify';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useDataStore } from '../lib/dataStore';
+import { useDataStore, compareSalesDescending } from '../lib/dataStore';
 import BarcodeScannerModal, { playScanBeep } from '../components/BarcodeScannerModal';
 import SalesReturnModal, { printReturnReceipt, downloadReturnReceiptPdf, SaleReturnRecord } from '../components/SalesReturnModal';
 import { Pagination } from '../components/Pagination';
@@ -250,7 +250,7 @@ export default function Sales() {
           const missingSales = backupList.filter(s => s && s.id && !currentIds.has(s.id));
           if (missingSales.length > 0) {
             useDataStore.setState({
-              sales: [...missingSales, ...currentSales]
+              sales: [...missingSales, ...currentSales].sort(compareSalesDescending)
             });
           }
         }
@@ -278,8 +278,19 @@ export default function Sales() {
 
   const getNextInvoiceNumber = () => {
     const currentYear = new Date().getFullYear();
-    const yearSales = sales.filter(s => s.invoiceNo && s.invoiceNo.startsWith(`INV-${currentYear}-`));
-    const nextSeq = yearSales.length + 1;
+    let maxSeq = 0;
+    sales.forEach(s => {
+      if (s.invoiceNo) {
+        const match = s.invoiceNo.match(new RegExp(`INV-${currentYear}-(\\d+)`, 'i'));
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxSeq) {
+            maxSeq = num;
+          }
+        }
+      }
+    });
+    const nextSeq = Math.max(sales.length + 1, maxSeq + 1);
     const paddedSeq = String(nextSeq).padStart(4, '0');
     return `INV-${currentYear}-${paddedSeq}`;
   };
@@ -1774,6 +1785,7 @@ export default function Sales() {
         } else {
           nextSales = [createdSale, ...nextSales.filter(s => s.id !== saleId)];
         }
+        nextSales.sort(compareSalesDescending);
 
         // 2. Update products stock
         let nextProducts = [...storeState.products];
@@ -2623,7 +2635,7 @@ export default function Sales() {
     const rawSearch = searchTerm.trim().toLowerCase();
     const cleanSearchAlphanum = rawSearch.replace(/[^a-z0-9]/gi, '');
 
-    return sales.filter(s => {
+    const matched = sales.filter(s => {
       // 1. Fast rejection by status filter first
       if (statusFilter === 'Paid' && s.status !== 'Paid') return false;
       if (statusFilter === 'Pending' && s.status !== 'Pending') return false;
@@ -2655,6 +2667,9 @@ export default function Sales() {
 
       return true;
     });
+
+    // In Sales Invoices all invoices should be in descending order. Latest invoice should be on top.
+    return matched.sort(compareSalesDescending);
   }, [sales, searchTerm, statusFilter, serialIdToNumberMap]);
 
   useEffect(() => {
@@ -5088,7 +5103,9 @@ export default function Sales() {
                       return matchInv || matchCust || matchMode || matchSerial;
                     });
 
-                    if (filtered.length === 0) {
+                    const sortedFiltered = filtered.sort(compareSalesDescending);
+
+                    if (sortedFiltered.length === 0) {
                       return (
                         <div className="p-8 text-center text-slate-400 text-sm italic">
                           No matching invoices found.
@@ -5096,7 +5113,7 @@ export default function Sales() {
                       );
                     }
 
-                    return filtered.map((s) => {
+                    return sortedFiltered.map((s) => {
                       const isFullyReturned = s.returnStatus === 'Fully Returned';
                       const itemsCount = s.items?.length || 0;
                       return (

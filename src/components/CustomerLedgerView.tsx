@@ -45,6 +45,7 @@ import { db, auth } from '../lib/firebase';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { downloadHtmlAsPdf } from '../lib/pdfDownloader';
+import { compareSalesDescending } from '../lib/dataStore';
 
 // Helper to strip any undefined values and prevent Firestore rejection
 function cleanDataForFirestore(obj: any): any {
@@ -249,7 +250,7 @@ export default function CustomerLedgerView({
       snapshot.forEach(d => {
         salesList.push({ id: d.id, ...d.data() } as CustomerSaleRecord);
       });
-      salesList.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+      salesList.sort(compareSalesDescending);
       setSales(salesList);
     }, (err) => {
       console.error('Error fetching customer sales:', err);
