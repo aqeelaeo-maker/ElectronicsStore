@@ -129,7 +129,7 @@ export default function Vendors() {
     return vendorPaymentsMap.get(vendor.id)?.totalReturns || 0;
   };
 
-  // 2. Net Account Balance for a vendor = Initial Balance + Total Invoiced - Total Paid - Return Value
+  // 2. Net Account Balance for a vendor = Initial Balance + Total Purchases - Total Paid - Return Value
   const getVendorNetPayable = (vendor: Vendor): number => {
     const initial = getVendorInitialBalance(vendor);
     const purchasesTotal = getVendorPurchasesTotal(vendor);

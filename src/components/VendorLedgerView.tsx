@@ -369,7 +369,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
       totalPendingFromPurchases += pending;
     });
 
-    const totalInvoiced = currentVendorData.totalPurchases !== undefined && currentVendorData.totalPurchases > 0
+    const totalPurchases = currentVendorData.totalPurchases !== undefined && currentVendorData.totalPurchases > 0
       ? currentVendorData.totalPurchases
       : Number(totalPurchased.toFixed(2));
 
@@ -400,13 +400,14 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
     totalPaid = Number(totalPaid.toFixed(2));
     totalReturnValue = Number(totalReturnValue.toFixed(2));
 
-    // Net Account Balance = Initial Balance + Total Invoiced - Total Paid - Return Value
-    const netAccountBalance = Number((initialBalance + totalInvoiced - totalPaid - totalReturnValue).toFixed(2));
+    // Net Account Balance = Initial Balance + Total Purchases - Total Paid - Return Value
+    const netAccountBalance = Number((initialBalance + totalPurchases - totalPaid - totalReturnValue).toFixed(2));
 
     return {
       initialBalance,
-      totalPurchased: totalInvoiced,
-      totalInvoiced,
+      totalPurchased: totalPurchases,
+      totalPurchases,
+      totalInvoiced: totalPurchases,
       totalPaid,
       totalPending: totalPendingFromPurchases,
       totalReturnValue,
@@ -1642,7 +1643,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             </tr>
           </table>
 
-          <!-- Summary Cards Table (Initial Balance, Total Invoiced, Total Paid, Return Value, Net Balance) -->
+          <!-- Summary Cards Table (Initial Balance, Total Purchases, Total Paid, Return Value, Net Balance) -->
           <table class="summary-cards-table avoid-break">
             <tr>
               <td class="summary-card-cell" style="width: 20%;">
@@ -1650,7 +1651,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                 <div class="summary-val">PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </td>
               <td class="summary-card-cell" style="width: 20%;">
-                <div class="summary-label">Total Invoiced</div>
+                <div class="summary-label">Total Purchases</div>
                 <div class="summary-val">PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </td>
               <td class="summary-card-cell" style="width: 20%; border-color: #bbf7d0; background-color: #f0fdf4;">
@@ -1709,7 +1710,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                   ${financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE PAYABLE TO VENDOR' : financialTotals.currentBalance < 0 ? 'DEBIT ADVANCE BALANCE OVERPAID TO VENDOR' : 'ACCOUNT FULLY SETTLED / ZERO OUTSTANDING PAYABLE'}
                 </div>
                 <div style="font-size: 10px; color: #475569; margin-top: 3px;">
-                  Initial Balance: PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Total Invoiced: PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Total Paid: PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Return Value: PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Initial Balance: PKR ${(initialBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Total Purchases: PKR ${(financialTotals.totalPurchased || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Total Paid: PKR ${(financialTotals.totalPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - Return Value: PKR ${(financialTotals.totalReturnValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </td>
               <td style="vertical-align: middle; text-align: right; width: 260px;">
@@ -1928,7 +1929,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
         </div>
       </div>
 
-      {/* Financial Metrics Summary Cards (5-Column Grid: Initial Balance, Total Invoiced, Total Paid, Return Value, Net Account Balance) */}
+      {/* Financial Metrics Summary Cards (5-Column Grid: Initial Balance, Total Purchases, Total Paid, Return Value, Net Account Balance) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
@@ -1947,7 +1948,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
 
         <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Invoiced</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Total Purchases</span>
             <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
               <Package className="w-3.5 h-3.5" />
             </div>
@@ -2001,7 +2002,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
             PKR {financialTotals.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-500 mt-1 font-medium">
-            Initial (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}) + Total Invoiced - Total Paid - Return Value
+            Initial (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 0 })}) + Total Purchases - Total Paid - Return Value
           </div>
         </div>
       </div>
@@ -2767,7 +2768,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
                     : 'Account Fully Settled (Zero Outstanding Balance)'}
                 </h4>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Total Invoiced (PKR {financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Paid (PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                  Initial Balance (PKR {initialBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + Total Purchases (PKR {financialTotals.totalPurchased.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Total Paid (PKR {financialTotals.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) - Return Value (PKR {financialTotals.totalReturnValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                 </p>
               </div>
               <div className="text-right flex flex-col items-end gap-1">
@@ -3486,7 +3487,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
           <div className="text-right">
             <h3 className="font-bold uppercase text-[10px] text-black">Account Financial Summary</h3>
             <p className="font-semibold">Initial Balance: PKR {initialBalance.toFixed(2)}</p>
-            <p className="font-semibold">Total Invoiced: PKR {financialTotals.totalPurchased.toFixed(2)}</p>
+            <p className="font-semibold">Total Purchases: PKR {financialTotals.totalPurchased.toFixed(2)}</p>
             <p className="font-semibold">Total Paid: PKR {financialTotals.totalPaid.toFixed(2)}</p>
             <p className="font-semibold">Return Value: PKR {financialTotals.totalReturnValue.toFixed(2)}</p>
             <p className="font-black text-sm text-black mt-1">Net Account Balance: PKR {financialTotals.currentBalance.toFixed(2)}</p>
@@ -3536,7 +3537,7 @@ export default function VendorLedgerView({ vendor, storeId, onBack }: VendorLedg
               {financialTotals.currentBalance > 0 ? 'OUTSTANDING BALANCE PAYABLE TO VENDOR' : financialTotals.currentBalance < 0 ? 'DEBIT ADVANCE BALANCE OVERPAID' : 'ACCOUNT FULLY SETTLED'}
             </div>
             <div className="text-[10px] text-black mt-1">
-              Initial Balance (PKR {initialBalance.toFixed(2)}) + Total Invoiced (PKR {financialTotals.totalPurchased.toFixed(2)}) - Total Paid (PKR {financialTotals.totalPaid.toFixed(2)}) - Return Value (PKR {financialTotals.totalReturnValue.toFixed(2)})
+              Initial Balance (PKR {initialBalance.toFixed(2)}) + Total Purchases (PKR {financialTotals.totalPurchased.toFixed(2)}) - Total Paid (PKR {financialTotals.totalPaid.toFixed(2)}) - Return Value (PKR {financialTotals.totalReturnValue.toFixed(2)})
             </div>
           </div>
           <div className="text-right">
