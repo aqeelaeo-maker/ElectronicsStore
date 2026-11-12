@@ -24,6 +24,8 @@ interface Vendor {
   remainingAmount?: number;
   totalPurchases?: number;
   totalPaid?: number;
+  returnValue?: number;
+  totalReturnValue?: number;
   lastPaymentAmount?: number;
   lastPaymentDate?: any;
   storeId?: string;
@@ -65,13 +67,23 @@ export default function Vendors() {
     return map;
   }, [purchases]);
 
-  // Fast O(N) aggregate map of payments per vendor
+  // Fast O(N) aggregate map of payments & returns per vendor
   const vendorPaymentsMap = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { totalPaid: number; totalReturns: number }>();
     for (const p of payments) {
       if (!p.vendorId) continue;
-      const current = map.get(p.vendorId) || 0;
-      map.set(p.vendorId, current + (p.paidAmount || p.paymentDone || 0));
+      let entry = map.get(p.vendorId);
+      if (!entry) {
+        entry = { totalPaid: 0, totalReturns: 0 };
+        map.set(p.vendorId, entry);
+      }
+      const isReturn = p.type === 'Return' || p.type === 'ReturnDebit' || p.type === 'PurchaseReturn' || p.type === 'ReturnCredit' || ((p.refundAmount || 0) > 0);
+      const amt = Number(p.paidAmount !== undefined ? p.paidAmount : (p.paymentDone || p.refundAmount || 0)) || 0;
+      if (isReturn) {
+        entry.totalReturns += amt;
+      } else {
+        entry.totalPaid += amt;
+      }
     }
     return map;
   }, [payments]);
@@ -84,25 +96,13 @@ export default function Vendors() {
     if (vendor.initialBalance !== undefined && vendor.initialBalance !== null && !isNaN(Number(vendor.initialBalance))) {
       return Number(vendor.initialBalance);
     }
-    const agg = vendorPurchasesMap.get(vendor.id);
-    if ((!agg || agg.count === 0) && vendor.balance !== undefined && !isNaN(Number(vendor.balance))) {
-      return Number(vendor.balance);
-    }
+    const cost = vendorPurchasesMap.get(vendor.id)?.totalCost || 0;
+    const paid = vendorPaymentsMap.get(vendor.id)?.totalPaid || 0;
+    const curBal = vendor.remainingAmount ?? vendor.balance ?? 0;
+    const derived = Number((curBal - cost + paid).toFixed(2));
+    if (derived > 0) return derived;
+    if (cost === 0 && curBal > 0) return curBal;
     return 0;
-  };
-
-  // 2. Net Payables for a vendor (consistent with VendorLedgerView)
-  const getVendorNetPayable = (vendor: Vendor): number => {
-    if (vendor.remainingAmount !== undefined && vendor.remainingAmount !== null && !isNaN(Number(vendor.remainingAmount))) {
-      return Number(vendor.remainingAmount);
-    }
-    if (vendor.balance !== undefined && vendor.balance !== null && !isNaN(Number(vendor.balance))) {
-      return Number(vendor.balance);
-    }
-
-    const initial = getVendorInitialBalance(vendor);
-    const totalPending = vendorPurchasesMap.get(vendor.id)?.totalPending || 0;
-    return Number((initial + totalPending).toFixed(2));
   };
 
   const getVendorPurchasesTotal = (vendor: Vendor): number => {
@@ -116,7 +116,26 @@ export default function Vendors() {
     if (vendor.totalPaid !== undefined && vendor.totalPaid > 0) {
       return vendor.totalPaid;
     }
-    return vendorPaymentsMap.get(vendor.id) || 0;
+    return vendorPaymentsMap.get(vendor.id)?.totalPaid || 0;
+  };
+
+  const getVendorReturnsTotal = (vendor: Vendor): number => {
+    if (vendor.returnValue !== undefined && Number(vendor.returnValue) > 0) {
+      return Number(vendor.returnValue);
+    }
+    if (vendor.totalReturnValue !== undefined && Number(vendor.totalReturnValue) > 0) {
+      return Number(vendor.totalReturnValue);
+    }
+    return vendorPaymentsMap.get(vendor.id)?.totalReturns || 0;
+  };
+
+  // 2. Net Account Balance for a vendor = Initial Balance + Total Invoiced - Total Paid - Return Value
+  const getVendorNetPayable = (vendor: Vendor): number => {
+    const initial = getVendorInitialBalance(vendor);
+    const purchasesTotal = getVendorPurchasesTotal(vendor);
+    const paidTotal = getVendorPaidTotal(vendor);
+    const returnsTotal = getVendorReturnsTotal(vendor);
+    return Number((initial + purchasesTotal - paidTotal - returnsTotal).toFixed(2));
   };
 
   // Financial summary metrics matching Customers module
@@ -502,7 +521,7 @@ export default function Vendors() {
               <tr>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vendor Details</th>
                 <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-52">Purchases / Paid</th>
-                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-52">Remaining / Balance</th>
+                <th scope="col" className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-48 sm:w-52">Net Account Balance</th>
                 <th scope="col" className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 sm:w-44">Actions</th>
               </tr>
             </thead>
@@ -585,7 +604,7 @@ export default function Vendors() {
                           PKR {effectiveRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Outstanding Balance
+                          Net Account Balance
                         </div>
                       </td>
                       <td className="px-6 py-3.5 whitespace-nowrap text-right text-sm font-semibold">
